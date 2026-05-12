@@ -138,32 +138,53 @@ func main() {
 	cfg := loadConfig()
 	secretKey = sha256.Sum256([]byte(cfg.SecretKey))
 
+	lf, err := os.OpenFile("client.log", os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0666)
+	if err != nil { log.Fatal(err) }
+	defer lf.Close()
+	log.SetOutput(io.MultiWriter(lf, os.Stdout))
+	log.SetFlags(log.LstdFlags)
+
+	log.Printf("[ЗАПУСК] Клиент Hasta-Vaquet Phase 5")
+	log.Printf("[КОНФИГ] Сервер %s:%d, ключ %s", cfg.ServerIP, cfg.Port, cfg.SecretKey[:20]+"...")
+
 	adapter, err := wintun.CreateAdapter("HastaVaquet", "HastaVaquet", nil)
 	if err != nil { log.Fatal(err) }
 	defer adapter.Close()
+	log.Printf("[АДАПТЕР] Wintun создан")
 
 	index := getInterfaceIndex("HastaVaquet")
-	exec.Command("netsh", "interface", "ip", "set", "address", "name=HastaVaquet", "static", "10.0.0.1", "255.255.255.0").Run()
-	
-	exec.Command("route", "delete", cfg.ServerIP).Run()
-	exec.Command("route", "add", cfg.ServerIP, "mask", "255.255.255.255", "192.168.100.1").Run()
-	exec.Command("route", "delete", "0.0.0.0", "10.0.0.1").Run()
-	exec.Command("route", "add", "0.0.0.0", "mask", "0.0.0.0", "10.0.0.1", "metric", "1", "if", index).Run()
+	log.Printf("[МАРШРУТ] InterfaceIndex = %s", index)
+	run := func(cmd string, args ...string) {
+		out, err := exec.Command(cmd, args...).CombinedOutput()
+		if err != nil {
+			log.Printf("[ОШИБКА] %s %v: %s", cmd, args, strings.TrimSpace(string(out)))
+		}
+	}
+
+	run("netsh", "interface", "ip", "set", "address", "name=HastaVaquet", "static", "10.0.0.1", "255.255.255.0")
+	run("route", "delete", cfg.ServerIP)
+	run("route", "add", cfg.ServerIP, "mask", "255.255.255.255", "192.168.100.1")
+	run("route", "delete", "0.0.0.0", "10.0.0.1")
+	run("route", "add", "0.0.0.0", "mask", "0.0.0.0", "10.0.0.1", "metric", "1", "if", index)
+	log.Printf("[МАРШРУТ] Правила добавлены")
 
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
-	go func() { <-c; exec.Command("route", "delete", "0.0.0.0", "10.0.0.1").Run(); os.Exit(0) }()
+	go func() { <-c; log.Printf("[ОСТАНОВ] Завершение, чистка маршрутов..."); exec.Command("route", "delete", "0.0.0.0", "10.0.0.1").Run(); log.Printf("[ОСТАНОВ] Маршруты очищены"); os.Exit(0) }()
 
 	conn, _ := net.Dial("udp", net.JoinHostPort(cfg.ServerIP, fmt.Sprintf("%d", cfg.Port)))
 	defer conn.Close()
+	log.Printf("[СОЕДИНЕНИЕ] Установлено с %s:%d", cfg.ServerIP, cfg.Port)
 	session, _ := adapter.StartSession(0x800000)
 	defer session.End()
+	log.Printf("[СЕССИЯ] Wintun сессия запущена")
 
 	go func() {
 		for {
 			time.Sleep(time.Duration(10+mathrand.Intn(21)) * time.Second)
 			keepAlive, _ := encrypt([]byte{})
 			conn.Write(keepAlive)
+			log.Printf("[KEEP-ALIVE] Отправлен")
 		}
 	}()
 
@@ -171,13 +192,20 @@ func main() {
 		buf := make([]byte, 65535)
 		for {
 			n, err := conn.Read(buf)
-			if err != nil || n < 20 { continue }
-			decrypted, err := decrypt(buf[:n])
-			if err == nil {
-				packet, _ := session.AllocateSendPacket(len(decrypted))
-				copy(packet, decrypted)
-				session.SendPacket(packet)
+			if err != nil {
+				log.Printf("[ОШИБКА ЧТЕНИЯ] %v", err)
+				continue
 			}
+			if n < 20 { continue }
+			decrypted, err := decrypt(buf[:n])
+			if err != nil {
+				log.Printf("[ОШИБКА ДЕШИФРАЦИИ] %v", err)
+				continue
+			}
+			if len(decrypted) == 0 { continue }
+			packet, _ := session.AllocateSendPacket(len(decrypted))
+			copy(packet, decrypted)
+			session.SendPacket(packet)
 		}
 	}()
 
@@ -186,11 +214,18 @@ func main() {
 		if err == nil {
 			if len(packet) >= 20 && (packet[0]>>4) == 4 {
 				encrypted, err := encrypt(packet)
-				if err == nil { conn.Write(encrypted) }
+				if err == nil {
+					conn.Write(encrypted)
+				} else {
+					log.Printf("[ОШИБКА ШИФРАЦИИ] %v", err)
+				}
 			}
 			session.ReleaseReceivePacket(packet)
 		} else if err == windows.ERROR_NO_MORE_ITEMS {
 			windows.WaitForSingleObject(session.ReadWaitEvent(), windows.INFINITE)
-		} else { break }
+		} else {
+			log.Printf("[ОШИБКА СЕССИИ] %v", err)
+			break
+		}
 	}
 }
