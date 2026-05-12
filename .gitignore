@@ -1,0 +1,4 @@
+*.exe
+*.dll
+server_linux
+server/server_linux
