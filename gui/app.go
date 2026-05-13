@@ -208,7 +208,7 @@ func (a *App) IsConnected() bool {
 
 // --- Ping sliding window ---
 var (
-	pingBuffer [1000]int
+	pingBuffer [50]int
 	pingIndex  int
 	pingFilled int
 	pingCancel chan struct{}
@@ -226,31 +226,29 @@ func (a *App) startPinging() {
 	}
 
 	go func() {
-		ticker := time.NewTicker(2 * time.Second)
+		ticker := time.NewTicker(1 * time.Second)
 		defer ticker.Stop()
 
 		doPing := func() {
+			start := time.Now()
+			conn, err := net.DialTimeout("tcp", "31.42.120.154:22", 2*time.Second)
 			rtt := -1
-			targets := []string{"10.0.0.2:22", "10.0.0.2:443", "10.0.0.2:9999", "8.8.8.8:443"}
-			for _, t := range targets {
-				start := time.Now()
-				conn, err := net.DialTimeout("tcp", t, 2*time.Second)
-				if err == nil {
-					conn.Close()
-					rtt = int(time.Since(start).Milliseconds())
-					if rtt < 1 { rtt = 1 }
-					break
-				}
-				// RST (connection refused) = packet went through tunnel and back = valid RTT
-				if strings.Contains(err.Error(), "refused") {
-					rtt = int(time.Since(start).Milliseconds())
-					if rtt < 1 { rtt = 1 }
-					break
-				}
+			if err == nil {
+				conn.Close()
+				rtt = int(time.Since(start).Milliseconds())
 			}
-			pingBuffer[pingIndex%1000] = rtt
+			if rtt < 1 { rtt = 0 }
+			// Also probe tunnel: try 10.0.0.2 (internal server IP)
+			start2 := time.Now()
+			conn2, err2 := net.DialTimeout("tcp", "10.0.0.2:22", 1*time.Second)
+			if err2 == nil || strings.Contains(err2.Error(), "refused") {
+				if conn2 != nil { conn2.Close() }
+				trtt := int(time.Since(start2).Milliseconds())
+				if trtt > 0 && trtt < rtt { rtt = trtt }
+			}
+			pingBuffer[pingIndex%50] = rtt
 			pingIndex++
-			if pingFilled < 1000 { pingFilled++ }
+			if pingFilled < 50 { pingFilled++ }
 		}
 		emitPing := func() {
 			var sum, count, lossCount int
@@ -267,7 +265,7 @@ func (a *App) startPinging() {
 			runtime.EventsEmit(a.ctx, "ping", map[string]int{"rtt": avgRT, "loss": lossPct})
 		}
 
-		time.Sleep(1 * time.Second)
+		// Fire immediately, then every 1s
 		doPing()
 		emitPing()
 
