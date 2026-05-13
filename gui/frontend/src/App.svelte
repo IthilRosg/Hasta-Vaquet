@@ -285,7 +285,7 @@
   .bottom-section {
     position: fixed; bottom: 0; left: 0; right: 0;
     display: flex; flex-direction: column; align-items: center;
-    padding: 8px 16px 20px; gap: 10px;
+    padding: 12px 16px 24px; gap: 14px;
     background: linear-gradient(transparent, var(--bg) 15%);
     pointer-events: none;
   }
@@ -306,7 +306,7 @@
   .dropdown-arrow { color: var(--text-dim); font-size: 10px; }
 
   .dropdown-menu {
-    position: absolute; bottom: 100%; left: 0; right: 0; margin-bottom: 4px;
+    position: absolute; bottom: 100%; left: 0; right: 0; margin-bottom: 8px;
     background: var(--surface); border: 1px solid var(--border);
     border-radius: var(--radius); overflow: hidden;
     box-shadow: 0 -8px 32px rgba(0,0,0,0.4);
@@ -330,9 +330,9 @@
 
   .add-btn {
     background: var(--surface); border: 2px dashed var(--border);
-    color: var(--text-dim); cursor: pointer; width: 44px; height: 44px;
+    color: var(--text-dim); cursor: pointer; width: 40px; height: 40px;
     border-radius: 50%; display: flex; align-items: center; justify-content: center;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); margin-top: 4px;
   }
   .add-btn:hover {
     border-color: var(--accent); color: var(--accent);
