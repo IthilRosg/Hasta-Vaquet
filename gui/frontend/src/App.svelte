@@ -173,7 +173,7 @@
     </div>
     <div class="card">
       <div class="card-title">NETWORK</div>
-      <div class="card-body">Ping: {rtt > 0 ? rtt + 'ms' : '—'}  Loss: {loss}%</div>
+      <div class="card-body">Ping: {rtt > 0 ? rtt + 'ms' : '—'}  Loss: {rtt > 0 ? loss + '%' : '—'}</div>
     </div>
     <div class="card">
       <div class="card-title">UPTIME</div>

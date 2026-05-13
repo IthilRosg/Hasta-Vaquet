@@ -260,6 +260,7 @@ func (a *App) startPinging() {
 			runtime.EventsEmit(a.ctx, "ping", map[string]int{"rtt": avgRT, "loss": lossPct})
 		}
 
+		time.Sleep(1 * time.Second)
 		doPing()
 		emitPing()
 
