@@ -120,7 +120,10 @@ func decrypt(packet []byte) ([]byte, error) {
 
 	mac := hmac.New(sha256.New, key[:])
 	mac.Write(nonce)
-	if !hmac.Equal(marker, mac.Sum(nil)[:4]) {
+	expected := mac.Sum(nil)[:4]
+	marker[0] &^= 0x40
+	expected[0] &^= 0x40
+	if !hmac.Equal(marker, expected) {
 		return nil, fmt.Errorf("HMAC mismatch")
 	}
 

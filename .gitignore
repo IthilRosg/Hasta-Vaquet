@@ -2,3 +2,5 @@
 *.dll
 server_linux
 server/server_linux
+
+client.log
