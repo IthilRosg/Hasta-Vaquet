@@ -19,7 +19,8 @@
   let pingTimer: number
   let uptimeTimer: number
   let uptimeSeconds = 0
-  let totalBytes = 0
+  let totalTX = 0
+  let totalRX = 0
 
   async function loadConfig() {
     profiles = (await ListProfileItems()) || []
@@ -81,7 +82,7 @@
       if (pingTimer) { clearInterval(pingTimer); pingTimer = 0 }
       if (uptimeTimer) { clearInterval(uptimeTimer); uptimeTimer = 0 }
     } else {
-      uptimeSeconds = 0; totalBytes = 0; uptime = '00:00'; totalTraffic = '0 MB'
+      uptimeSeconds = 0; totalTX = 0; totalRX = 0; uptime = '00:00'; totalTraffic = '0 MB'
       if (!pingTimer) startPinging()
       startUptime()
     }
@@ -107,8 +108,9 @@
   EventsOn('traffic', (data: {tx: number, rx: number}) => {
     txSpeed = formatSpeed(data.tx)
     rxSpeed = formatSpeed(data.rx)
-    totalBytes += data.tx + data.rx
-    totalTraffic = formatBytes(totalBytes)
+    totalTX += data.tx
+    totalRX += data.rx
+    totalTraffic = formatBytes(totalTX) + ' ↑ / ' + formatBytes(totalRX) + ' ↓'
   })
 
   function toggle() {
@@ -198,8 +200,12 @@
       <span class="stat-value">{uptime}</span>
     </div>
     <div class="stat-card">
-      <span class="stat-label">Traffic</span>
-      <span class="stat-value">{totalTraffic}</span>
+      <span class="stat-label">Total TX</span>
+      <span class="stat-value up">{formatBytes(totalTX)}</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-label">Total RX</span>
+      <span class="stat-value down">{formatBytes(totalRX)}</span>
     </div>
   </div>
   {/if}
@@ -310,8 +316,8 @@
 
   /* ----- Stats grid ----- */
   .stats-grid {
-    display: grid; grid-template-columns: 1fr 1fr 1fr;
-    gap: 8px; width: 100%; max-width: 360px; margin-top: 24px;
+    display: grid; grid-template-columns: 1fr 1fr 1fr 1fr;
+    gap: 6px; width: 100%; max-width: 380px; margin-top: 24px;
   }
 
   .stat-card {
