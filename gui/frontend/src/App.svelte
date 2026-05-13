@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { DoConnect, DoDisconnect, ImportConfig, LoadDefaultConfig, LoadProfile, ListProfileItems, DoPing, SaveLastProfile, LoadLastProfile } from '../wailsjs/go/main/App'
+  import { DoConnect, DoDisconnect, ImportConfig, LoadDefaultConfig, LoadProfile, ListProfileItems, SaveLastProfile, LoadLastProfile } from '../wailsjs/go/main/App'
   import { EventsOn } from '../wailsjs/runtime/runtime'
 
   let connected = false
@@ -9,7 +9,6 @@
   let rtt = 0
   let loss = 0
   let uptime = '00:00'
-  let totalTraffic = '0 MB'
   let showSettings = false
   let animating = false
   let profileName = ''
@@ -17,8 +16,7 @@
   let showProfileDropdown = false
 
   let pingTimer: number
-  let uptimeTimer: number
-  let uptimeSeconds = 0
+  let startTime: number
   let totalTX = 0
   let totalRX = 0
 
@@ -78,39 +76,24 @@
     statusText = s === 'connected' ? 'Connected' : 'Disconnected'
     connected = s === 'connected'
     if (!connected) {
-      txSpeed = '0 B/s'; rxSpeed = '0 B/s'; rtt = 0; loss = 0
-      if (pingTimer) { clearInterval(pingTimer); pingTimer = 0 }
-      if (uptimeTimer) { clearInterval(uptimeTimer); uptimeTimer = 0 }
+      txSpeed = '0 B/s'; rxSpeed = '0 B/s'; rtt = 0; loss = 0; uptime = '00:00'
     } else {
-      uptimeSeconds = 0; totalTX = 0; totalRX = 0; uptime = '00:00'; totalTraffic = '0 MB'
-      if (!pingTimer) startPinging()
-      startUptime()
+      startTime = Date.now()
     }
   })
 
-  async function startPinging() {
-    pingTimer = window.setInterval(async () => {
-      if (!connected) return
-      const res = await DoPing()
-      rtt = res.rtt || 0
-      loss = res.loss || 0
-    }, 3000)
-  }
+  EventsOn('traffic', (data: {tx_speed: number, rx_speed: number, total_tx: number, total_rx: number}) => {
+    txSpeed = formatSpeed(data.tx_speed)
+    rxSpeed = formatSpeed(data.rx_speed)
+    totalTX = data.total_tx
+    totalRX = data.total_rx
+    const sec = Math.floor((Date.now() - startTime) / 1000)
+    uptime = formatTime(sec)
+  })
 
-  function startUptime() {
-    uptimeTimer = window.setInterval(() => {
-      if (!connected) return
-      uptimeSeconds++
-      uptime = formatTime(uptimeSeconds)
-    }, 1000)
-  }
-
-  EventsOn('traffic', (data: {tx: number, rx: number}) => {
-    txSpeed = formatSpeed(data.tx)
-    rxSpeed = formatSpeed(data.rx)
-    totalTX += data.tx
-    totalRX += data.rx
-    totalTraffic = formatBytes(totalTX) + ' ↑ / ' + formatBytes(totalRX) + ' ↓'
+  EventsOn('ping', (data: {rtt: number, loss: number}) => {
+    rtt = data.rtt
+    loss = data.loss
   })
 
   function toggle() {

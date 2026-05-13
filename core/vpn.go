@@ -15,20 +15,22 @@ import (
 	"golang.zx2c4.com/wintun"
 )
 
-type StatusCallback func(status string, txBytes, rxBytes int64)
+type StatusCallback func(status string, txSpeed, rxSpeed int64, totalTx, totalRx uint64)
 
 type VPN struct {
-	config    Config
-	key       [32]byte
-	conn      *net.UDPConn
-	session   *wintun.Session
-	adapter   *wintun.Adapter
-	running   atomic.Bool
-	stopCh    chan struct{}
-	txBytes   atomic.Int64
-	rxBytes   atomic.Int64
-	onStatus  StatusCallback
-	mu        sync.Mutex
+	config        Config
+	key           [32]byte
+	conn          *net.UDPConn
+	session       *wintun.Session
+	adapter       *wintun.Adapter
+	running       atomic.Bool
+	stopCh        chan struct{}
+	txBytes       atomic.Int64
+	rxBytes       atomic.Int64
+	sessionTotalTx atomic.Uint64
+	sessionTotalRx atomic.Uint64
+	onStatus      StatusCallback
+	mu            sync.Mutex
 }
 
 func New(cfg Config, cb StatusCallback) *VPN {
@@ -48,7 +50,7 @@ func (v *VPN) Start() error {
 	}
 	v.stopCh = make(chan struct{})
 
-	v.callback("connecting", 0, 0)
+	v.callback("connecting", 0, 0, 0, 0)
 
 	adapter, err := wintun.CreateAdapter("HastaVaquet", "HastaVaquet", nil)
 	if err != nil {
@@ -89,7 +91,7 @@ func (v *VPN) Start() error {
 	v.session = &sess
 
 	v.running.Store(true)
-	v.callback("connected", 0, 0)
+	v.callback("connected", 0, 0, 0, 0)
 
 	go v.keepAliveLoop()
 	go v.readerLoop()
@@ -121,16 +123,16 @@ func (v *VPN) Stop() {
 		v.adapter.Close()
 	}
 
-	v.callback("disconnected", 0, 0)
+	v.callback("disconnected", 0, 0, 0, 0)
 }
 
 func (v *VPN) IsRunning() bool {
 	return v.running.Load()
 }
 
-func (v *VPN) callback(status string, tx, rx int64) {
+func (v *VPN) callback(status string, txSpeed, rxSpeed int64, totalTx, totalRx uint64) {
 	if v.onStatus != nil {
-		v.onStatus(status, tx, rx)
+		v.onStatus(status, txSpeed, rxSpeed, totalTx, totalRx)
 	}
 }
 
@@ -177,6 +179,7 @@ func (v *VPN) readerLoop() {
 		copy(packet, decrypted)
 		v.session.SendPacket(packet)
 		v.rxBytes.Add(int64(len(decrypted)))
+		v.sessionTotalRx.Add(uint64(len(decrypted)))
 	}
 }
 
@@ -191,9 +194,10 @@ func (v *VPN) writerLoop() {
 		if err == nil {
 			if len(packet) >= 20 && (packet[0]>>4) == 4 {
 				encrypted, err := Encrypt(packet, v.key[:], v.config.ShortID, v.config.RoutingSalt)
-				if err == nil {
-					v.conn.Write(encrypted)
-					v.txBytes.Add(int64(len(encrypted)))
+			if err == nil {
+				v.conn.Write(encrypted)
+				v.txBytes.Add(int64(len(encrypted)))
+				v.sessionTotalTx.Add(uint64(len(encrypted)))
 				}
 			}
 			v.session.ReleaseReceivePacket(packet)
@@ -211,10 +215,10 @@ func (v *VPN) statsLoop() {
 		case <-v.stopCh:
 			return
 		case <-ticker.C:
-			tx := v.txBytes.Swap(0)
-			rx := v.rxBytes.Swap(0)
-			if tx > 0 || rx > 0 {
-				v.callback("connected", tx, rx)
+			txSpeed := v.txBytes.Swap(0)
+			rxSpeed := v.rxBytes.Swap(0)
+			if txSpeed > 0 || rxSpeed > 0 {
+				v.callback("traffic", txSpeed, rxSpeed, v.sessionTotalTx.Load(), v.sessionTotalRx.Load())
 			}
 		}
 	}

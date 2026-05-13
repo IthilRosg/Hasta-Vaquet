@@ -171,18 +171,20 @@ func (a *App) DoConnect(serverIP, secretKey, routingSalt, internalIP, gatewayIP,
 		GatewayIP:   gatewayIP,
 		DNS:         dns,
 	}
-	vpn := core.New(cfg, func(status string, tx, rx int64) {
-		if status == "connected" || status == "disconnected" {
-			runtime.EventsEmit(a.ctx, "status", status)
-		}
-		if tx > 0 || rx > 0 {
-			runtime.EventsEmit(a.ctx, "traffic", map[string]int64{"tx": tx, "rx": rx})
+	vpn := core.New(cfg, func(status string, txSpeed, rxSpeed int64, totalTx, totalRx uint64) {
+		runtime.EventsEmit(a.ctx, "status", status)
+		if txSpeed > 0 || rxSpeed > 0 {
+			runtime.EventsEmit(a.ctx, "traffic", map[string]interface{}{
+				"tx_speed": txSpeed, "rx_speed": rxSpeed,
+				"total_tx": totalTx, "total_rx": totalRx,
+			})
 		}
 	})
 	if err := vpn.Start(); err != nil {
 		return err.Error()
 	}
 	a.vpn = vpn
+	a.startPinging()
 	return "connected"
 }
 
@@ -190,6 +192,7 @@ func (a *App) DoDisconnect() string {
 	if a.vpn == nil || !a.vpn.IsRunning() {
 		return "not connected"
 	}
+	a.stopPinging()
 	a.vpn.Stop()
 	a.vpn = nil
 	runtime.EventsEmit(a.ctx, "status", "disconnected")
@@ -200,22 +203,79 @@ func (a *App) IsConnected() bool {
 	return a.vpn != nil && a.vpn.IsRunning()
 }
 
-func (a *App) DoPing() map[string]int {
-	dialer := net.Dialer{Timeout: 3 * time.Second}
-	start := time.Now()
-	conn, err := dialer.DialContext(a.ctx, "tcp", "8.8.8.8:443")
-	if err != nil {
-		conn, err = dialer.DialContext(a.ctx, "tcp", "1.1.1.1:443")
+// --- Ping sliding window ---
+var (
+	pingBuffer [1000]int
+	pingIndex  int
+	pingCancel chan struct{}
+)
+
+func (a *App) startPinging() {
+	if pingCancel != nil {
+		close(pingCancel)
 	}
-	if err != nil {
-		return map[string]int{"rtt": 0, "loss": 100}
+	pingCancel = make(chan struct{})
+	pingIndex = 0
+	for i := range pingBuffer {
+		pingBuffer[i] = -1
 	}
-	conn.Close()
-	rtt := int(time.Since(start).Milliseconds())
-	if rtt < 1 {
-		rtt = 1
+
+	go func() {
+		ticker := time.NewTicker(2 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-pingCancel:
+				return
+			case <-ticker.C:
+			}
+
+			rtt := -1
+			targets := []string{"10.0.0.2:9999", "8.8.8.8:443", "1.1.1.1:443"}
+			for _, t := range targets {
+				start := time.Now()
+				conn, err := net.DialTimeout("tcp", t, 2*time.Second)
+				if err == nil {
+					conn.Close()
+					rtt = int(time.Since(start).Milliseconds())
+					if rtt < 1 {
+						rtt = 1
+					}
+					break
+				}
+			}
+
+			pingBuffer[pingIndex%1000] = rtt
+			pingIndex++
+
+			var sum, count, lossCount int
+			for _, v := range pingBuffer {
+				if v >= 0 {
+					sum += v
+					count++
+				} else if v == -1 {
+					lossCount++
+				}
+			}
+			total := count + lossCount
+			avgRT := 0
+			if count > 0 {
+				avgRT = sum / count
+			}
+			lossPct := 0
+			if total > 0 {
+				lossPct = lossCount * 100 / total
+			}
+			runtime.EventsEmit(a.ctx, "ping", map[string]int{"rtt": avgRT, "loss": lossPct})
+		}
+	}()
+}
+
+func (a *App) stopPinging() {
+	if pingCancel != nil {
+		close(pingCancel)
+		pingCancel = nil
 	}
-	return map[string]int{"rtt": rtt, "loss": 0}
 }
 
 func (a *App) SaveLastProfile(name string) {
