@@ -14,9 +14,10 @@
 - [x] **Phase 3: Global Routing.** Заворачивание 0.0.0.0/0 на Windows через Wintun, исключение петли маршрутизации, перехват DNS.
 - [x] **Phase 4: Operationalization & Stability.** Избавление от хардкода (config.json / CLI флаги), внедрение Keep-Alive (анти-таймаут NAT), агрегированное логирование (30-сек интервал), корректное завершение работы (очистка маршрутов).
 - [x] **Phase 5: DPI Evasion (ЗАВЕРШЕНА).** In-band signaling через HMAC-SHA256-маркер. QUIC-маска заголовка (бит 6). Динамический паддинг (Nonce-ротация: Client 0-40, Server Medium/Chaos). Bloom Filter анти-Replay (64KB, 3×FNV-1a). Keep-Alive jitter 10-30с. Асимметричное логирование клиент/сервер. Фиксация: 90 Mbps throughput, 0% packet loss.
-- [ ] **Phase 6: Multi-User Architecture (ТЕКУЩАЯ СТАДИЯ).** Перевод сервера в режим мультиплексора. Поддержка множества клиентов одновременно (горутины под каждого пира), привязка IP-адресов внутри туннеля к конкретным ключам.
+- [x] **Phase 6: Multi-User Architecture (ЗАВЕРШЕНА).** Dynamic XOR Routing: ShortID ^ FNV-1a(RoutingSalt+nonce)[:2]. Wire Format V6 с DynamicID. O(1) маршрутизация через map[uint16]*Peer. Per-user HMAC+AES ключи. TUN dstIP → ipToPeer. Композитный Bloom фильтр (ShortID+Nonce). server_config.json с массивом users. Поддержка 1000+ клиентов.
+- [ ] **Phase 7: GUI & Multi-platform (ТЕКУЩАЯ СТАДИЯ).** Разработка графического интерфейса для Windows (Wails/Fyne) с фоновой службой. Разработка Android-клиента (Go Mobile).
 - [ ] **Phase 7: GUI & Multi-platform.** Разработка графического интерфейса для Windows (Wails/Fyne) с фоновой службой. Разработка Android-клиента (Go Mobile).
 - [ ] **Phase 8: Management Ecosystem.** База данных пользователей, Web-интерфейс администратора (генерация ключей, статистика трафика, QR-коды для мобильных).
 
 ## 3. Current Task
-**Phase 6 (Multi-User Architecture):** Разработка серверного мультиплексора — поддержка множества независимых клиентов с разными ключами, изоляция пиров, динамическое выделение внутренних IP.
+**Phase 7 (GUI & Multi-platform):** Разработка графического интерфейса для Windows (Wails/Fyne) с фоновой службой. Разработка Android-клиента (Go Mobile).

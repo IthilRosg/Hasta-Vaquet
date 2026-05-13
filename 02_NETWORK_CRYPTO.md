@@ -14,7 +14,21 @@
     - Игнорировать IPv6 и мусорный трафик.
     - Серверный буфер: `make([]byte, 65535)`.
 
-## Phase 5: Stateless Polymorphic Obfuscation
+## Phase 6: Dynamic XOR Routing & Multi-User
+
+- **Wire Format V6:**
+    ```
+    [HMAC(4)] [DynamicID(2)] [Nonce(12)] [AES-GCM(inner)]
+    ```
+    Где `inner` = `[2 байта real_len] [real_data] [random_padding]`
+- **DynamicID:** `ShortID ^ FNV-1a(RoutingSalt + Nonce)[:2]` — 2 байта, неотличимы от случайных.
+- **Routing (O(1)):** Сервер вычисляет маску FNV-1a(RoutingSalt + Nonce), XOR с DynamicID → чистый ShortID → lookup в `map[uint16]*Peer`.
+- **Per-user ключи:** Каждый клиент имеет свой `secret_key` в конфиге. HMAC и AES-GCM используют SHA256 этого ключа.
+- **HMAC покрывает только заголовок** `(DynamicID + Nonce)` — 14 байт. Ciphertext защищён GCM-тегом.
+- **Composite Bloom filter:** ключ = `[ShortID 2 байта] [Nonce 12 байт]` — исключает коллизии между клиентами.
+- **TUN маршрутизация:** Сервер смотрит dstIP в IP-заголовке ответа → `map[string]*Peer` → шифрует ключом найденного пира → отправляет на его UDP-адрес.
+- **Non-клиентский трафик:** Пакеты с dstIP = 10.0.0.2 (сам сервер) или broadcast игнорируются.
+- **Stealth:** Все пакеты разных клиентов выглядят одинаково — 4 байта HMAC, 2 байта random (DynamicID), 12 байт nonce, ciphertext. DPI не может определить, сколько клиентов и какие пакеты кому принадлежат.
 
 - **Абсолютный Stateless:** Вся вариативность трафика извлекается из 12-байтового Nonce AES-GCM пакета. Никакого серверного состояния между пакетами.
 - **QUIC Header Mask (Critical):** Первый байт HMAC-маркера на проводе всегда имеет бит 6 = 1 (`marker[0] |= 0x40`). При HMAC-проверке получатель снимает бит 6 с ОБОИХ аргументов (`marker[0] &^= 0x40` И `expected[0] &^= 0x40`). Без этого ~50% пакетов падают с HMAC mismatch.

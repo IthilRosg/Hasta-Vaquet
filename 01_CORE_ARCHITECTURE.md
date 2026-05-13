@@ -10,6 +10,14 @@
   ```
   - Первый байт HMAC-маркера: бит 6 принудительно установлен (QUIC fixed bit mask)
   - Сервер при проверке снимает бит 6 с marker И expected перед `hmac.Equal`
+- **Phase 6 Wire Format (с 2026-05-13):**
+  ```
+  [HMAC(4)] [DynamicID(2)] [Nonce(12)] [AES-GCM(payload)]
+  ```
+  - DynamicID = ShortID ^ FNV-1a(RoutingSalt + Nonce)[:2]
+  - Сервер декодирует ShortID за O(1), извлекает per-user ключ, проверяет HMAC
+  - Динамические 2 байта меняются на каждом пакете — DPI не может сгруппировать пакеты одного клиента
+- **Multi-User:** Маршрутизация через `map[uint16]*Peer` и `map[string]*Peer` (по dstIP). Каждый клиент — свой ShortID, свой SecretKey, своя маскировка.
 - **Разделение сред:**
     - Клиент (Windows): использовать `golang.org/x/sys/windows` и `wintun`. Сборка только под Windows.
     - Сервер (Linux): использовать стандартный `os.OpenFile("/dev/net/tun", ...)`. Сборка только под Linux.
