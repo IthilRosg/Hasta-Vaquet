@@ -79,6 +79,7 @@
       txSpeed = '0 B/s'; rxSpeed = '0 B/s'; rtt = 0; loss = 0; uptime = '00:00'
     } else {
       startTime = Date.now()
+      uptime = '00:00'
     }
   })
 

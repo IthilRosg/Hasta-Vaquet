@@ -230,10 +230,10 @@ func (a *App) startPinging() {
 
 		doPing := func() {
 			rtt := -1
-			targets := []string{"10.0.0.2:9999", "8.8.8.8:443", "1.1.1.1:443"}
+			targets := []string{"8.8.8.8:443", "1.1.1.1:443", "10.0.0.2:9999"}
 			for _, t := range targets {
 				start := time.Now()
-				conn, err := net.DialTimeout("tcp", t, 2*time.Second)
+				conn, err := net.DialTimeout("tcp", t, 1*time.Second)
 				if err == nil {
 					conn.Close()
 					rtt = int(time.Since(start).Milliseconds())
