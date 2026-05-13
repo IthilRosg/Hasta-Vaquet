@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { DoConnect, DoDisconnect, ImportConfig, LoadDefaultConfig, ListProfiles, LoadProfile, ListProfileItems, DoPing } from '../wailsjs/go/main/App'
+  import { DoConnect, DoDisconnect, ImportConfig, LoadDefaultConfig, ListProfiles, LoadProfile, ListProfileItems, DoPing, SaveLastProfile, LoadLastProfile } from '../wailsjs/go/main/App'
   import { EventsOn } from '../wailsjs/runtime/runtime'
 
   let connected = false
@@ -10,6 +10,9 @@
   let loss = 0
   let showSettings = false
   let animating = false
+  let profileName = 'Default'
+  let profiles: {name: string; server_ip: string; port: number; short_id: number; internal_ip: string; dns: string}[] = []
+  let showProfileDropdown = false
 
   let serverIP = '31.42.120.154'
   let port = 9999
@@ -21,8 +24,12 @@
   let dns = '1.1.1.1'
 
   async function loadConfig() {
-    const list = await ListProfileItems()
-    profiles = list || []
+    profiles = (await ListProfileItems()) || []
+    const last = await LoadLastProfile()
+    if (last) {
+      const cfg = await LoadProfile(last)
+      if (cfg) { applyCfg(cfg); profileName = last; return }
+    }
     const cfg = await LoadDefaultConfig()
     if (cfg) { applyCfg(cfg) }
   }
@@ -45,6 +52,7 @@
     if (cfg) {
       applyCfg(cfg)
       profileName = name
+      SaveLastProfile(name)
     }
   }
 
@@ -184,23 +192,31 @@
   {/if}
 </div>
 
-<!-- Profile list + Add button -->
+<!-- Profile dropdown + Add button -->
 <div class="bottom-section">
-  {#if profiles.length > 0}
-  <div class="profile-list">
-    {#each profiles as p}
-    <button class="profile-card" class:active={p.name === profileName} on:click={() => selectProfile(p.name)}>
-      <div class="profile-card-left">
-        <div class="profile-card-name">{p.name}</div>
-        <div class="profile-card-detail">{p.server_ip}:{p.port}</div>
-      </div>
-      <div class="profile-card-right">
-        <span class="profile-card-ip">{p.internal_ip}</span>
-      </div>
+  <div class="dropdown-wrap">
+    <button class="dropdown-trigger" on:click={() => showProfileDropdown = !showProfileDropdown}>
+      <span class="dropdown-label">{profileName}</span>
+      <span class="dropdown-arrow">{showProfileDropdown ? '▲' : '▼'}</span>
     </button>
-    {/each}
+    {#if showProfileDropdown}
+    <div class="dropdown-menu">
+      {#if profiles.length === 0}
+      <div class="dropdown-empty">No profiles</div>
+      {:else}
+      {#each profiles as p}
+      <button class="dropdown-item" class:selected={p.name === profileName} on:click={() => { selectProfile(p.name); showProfileDropdown = false; }}>
+        <div>
+          <div class="dropdown-item-name">{p.name}</div>
+          <div class="dropdown-item-detail">{p.server_ip}:{p.port}</div>
+        </div>
+        <span class="dropdown-item-ip">{p.internal_ip}</span>
+      </button>
+      {/each}
+      {/if}
+    </div>
+    {/if}
   </div>
-  {/if}
   <button class="add-btn" on:click={importProfile} title="Add Profile">
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
       <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
@@ -288,37 +304,52 @@
 
   .icon-btn:hover { color: var(--accent); background: var(--surface); }
 
-  /* Bottom profile list */
+  /* Bottom dropdown */
   .bottom-section {
     position: fixed; bottom: 0; left: 0; right: 0;
     display: flex; flex-direction: column; align-items: center;
-    padding: 12px 16px 20px; gap: 10px;
-    background: linear-gradient(transparent, var(--bg) 20%);
+    padding: 8px 16px 20px; gap: 10px;
+    background: linear-gradient(transparent, var(--bg) 15%);
     pointer-events: none;
   }
-
   .bottom-section > * { pointer-events: auto; }
 
-  .profile-list {
-    display: flex; flex-direction: column; gap: 6px;
-    width: 100%; max-width: 340px;
-  }
+  .dropdown-wrap { position: relative; width: 100%; max-width: 340px; }
 
-  .profile-card {
+  .dropdown-trigger {
     display: flex; align-items: center; justify-content: space-between;
     width: 100%; padding: 10px 14px;
     background: var(--surface); border: 1px solid var(--border);
     border-radius: var(--radius); cursor: pointer;
-    color: var(--text); transition: all 0.2s;
-    text-align: left;
+    color: var(--text); font-size: 14px; font-weight: 600;
+    transition: border 0.2s;
+  }
+  .dropdown-trigger:hover { border-color: var(--accent); }
+
+  .dropdown-arrow { color: var(--text-dim); font-size: 10px; }
+
+  .dropdown-menu {
+    position: absolute; bottom: 100%; left: 0; right: 0; margin-bottom: 4px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); overflow: hidden;
+    box-shadow: 0 -8px 32px rgba(0,0,0,0.4);
+    max-height: 200px; overflow-y: auto;
   }
 
-  .profile-card:hover { border-color: var(--accent); background: var(--surface-hover); }
-  .profile-card.active { border-color: var(--green); background: rgba(63, 185, 80, 0.06); }
+  .dropdown-item {
+    display: flex; align-items: center; justify-content: space-between;
+    width: 100%; padding: 10px 14px; text-align: left;
+    background: none; border: none; border-bottom: 1px solid var(--border);
+    color: var(--text); cursor: pointer; transition: background 0.15s;
+  }
+  .dropdown-item:last-child { border-bottom: none; }
+  .dropdown-item:hover { background: var(--surface-hover); }
+  .dropdown-item.selected { background: rgba(63, 185, 80, 0.06); }
 
-  .profile-card-name { font-weight: 600; font-size: 14px; }
-  .profile-card-detail { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
-  .profile-card-ip { font-size: 12px; color: var(--accent); font-weight: 500; }
+  .dropdown-item-name { font-size: 14px; font-weight: 600; }
+  .dropdown-item-detail { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+  .dropdown-item-ip { font-size: 12px; color: var(--accent); }
+  .dropdown-empty { padding: 16px; text-align: center; color: var(--text-dim); font-size: 13px; }
 
   .add-btn {
     background: var(--surface); border: 2px dashed var(--border);
@@ -326,7 +357,6 @@
     border-radius: 50%; display: flex; align-items: center; justify-content: center;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
-
   .add-btn:hover {
     border-color: var(--accent); color: var(--accent);
     background: var(--accent-glow); transform: scale(1.08);

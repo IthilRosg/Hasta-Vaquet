@@ -18,4 +18,8 @@ export function ListProfiles():Promise<Array<string>>;
 
 export function LoadDefaultConfig():Promise<main.ConfigResult>;
 
+export function LoadLastProfile():Promise<string>;
+
 export function LoadProfile(arg1:string):Promise<main.ConfigResult>;
+
+export function SaveLastProfile(arg1:string):Promise<void>;

@@ -217,3 +217,21 @@ func (a *App) DoPing() map[string]int {
 	}
 	return map[string]int{"rtt": rtt, "loss": 0}
 }
+
+func (a *App) SaveLastProfile(name string) {
+	exeDir := filepath.Dir(os.Args[0])
+	os.WriteFile(filepath.Join(exeDir, "last_profile.txt"), []byte(name), 0644)
+}
+
+func (a *App) LoadLastProfile() string {
+	exeDir := filepath.Dir(os.Args[0])
+	data, err := os.ReadFile(filepath.Join(exeDir, "last_profile.txt"))
+	if err != nil {
+		exeDir = "."
+		data, err = os.ReadFile(filepath.Join(exeDir, "last_profile.txt"))
+	}
+	if err != nil {
+		return ""
+	}
+	return string(data)
+}

@@ -34,6 +34,14 @@ export function LoadDefaultConfig() {
   return window['go']['main']['App']['LoadDefaultConfig']();
 }
 
+export function LoadLastProfile() {
+  return window['go']['main']['App']['LoadLastProfile']();
+}
+
 export function LoadProfile(arg1) {
   return window['go']['main']['App']['LoadProfile'](arg1);
+}
+
+export function SaveLastProfile(arg1) {
+  return window['go']['main']['App']['SaveLastProfile'](arg1);
 }
