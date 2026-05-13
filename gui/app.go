@@ -172,7 +172,9 @@ func (a *App) DoConnect(serverIP, secretKey, routingSalt, internalIP, gatewayIP,
 		DNS:         dns,
 	}
 	vpn := core.New(cfg, func(status string, txSpeed, rxSpeed int64, totalTx, totalRx uint64) {
-		runtime.EventsEmit(a.ctx, "status", status)
+		if status == "connected" || status == "disconnected" {
+			runtime.EventsEmit(a.ctx, "status", status)
+		}
 		if txSpeed > 0 || rxSpeed > 0 {
 			runtime.EventsEmit(a.ctx, "traffic", map[string]interface{}{
 				"tx_speed": txSpeed, "rx_speed": rxSpeed,
@@ -223,13 +225,8 @@ func (a *App) startPinging() {
 	go func() {
 		ticker := time.NewTicker(2 * time.Second)
 		defer ticker.Stop()
-		for {
-			select {
-			case <-pingCancel:
-				return
-			case <-ticker.C:
-			}
 
+		doPing := func() {
 			rtt := -1
 			targets := []string{"10.0.0.2:9999", "8.8.8.8:443", "1.1.1.1:443"}
 			for _, t := range targets {
@@ -238,35 +235,38 @@ func (a *App) startPinging() {
 				if err == nil {
 					conn.Close()
 					rtt = int(time.Since(start).Milliseconds())
-					if rtt < 1 {
-						rtt = 1
-					}
+					if rtt < 1 { rtt = 1 }
 					break
 				}
 			}
-
 			pingBuffer[pingIndex%1000] = rtt
 			pingIndex++
-
+		}
+		emitPing := func() {
 			var sum, count, lossCount int
 			for _, v := range pingBuffer {
-				if v >= 0 {
-					sum += v
-					count++
-				} else if v == -1 {
-					lossCount++
-				}
+				if v >= 0 { sum += v; count++ }
+				if v == -1 { lossCount++ }
 			}
 			total := count + lossCount
 			avgRT := 0
-			if count > 0 {
-				avgRT = sum / count
-			}
+			if count > 0 { avgRT = sum / count }
 			lossPct := 0
-			if total > 0 {
-				lossPct = lossCount * 100 / total
-			}
+			if total > 0 { lossPct = lossCount * 100 / total }
 			runtime.EventsEmit(a.ctx, "ping", map[string]int{"rtt": avgRT, "loss": lossPct})
+		}
+
+		doPing()
+		emitPing()
+
+		for {
+			select {
+			case <-pingCancel:
+				return
+			case <-ticker.C:
+				doPing()
+				emitPing()
+			}
 		}
 	}()
 }
