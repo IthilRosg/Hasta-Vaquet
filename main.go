@@ -132,6 +132,7 @@ type Config struct {
 	ShortID     uint16 `json:"short_id"`
 	SecretKey   string `json:"secret_key"`
 	RoutingSalt string `json:"routing_salt"`
+	InternalIP  string `json:"internal_ip"`
 }
 
 func loadConfig() Config {
@@ -184,7 +185,7 @@ func main() {
 	log.SetFlags(log.LstdFlags)
 
 	log.Printf("[ЗАПУСК] Клиент Hasta-Vaquet Phase 6")
-	log.Printf("[КОНФИГ] Сервер %s:%d, ShortID=%d", cfg.ServerIP, cfg.Port, cfg.ShortID)
+	log.Printf("[КОНФИГ] Сервер %s:%d, ShortID=%d, InternalIP=%s", cfg.ServerIP, cfg.Port, cfg.ShortID, cfg.InternalIP)
 
 	adapter, err := wintun.CreateAdapter("HastaVaquet", "HastaVaquet", nil)
 	if err != nil { log.Fatal(err) }
@@ -200,7 +201,7 @@ func main() {
 		}
 	}
 
-	run("netsh", "interface", "ip", "set", "address", "name=HastaVaquet", "static", "10.0.0.1", "255.255.255.0")
+	run("netsh", "interface", "ip", "set", "address", "name=HastaVaquet", "static", cfg.InternalIP, "255.255.255.0")
 	run("route", "delete", cfg.ServerIP)
 	run("route", "add", cfg.ServerIP, "mask", "255.255.255.255", "192.168.100.1")
 	run("route", "delete", "0.0.0.0", "10.0.0.1")

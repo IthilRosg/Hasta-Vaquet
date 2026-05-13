@@ -3,5 +3,6 @@
   "port": 9999,
   "short_id": 1,
   "secret_key": "AliceSecret2026",
-  "routing_salt": "HastaVaquetGlobal"
+  "routing_salt": "HastaVaquetGlobal",
+  "internal_ip": "10.0.0.10"
 }
