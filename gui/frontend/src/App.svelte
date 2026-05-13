@@ -281,21 +281,22 @@
   }
   .icon-btn:hover { color: var(--accent); background: var(--surface); }
 
-  /* Bottom dropdown */
+  /* Bottom: dropdown trigger + add button — strictly separated */
   .bottom-section {
     position: fixed; bottom: 0; left: 0; right: 0;
     display: flex; flex-direction: column; align-items: center;
-    padding: 12px 16px 24px; gap: 14px;
-    background: linear-gradient(transparent, var(--bg) 15%);
+    padding: 0 16px;
+    background: linear-gradient(transparent, var(--bg) 10%);
+    z-index: 10;
     pointer-events: none;
   }
   .bottom-section > * { pointer-events: auto; }
 
-  .dropdown-wrap { position: relative; width: 100%; max-width: 340px; }
+  .dropdown-wrap { position: relative; width: 100%; max-width: 340px; z-index: 20; }
 
   .dropdown-trigger {
     display: flex; align-items: center; justify-content: space-between;
-    width: 100%; padding: 10px 14px;
+    width: 100%; padding: 12px 16px; margin-bottom: 16px;
     background: var(--surface); border: 1px solid var(--border);
     border-radius: var(--radius); cursor: pointer;
     color: var(--text); font-size: 14px; font-weight: 600;
@@ -306,16 +307,16 @@
   .dropdown-arrow { color: var(--text-dim); font-size: 10px; }
 
   .dropdown-menu {
-    position: absolute; bottom: 100%; left: 0; right: 0; margin-bottom: 8px;
+    position: absolute; bottom: calc(100% + 52px); left: 0; right: 0;
     background: var(--surface); border: 1px solid var(--border);
     border-radius: var(--radius); overflow: hidden;
-    box-shadow: 0 -8px 32px rgba(0,0,0,0.4);
-    max-height: 200px; overflow-y: auto;
+    box-shadow: 0 -8px 32px rgba(0,0,0,0.5);
+    max-height: 200px; overflow-y: auto; z-index: 25;
   }
 
   .dropdown-item {
     display: flex; align-items: center; justify-content: space-between;
-    width: 100%; padding: 10px 14px; text-align: left;
+    width: 100%; padding: 12px 16px; text-align: left;
     background: none; border: none; border-bottom: 1px solid var(--border);
     color: var(--text); cursor: pointer; transition: background 0.15s;
   }
@@ -329,10 +330,11 @@
   .dropdown-empty { padding: 16px; text-align: center; color: var(--text-dim); font-size: 13px; }
 
   .add-btn {
+    width: 40px; height: 40px; margin-bottom: 20px;
     background: var(--surface); border: 2px dashed var(--border);
-    color: var(--text-dim); cursor: pointer; width: 40px; height: 40px;
+    color: var(--text-dim); cursor: pointer;
     border-radius: 50%; display: flex; align-items: center; justify-content: center;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); margin-top: 4px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); z-index: 15;
   }
   .add-btn:hover {
     border-color: var(--accent); color: var(--accent);
