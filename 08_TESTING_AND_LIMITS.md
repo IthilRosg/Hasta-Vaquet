@@ -22,6 +22,14 @@
 - **HMAC / QUIC mask:**
   - 50% HMAC-mismatch на входящих пакетах = проблема QUIC-маски (бит 6). Проверить: `got & 0x40 == exp & 0x40` на первом байте marker.
   - Если все пакеты сыпят HMAC mismatch, но keep-alive проходит — ключи совпадают, проблема в маскировании бита 6.
+  - **Правильно:** снимать бит 6 с marker И expected перед `hmac.Equal`: `marker[0] &^= 0x40; expected[0] &^= 0x40`
+- **Echo Ping (Native UDP Echo):**
+  - Keep-Alive клиента → сервер отвечает 1-байтовым зашифрованным пакетом (marker 0x01)
+  - RTT = time.Now().UnixMilli() - lastKeepAliveTx
+  - Loss = (echoSent - echoAcked) * 100 / echoSent
+  - Отображается только после первого успешного эха. До этого — "—"
+  - Нет зависимости от TCP, ICMP, DNS, внешних серверов
+- **IPv6 Blackhole:** Маршрут `::/0` через Wintun (netsh interface ipv6 add route). IPv6 трафик падает, утечки нет. Проверка: `ping -6 8.8.8.8` должен выдавать "Destination unreachable".
 
 - **Изоляция сбоев (Graceful Degradation):**
   - Падение одной горутины не должно "ронять" весь VPN-клиент. Используй обработку паник (`recover()`) в горутинах, которые читают/пишут в интерфейс Wintun.

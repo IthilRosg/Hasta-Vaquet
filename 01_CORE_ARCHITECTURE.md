@@ -18,6 +18,9 @@
   - Сервер декодирует ShortID за O(1), извлекает per-user ключ, проверяет HMAC
   - Динамические 2 байта меняются на каждом пакете — DPI не может сгруппировать пакеты одного клиента
 - **Multi-User:** Маршрутизация через `map[uint16]*Peer` и `map[string]*Peer` (по dstIP). Каждый клиент — свой ShortID, свой SecretKey, своя маскировка.
+- **Native UDP Echo Ping:** Keep-Alive клиента → сервер отвечает 1-байтовым шифрованным эхо → клиент замеряет RTT. Потери считаются как `(echoSent - echoAcked) / echoSent`. Никакого TCP/ICMP/внешних серверов.
+- **IPv6 Blackhole:** Маршрут `::/0` направляется через Wintun-адаптер. Наш код игнорирует IPv6 (packet[0]>>4 != 4) → трафик падает в чёрную дыру, предотвращая IPv6 утечку.
+- **UI (Phase 7b):** Wails + Svelte. Асинхронный мост Go↔JS через runtime.EventsEmit. HideWindow для всех exec.Command. Профили через выпадающий список с last_profile.txt.
 - **Разделение сред:**
     - Клиент (Windows): использовать `golang.org/x/sys/windows` и `wintun`. Сборка только под Windows.
     - Сервер (Linux): использовать стандартный `os.OpenFile("/dev/net/tun", ...)`. Сборка только под Linux.
