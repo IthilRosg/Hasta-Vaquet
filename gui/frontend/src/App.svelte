@@ -10,9 +10,6 @@
   let loss = 0
   let showSettings = false
   let animating = false
-  let profileName = 'Default'
-  let profiles: {name: string; server_ip: string; port: number; short_id: number; internal_ip: string; dns: string}[] = []
-  let showProfileMenu = false
 
   let serverIP = '31.42.120.154'
   let port = 9999
@@ -44,7 +41,6 @@
   }
 
   async function selectProfile(name: string) {
-    showProfileMenu = false
     const cfg = await LoadProfile(name)
     if (cfg) {
       applyCfg(cfg)
@@ -121,7 +117,7 @@
 <div class="container">
   <!-- Profile selector -->
   <div class="profile-bar">
-    <button class="profile-btn" on:click={() => showProfileMenu = !showProfileMenu}>
+    <button class="profile-btn" on:click={toggleSettings}>
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M20 8v6m-3-3h6"/>
       </svg>
@@ -137,20 +133,6 @@
     </button>
   </div>
 
-  <!-- Profile dropdown -->
-  {#if showProfileMenu}
-  <div class="profile-dropdown">
-    {#each profiles as p}
-    <button class="profile-item" on:click={() => selectProfile(p.name)}>
-      <div class="profile-item-name">{p.name}</div>
-      <div class="profile-item-detail">{p.server_ip}:{p.port} | {p.internal_ip}</div>
-    </button>
-    {/each}
-    {#if profiles.length === 0}
-    <div class="profile-empty">No profiles. Add .json files to profiles/</div>
-    {/if}
-  </div>
-  {/if}
 
   <!-- Main button -->
   <div class="button-wrapper" class:connected>
@@ -200,10 +182,27 @@
     </div>
   </div>
   {/if}
+</div>
 
-  <!-- Import / Add Profile button -->
+<!-- Profile list + Add button -->
+<div class="bottom-section">
+  {#if profiles.length > 0}
+  <div class="profile-list">
+    {#each profiles as p}
+    <button class="profile-card" class:active={p.name === profileName} on:click={() => selectProfile(p.name)}>
+      <div class="profile-card-left">
+        <div class="profile-card-name">{p.name}</div>
+        <div class="profile-card-detail">{p.server_ip}:{p.port}</div>
+      </div>
+      <div class="profile-card-right">
+        <span class="profile-card-ip">{p.internal_ip}</span>
+      </div>
+    </button>
+    {/each}
+  </div>
+  {/if}
   <button class="add-btn" on:click={importProfile} title="Add Profile">
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
       <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
       <circle cx="12" cy="12" r="10"/>
     </svg>
@@ -289,29 +288,49 @@
 
   .icon-btn:hover { color: var(--accent); background: var(--surface); }
 
-  .profile-dropdown {
-    position: fixed; top: 48px; left: 16px; right: 16px; max-width: 320px;
+  /* Bottom profile list */
+  .bottom-section {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 12px 16px 20px; gap: 10px;
+    background: linear-gradient(transparent, var(--bg) 20%);
+    pointer-events: none;
+  }
+
+  .bottom-section > * { pointer-events: auto; }
+
+  .profile-list {
+    display: flex; flex-direction: column; gap: 6px;
+    width: 100%; max-width: 340px;
+  }
+
+  .profile-card {
+    display: flex; align-items: center; justify-content: space-between;
+    width: 100%; padding: 10px 14px;
     background: var(--surface); border: 1px solid var(--border);
-    border-radius: var(--radius); z-index: 20; overflow: hidden;
-    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    border-radius: var(--radius); cursor: pointer;
+    color: var(--text); transition: all 0.2s;
+    text-align: left;
   }
 
-  .profile-item {
-    width: 100%; background: none; border: none; border-bottom: 1px solid var(--border);
-    color: var(--text); padding: 10px 14px; text-align: left; cursor: pointer;
-    transition: background 0.15s;
+  .profile-card:hover { border-color: var(--accent); background: var(--surface-hover); }
+  .profile-card.active { border-color: var(--green); background: rgba(63, 185, 80, 0.06); }
+
+  .profile-card-name { font-weight: 600; font-size: 14px; }
+  .profile-card-detail { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+  .profile-card-ip { font-size: 12px; color: var(--accent); font-weight: 500; }
+
+  .add-btn {
+    background: var(--surface); border: 2px dashed var(--border);
+    color: var(--text-dim); cursor: pointer; width: 44px; height: 44px;
+    border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
-  .profile-item:last-child { border-bottom: none; }
-  .profile-item:hover { background: var(--surface-hover); }
-
-  .profile-item-name { font-weight: 600; font-size: 14px; }
-  .profile-item-detail { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
-
-  .profile-empty { padding: 16px; text-align: center; color: var(--text-dim); font-size: 13px; }
-
-  .button-wrapper { position: relative; border-radius: 50%; padding: 4px; margin-top: 48px; }
-  .button-wrapper.connected { animation: pulse 2s ease-in-out infinite; }
+  .add-btn:hover {
+    border-color: var(--accent); color: var(--accent);
+    background: var(--accent-glow); transform: scale(1.08);
+  }
 
   @keyframes pulse {
     0%, 100% { box-shadow: 0 0 0 0 var(--green-glow); }
@@ -329,6 +348,8 @@
   .big-btn:active { transform: scale(0.95); }
   .big-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 
+  .button-wrapper { position: relative; border-radius: 50%; padding: 4px; }
+  .button-wrapper.connected { animation: pulse 2s ease-in-out infinite; }
   .button-wrapper.connected .big-btn { border-color: var(--green); background: rgba(63, 185, 80, 0.08); }
 
   .icon { display: flex; }

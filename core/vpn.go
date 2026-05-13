@@ -221,7 +221,9 @@ func (v *VPN) statsLoop() {
 }
 
 func getInterfaceIndex(name string) string {
-	out, _ := exec.Command("powershell", "-Command",
-		fmt.Sprintf("Get-NetAdapter -Name '%s' | Select-Object -ExpandProperty InterfaceIndex", name)).Output()
+	cmd := exec.Command("powershell", "-Command",
+		fmt.Sprintf("Get-NetAdapter -Name '%s' | Select-Object -ExpandProperty InterfaceIndex", name))
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	out, _ := cmd.Output()
 	return strings.TrimSpace(string(out))
 }
