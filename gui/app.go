@@ -204,16 +204,20 @@ func (a *App) IsConnected() bool {
 }
 
 func (a *App) DoPing() map[string]int {
-	cmd := exec.Command("ping", "-n", "1", "-w", "3000", "8.8.8.8")
-	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
-	out, _ := cmd.Output()
-	for _, l := range strings.Split(string(out), "\n") {
-		if idx := strings.Index(l, "time="); idx >= 0 {
-			after := l[idx+5:]
-			if end := strings.Index(after, "ms"); end > 0 {
-				v, _ := strconv.Atoi(strings.TrimSpace(after[:end]))
-				if v > 0 {
-					return map[string]int{"rtt": v, "loss": 0}
+	// First try pinging the server through tunnel via its internal IP
+	targets := []string{"10.0.0.2", "8.8.8.8", "1.1.1.1"}
+	for _, target := range targets {
+		cmd := exec.Command("ping", "-n", "1", "-w", "2000", target)
+		cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+		out, _ := cmd.Output()
+		for _, l := range strings.Split(string(out), "\n") {
+			if idx := strings.Index(l, "time="); idx >= 0 {
+				after := l[idx+5:]
+				if end := strings.Index(after, "ms"); end > 0 {
+					v, _ := strconv.Atoi(strings.TrimSpace(after[:end]))
+					if v > 0 {
+						return map[string]int{"rtt": v, "loss": 0}
+					}
 				}
 			}
 		}

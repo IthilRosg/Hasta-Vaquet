@@ -130,11 +130,18 @@
         <path d="M6 9l6 6 6-6"/>
       </svg>
     </button>
-    <button class="gear" on:click={toggleSettings}>
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <circle cx="12" cy="12" r="3"/><path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72l1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
-      </svg>
-    </button>
+    <div class="profile-actions">
+      <button class="icon-btn" title="Import Profile" on:click={importProfile}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+        </svg>
+      </button>
+      <button class="icon-btn" title="Settings" on:click={toggleSettings}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="3"/><path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72l1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+        </svg>
+      </button>
+    </div>
   </div>
 
   <!-- Profile dropdown -->
@@ -272,12 +279,14 @@
 
   .profile-name { font-weight: 600; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-  .gear {
+  .profile-actions { display: flex; gap: 4px; }
+
+  .icon-btn {
     background: none; border: none; color: var(--text-dim); cursor: pointer;
-    padding: 6px; border-radius: var(--radius-sm); transition: all 0.2s;
+    padding: 8px; border-radius: var(--radius-sm); transition: all 0.2s;
   }
 
-  .gear:hover { color: var(--text); background: var(--surface); }
+  .icon-btn:hover { color: var(--accent); background: var(--surface); }
 
   .profile-dropdown {
     position: fixed; top: 48px; left: 16px; right: 16px; max-width: 320px;
