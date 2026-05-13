@@ -1,0 +1,8 @@
+{
+  "port": 9999,
+  "routing_salt": "HastaVaquetGlobal",
+  "users": [
+    { "short_id": 1, "secret_key": "AliceSecret2026", "ip": "10.0.0.10" },
+    { "short_id": 2, "secret_key": "BobSecret2026", "ip": "10.0.0.11" }
+  ]
+}
