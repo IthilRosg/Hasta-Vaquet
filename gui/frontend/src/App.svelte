@@ -281,37 +281,35 @@
   }
   .icon-btn:hover { color: var(--accent); background: var(--surface); }
 
-  /* Bottom: dropdown trigger + add button — strictly separated */
+  /* Bottom: pure Flexbox, no absolute, no fixed children */
   .bottom-section {
     position: fixed; bottom: 0; left: 0; right: 0;
     display: flex; flex-direction: column; align-items: center;
-    padding: 0 16px;
+    justify-content: flex-end; gap: 16px; padding-bottom: 24px;
     background: linear-gradient(transparent, var(--bg) 10%);
-    z-index: 10;
-    pointer-events: none;
+    z-index: 10; pointer-events: none;
   }
   .bottom-section > * { pointer-events: auto; }
 
-  .dropdown-wrap { position: relative; width: 100%; max-width: 340px; z-index: 20; }
+  .dropdown-wrap { position: relative; width: 100%; max-width: 340px; }
 
   .dropdown-trigger {
     display: flex; align-items: center; justify-content: space-between;
-    width: 100%; padding: 12px 16px; margin-bottom: 16px;
+    width: 100%; padding: 12px 16px;
     background: var(--surface); border: 1px solid var(--border);
     border-radius: var(--radius); cursor: pointer;
     color: var(--text); font-size: 14px; font-weight: 600;
     transition: border 0.2s;
   }
   .dropdown-trigger:hover { border-color: var(--accent); }
-
   .dropdown-arrow { color: var(--text-dim); font-size: 10px; }
 
   .dropdown-menu {
-    position: absolute; bottom: calc(100% + 52px); left: 0; right: 0;
+    position: absolute; bottom: 100%; margin-bottom: 8px; left: 0; right: 0;
     background: var(--surface); border: 1px solid var(--border);
     border-radius: var(--radius); overflow: hidden;
     box-shadow: 0 -8px 32px rgba(0,0,0,0.5);
-    max-height: 200px; overflow-y: auto; z-index: 25;
+    max-height: 200px; overflow-y: auto; z-index: 50;
   }
 
   .dropdown-item {
@@ -323,18 +321,17 @@
   .dropdown-item:last-child { border-bottom: none; }
   .dropdown-item:hover { background: var(--surface-hover); }
   .dropdown-item.selected { background: rgba(63, 185, 80, 0.06); }
-
   .dropdown-item-name { font-size: 14px; font-weight: 600; }
   .dropdown-item-detail { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
   .dropdown-item-ip { font-size: 12px; color: var(--accent); }
   .dropdown-empty { padding: 16px; text-align: center; color: var(--text-dim); font-size: 13px; }
 
   .add-btn {
-    width: 40px; height: 40px; margin-bottom: 20px;
+    width: 40px; height: 40px;
     background: var(--surface); border: 2px dashed var(--border);
     color: var(--text-dim); cursor: pointer;
     border-radius: 50%; display: flex; align-items: center; justify-content: center;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); z-index: 15;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
   .add-btn:hover {
     border-color: var(--accent); color: var(--accent);
