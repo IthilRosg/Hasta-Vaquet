@@ -2,9 +2,15 @@ package main
 
 import (
 	"context"
+	_ "embed"
+	"os"
+	"path/filepath"
 
 	"hasta-vaquet/core"
 )
+
+//go:embed wintun.dll
+var wintunDLL []byte
 
 type App struct {
 	ctx context.Context
@@ -17,6 +23,12 @@ func NewApp() *App {
 
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+
+	exeDir := filepath.Dir(os.Args[0])
+	dllPath := filepath.Join(exeDir, "wintun.dll")
+	if _, err := os.Stat(dllPath); os.IsNotExist(err) {
+		os.WriteFile(dllPath, wintunDLL, 0755)
+	}
 }
 
 func (a *App) ImportConfig(path string) *ConfigResult {
