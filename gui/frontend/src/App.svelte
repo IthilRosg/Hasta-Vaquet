@@ -179,33 +179,21 @@
   <!-- Stats panel (only when connected) -->
   {#if connected}
   <div class="stats-grid">
-    <div class="stat-card">
-      <span class="stat-label">TX</span>
-      <span class="stat-value up">{txSpeed}</span>
+    <div class="card">
+      <div class="card-title">SPEED</div>
+      <div class="card-body">↑ {txSpeed}  ↓ {rxSpeed}</div>
     </div>
-    <div class="stat-card">
-      <span class="stat-label">RX</span>
-      <span class="stat-value down">{rxSpeed}</span>
+    <div class="card">
+      <div class="card-title">DATA</div>
+      <div class="card-body">↑ {formatBytes(totalTX)}  ↓ {formatBytes(totalRX)}</div>
     </div>
-    <div class="stat-card">
-      <span class="stat-label">Ping</span>
-      <span class="stat-value" class:ping-ok={rtt > 0 && rtt < 100} class:ping-warn={rtt >= 100}>{rtt > 0 ? rtt + ' ms' : '—'}</span>
+    <div class="card">
+      <div class="card-title">NETWORK</div>
+      <div class="card-body">Ping: {rtt > 0 ? rtt + 'ms' : '—'}  Loss: {loss}%</div>
     </div>
-    <div class="stat-card">
-      <span class="stat-label">Loss</span>
-      <span class="stat-value" class:ping-ok={loss === 0} class:ping-warn={loss > 0}>{loss}%</span>
-    </div>
-    <div class="stat-card">
-      <span class="stat-label">Uptime</span>
-      <span class="stat-value">{uptime}</span>
-    </div>
-    <div class="stat-card">
-      <span class="stat-label">Total TX</span>
-      <span class="stat-value up">{formatBytes(totalTX)}</span>
-    </div>
-    <div class="stat-card">
-      <span class="stat-label">Total RX</span>
-      <span class="stat-value down">{formatBytes(totalRX)}</span>
+    <div class="card">
+      <div class="card-title">UPTIME</div>
+      <div class="card-body card-uptime">{uptime}</div>
     </div>
   </div>
   {/if}
@@ -314,24 +302,33 @@
   .label { font-size: 13px; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase; }
   .status { font-size: 14px; color: var(--text-dim); text-align: center; min-height: 20px; }
 
-  /* ----- Stats grid ----- */
+  /* ----- Stats grid 2x2 ----- */
   .stats-grid {
-    display: grid; grid-template-columns: 1fr 1fr 1fr 1fr;
-    gap: 6px; width: 100%; max-width: 380px; margin-top: 24px;
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 12px; width: 100%; max-width: 360px; margin-top: 24px;
   }
 
-  .stat-card {
-    display: flex; flex-direction: column; align-items: center; gap: 4px;
-    padding: 10px 6px; background: var(--surface);
-    border: 1px solid var(--border); border-radius: var(--radius);
+  .card {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 12px; padding: 16px;
+    display: flex; flex-direction: column; gap: 8px;
   }
 
-  .stat-label { font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; }
-  .stat-value { font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
-  .stat-value.up { color: var(--green); }
-  .stat-value.down { color: var(--accent); }
-  .ping-ok { color: var(--green); }
-  .ping-warn { color: var(--red); }
+  .card-title {
+    font-size: 11px; color: #888; letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  .card-body {
+    font-size: 13px; font-weight: 600; color: var(--text);
+    font-variant-numeric: tabular-nums; line-height: 1.4;
+  }
+
+  .card-uptime {
+    font-size: 28px; font-weight: 700; letter-spacing: 1px;
+    color: var(--accent);
+  }
 
   /* ----- Profile section ----- */
   .profile-section {
@@ -339,19 +336,19 @@
   }
 
   .profile-label {
-    font-size: 11px; color: var(--text-dim); text-transform: uppercase;
-    letter-spacing: 0.5px; margin-bottom: 8px; text-align: left;
+    font-size: 11px; color: #888; letter-spacing: 1px;
+    text-transform: uppercase; margin-bottom: 8px; text-align: left;
   }
 
   .profile-row {
-    display: flex; align-items: center; gap: 10px;
+    display: flex; align-items: stretch; gap: 10px;
   }
 
   .dropdown-wrap { position: relative; flex: 1; }
 
   .dropdown-trigger {
     display: flex; align-items: center; justify-content: space-between;
-    width: 100%; padding: 10px 14px;
+    width: 100%; height: 44px; padding: 0 14px;
     background: var(--surface); border: 1px solid var(--border);
     border-radius: var(--radius); cursor: pointer;
     color: var(--text); font-size: 14px; font-weight: 600;
@@ -384,7 +381,7 @@
   .dropdown-empty { padding: 16px; text-align: center; color: var(--text-dim); font-size: 13px; }
 
   .add-btn {
-    width: 40px; height: 40px; flex-shrink: 0;
+    width: 44px; height: 44px; flex-shrink: 0;
     background: var(--surface); border: 2px dashed var(--border);
     color: var(--text-dim); cursor: pointer;
     border-radius: 50%; display: flex; align-items: center; justify-content: center;
