@@ -66,12 +66,13 @@ func (v *VPN) Start() error {
 	}
 
 	run("netsh", "interface", "ip", "set", "address", "name=HastaVaquet", "static", v.config.InternalIP, "255.255.255.0")
-	run("netsh", "interface", "ipv6", "set", "disabled", "interface=HastaVaquet", "store=active")
 	run("netsh", "interface", "ip", "set", "dns", "name=HastaVaquet", "static", v.config.DNS)
 	run("route", "delete", v.config.ServerIP)
 	run("route", "add", v.config.ServerIP, "mask", "255.255.255.255", v.config.GatewayIP)
 	run("route", "delete", "0.0.0.0", v.config.InternalIP)
 	run("route", "add", "0.0.0.0", "mask", "0.0.0.0", v.config.InternalIP, "metric", "1", "if", index)
+	// Blackhole IPv6: route ::/0 through Wintun (our code ignores IPv6 = drop = no leak)
+	run("netsh", "interface", "ipv6", "add", "route", "::/0", "name=HastaVaquet", v.config.InternalIP, "metric=1")
 
 	conn, err := net.DialUDP("udp", nil, &net.UDPAddr{
 		IP:   net.ParseIP(v.config.ServerIP),
@@ -112,7 +113,13 @@ func (v *VPN) Stop() {
 	v.running.Store(false)
 	close(v.stopCh)
 
-	exec.Command("route", "delete", "0.0.0.0", v.config.InternalIP).Run()
+	hide := func(cmd string, args ...string) {
+		c := exec.Command(cmd, args...)
+		c.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+		c.Run()
+	}
+	hide("route", "delete", "0.0.0.0", v.config.InternalIP)
+	hide("netsh", "interface", "ipv6", "delete", "route", "::/0", "name=HastaVaquet")
 
 	if v.conn != nil {
 		v.conn.Close()
