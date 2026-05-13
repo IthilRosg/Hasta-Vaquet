@@ -15,22 +15,27 @@ import (
 	"golang.zx2c4.com/wintun"
 )
 
-type StatusCallback func(status string, txSpeed, rxSpeed int64, totalTx, totalRx uint64)
+type StatusCallback func(status string, txSpeed, rxSpeed int64, totalTx, totalRx uint64, pingMs int, lossPct int)
 
 type VPN struct {
-	config        Config
-	key           [32]byte
-	conn          *net.UDPConn
-	session       *wintun.Session
-	adapter       *wintun.Adapter
-	running       atomic.Bool
-	stopCh        chan struct{}
-	txBytes       atomic.Int64
-	rxBytes       atomic.Int64
-	sessionTotalTx atomic.Uint64
-	sessionTotalRx atomic.Uint64
-	onStatus      StatusCallback
-	mu            sync.Mutex
+	config          Config
+	key             [32]byte
+	conn            *net.UDPConn
+	session         *wintun.Session
+	adapter         *wintun.Adapter
+	running         atomic.Bool
+	stopCh          chan struct{}
+	txBytes         atomic.Int64
+	rxBytes         atomic.Int64
+	sessionTotalTx  atomic.Uint64
+	sessionTotalRx  atomic.Uint64
+	onStatus        StatusCallback
+	mu              sync.Mutex
+	lastAliveMs     atomic.Int64  // unix milli of last keep-alive sent
+	echoReceived    atomic.Bool   // true if at least one echo came back
+	echoRtt         atomic.Int64  // latest RTT in ms
+	echoSent        atomic.Int64  // keep-alives sent
+	echoAcked       atomic.Int64  // echos received
 }
 
 func New(cfg Config, cb StatusCallback) *VPN {
@@ -50,7 +55,7 @@ func (v *VPN) Start() error {
 	}
 	v.stopCh = make(chan struct{})
 
-	v.callback("connecting", 0, 0, 0, 0)
+	v.callback("connecting", 0, 0, 0, 0, 0, 0)
 
 	adapter, err := wintun.CreateAdapter("HastaVaquet", "HastaVaquet", nil)
 	if err != nil {
@@ -93,7 +98,7 @@ func (v *VPN) Start() error {
 	v.session = &sess
 
 	v.running.Store(true)
-	v.callback("connected", 0, 0, 0, 0)
+	v.callback("connected", 0, 0, 0, 0, 0, 0)
 
 	go v.keepAliveLoop()
 	go v.readerLoop()
@@ -131,25 +136,26 @@ func (v *VPN) Stop() {
 		v.adapter.Close()
 	}
 
-	v.callback("disconnected", 0, 0, 0, 0)
+	v.callback("disconnected", 0, 0, 0, 0, 0, 0)
 }
 
 func (v *VPN) IsRunning() bool {
 	return v.running.Load()
 }
 
-func (v *VPN) callback(status string, txSpeed, rxSpeed int64, totalTx, totalRx uint64) {
+func (v *VPN) callback(status string, txSpeed, rxSpeed int64, totalTx, totalRx uint64, pingMs, lossPct int) {
 	if v.onStatus != nil {
-		v.onStatus(status, txSpeed, rxSpeed, totalTx, totalRx)
+		v.onStatus(status, txSpeed, rxSpeed, totalTx, totalRx, pingMs, lossPct)
 	}
 }
 
 func (v *VPN) keepAliveLoop() {
-	// Send keep-alive immediately, then every 10-30s
 	for {
 		packet, err := Encrypt([]byte{}, v.key[:], v.config.ShortID, v.config.RoutingSalt)
 		if err == nil {
 			v.conn.Write(packet)
+			v.lastAliveMs.Store(time.Now().UnixMilli())
+			v.echoSent.Add(1)
 		}
 		select {
 		case <-v.stopCh:
@@ -179,6 +185,19 @@ func (v *VPN) readerLoop() {
 			continue
 		}
 		if len(decrypted) == 0 {
+			continue
+		}
+		// Server echo response (1-byte marker for RTT measurement)
+		if len(decrypted) == 1 && decrypted[0] == 0x01 {
+			v.echoAcked.Add(1)
+			last := v.lastAliveMs.Load()
+			if last > 0 {
+				rtt := time.Now().UnixMilli() - last
+				if rtt > 0 && rtt < 10000 {
+					v.echoRtt.Store(rtt)
+					v.echoReceived.Store(true)
+				}
+			}
 			continue
 		}
 		packet, err := v.session.AllocateSendPacket(len(decrypted))
@@ -226,8 +245,17 @@ func (v *VPN) statsLoop() {
 		case <-ticker.C:
 			txSpeed := v.txBytes.Swap(0)
 			rxSpeed := v.rxBytes.Swap(0)
-			if txSpeed > 0 || rxSpeed > 0 {
-				v.callback("traffic", txSpeed, rxSpeed, v.sessionTotalTx.Load(), v.sessionTotalRx.Load())
+			var pingMs, lossPct int
+			if v.echoReceived.Load() {
+				pingMs = int(v.echoRtt.Load())
+				sent := v.echoSent.Load()
+				acked := v.echoAcked.Load()
+				if sent > 0 {
+					lossPct = int((sent - acked) * 100 / sent)
+				}
+			}
+			if txSpeed > 0 || rxSpeed > 0 || pingMs > 0 {
+				v.callback("traffic", txSpeed, rxSpeed, v.sessionTotalTx.Load(), v.sessionTotalRx.Load(), pingMs, lossPct)
 			}
 		}
 	}

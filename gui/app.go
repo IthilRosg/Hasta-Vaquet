@@ -4,12 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	_ "embed"
-	"net"
 	"os"
 	"path/filepath"
 	"sort"
-	"strings"
-	"time"
 
 	"hasta-vaquet/core"
 
@@ -172,22 +169,22 @@ func (a *App) DoConnect(serverIP, secretKey, routingSalt, internalIP, gatewayIP,
 		GatewayIP:   gatewayIP,
 		DNS:         dns,
 	}
-	vpn := core.New(cfg, func(status string, txSpeed, rxSpeed int64, totalTx, totalRx uint64) {
+	vpn := core.New(cfg, func(status string, txSpeed, rxSpeed int64, totalTx, totalRx uint64, pingMs, lossPct int) {
 		if status == "connected" || status == "disconnected" {
 			runtime.EventsEmit(a.ctx, "status", status)
 		}
-		if txSpeed > 0 || rxSpeed > 0 {
+		if txSpeed > 0 || rxSpeed > 0 || pingMs > 0 {
 			runtime.EventsEmit(a.ctx, "traffic", map[string]interface{}{
 				"tx_speed": txSpeed, "rx_speed": rxSpeed,
 				"total_tx": totalTx, "total_rx": totalRx,
 			})
 		}
+		runtime.EventsEmit(a.ctx, "ping", map[string]int{"rtt": pingMs, "loss": lossPct})
 	})
 	if err := vpn.Start(); err != nil {
 		return err.Error()
 	}
 	a.vpn = vpn
-	a.startPinging()
 	return "connected"
 }
 
@@ -195,7 +192,6 @@ func (a *App) DoDisconnect() string {
 	if a.vpn == nil || !a.vpn.IsRunning() {
 		return "not connected"
 	}
-	a.stopPinging()
 	a.vpn.Stop()
 	a.vpn = nil
 	runtime.EventsEmit(a.ctx, "status", "disconnected")
@@ -204,88 +200,6 @@ func (a *App) DoDisconnect() string {
 
 func (a *App) IsConnected() bool {
 	return a.vpn != nil && a.vpn.IsRunning()
-}
-
-// --- Ping sliding window ---
-var (
-	pingBuffer [50]int
-	pingIndex  int
-	pingFilled int
-	pingCancel chan struct{}
-)
-
-func (a *App) startPinging() {
-	if pingCancel != nil {
-		close(pingCancel)
-	}
-	pingCancel = make(chan struct{})
-	pingIndex = 0
-	pingFilled = 0
-	for i := range pingBuffer {
-		pingBuffer[i] = -1
-	}
-
-	go func() {
-		ticker := time.NewTicker(1 * time.Second)
-		defer ticker.Stop()
-
-		doPing := func() {
-			start := time.Now()
-			conn, err := net.DialTimeout("tcp", "31.42.120.154:22", 2*time.Second)
-			rtt := -1
-			if err == nil {
-				conn.Close()
-				rtt = int(time.Since(start).Milliseconds())
-			}
-			if rtt < 1 { rtt = 0 }
-			// Also probe tunnel: try 10.0.0.2 (internal server IP)
-			start2 := time.Now()
-			conn2, err2 := net.DialTimeout("tcp", "10.0.0.2:22", 1*time.Second)
-			if err2 == nil || strings.Contains(err2.Error(), "refused") {
-				if conn2 != nil { conn2.Close() }
-				trtt := int(time.Since(start2).Milliseconds())
-				if trtt > 0 && trtt < rtt { rtt = trtt }
-			}
-			pingBuffer[pingIndex%50] = rtt
-			pingIndex++
-			if pingFilled < 50 { pingFilled++ }
-		}
-		emitPing := func() {
-			var sum, count, lossCount int
-			for i := 0; i < pingFilled; i++ {
-				v := pingBuffer[i]
-				if v >= 0 { sum += v; count++ }
-				if v == -1 { lossCount++ }
-			}
-			total := count + lossCount
-			avgRT := 0
-			if count > 0 { avgRT = sum / count }
-			lossPct := 0
-			if total > 0 { lossPct = lossCount * 100 / total }
-			runtime.EventsEmit(a.ctx, "ping", map[string]int{"rtt": avgRT, "loss": lossPct})
-		}
-
-		// Fire immediately, then every 1s
-		doPing()
-		emitPing()
-
-		for {
-			select {
-			case <-pingCancel:
-				return
-			case <-ticker.C:
-				doPing()
-				emitPing()
-			}
-		}
-	}()
-}
-
-func (a *App) stopPinging() {
-	if pingCancel != nil {
-		close(pingCancel)
-		pingCancel = nil
-	}
 }
 
 func (a *App) SaveLastProfile(name string) {

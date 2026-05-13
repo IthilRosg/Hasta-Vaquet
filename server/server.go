@@ -319,6 +319,9 @@ func main() {
 				peer.udpMu.Lock()
 				peer.UDPAddr = addr
 				peer.udpMu.Unlock()
+				// Echo back for tunnel latency measurement
+				enc, _ := encrypt([]byte{0x01}, peer.Key[:], peer.ShortID)
+				conn.WriteToUDP(enc, addr)
 				continue
 			}
 			peer.udpMu.Lock()
