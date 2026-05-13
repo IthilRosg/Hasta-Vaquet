@@ -7,6 +7,7 @@ import (
 )
 
 type Config struct {
+	ProfileName string `json:"profile_name"`
 	ServerIP    string `json:"server_ip"`
 	Port        int    `json:"port"`
 	ShortID     uint16 `json:"short_id"`

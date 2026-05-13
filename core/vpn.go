@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"golang.org/x/sys/windows"
@@ -57,7 +58,9 @@ func (v *VPN) Start() error {
 
 	index := getInterfaceIndex("HastaVaquet")
 	run := func(cmd string, args ...string) {
-		exec.Command(cmd, args...).CombinedOutput()
+		c := exec.Command(cmd, args...)
+		c.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+		c.CombinedOutput()
 	}
 
 	run("netsh", "interface", "ip", "set", "address", "name=HastaVaquet", "static", v.config.InternalIP, "255.255.255.0")
@@ -173,6 +176,7 @@ func (v *VPN) readerLoop() {
 		}
 		copy(packet, decrypted)
 		v.session.SendPacket(packet)
+		v.rxBytes.Add(int64(len(decrypted)))
 	}
 }
 

@@ -1,7 +1,7 @@
 export namespace main {
 	
 	export class ConfigResult {
-	    error?: string;
+	    profile_name: string;
 	    server_ip: string;
 	    port: number;
 	    short_id: number;
@@ -17,7 +17,7 @@ export namespace main {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.error = source["error"];
+	        this.profile_name = source["profile_name"];
 	        this.server_ip = source["server_ip"];
 	        this.port = source["port"];
 	        this.short_id = source["short_id"];
@@ -25,6 +25,28 @@ export namespace main {
 	        this.internal_ip = source["internal_ip"];
 	        this.routing_salt = source["routing_salt"];
 	        this.gateway_ip = source["gateway_ip"];
+	        this.dns = source["dns"];
+	    }
+	}
+	export class ProfileItem {
+	    name: string;
+	    server_ip: string;
+	    port: number;
+	    short_id: number;
+	    internal_ip: string;
+	    dns: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ProfileItem(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.server_ip = source["server_ip"];
+	        this.port = source["port"];
+	        this.short_id = source["short_id"];
+	        this.internal_ip = source["internal_ip"];
 	        this.dns = source["dns"];
 	    }
 	}

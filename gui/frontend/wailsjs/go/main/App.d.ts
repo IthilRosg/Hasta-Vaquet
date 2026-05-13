@@ -10,4 +10,10 @@ export function ImportConfig(arg1:string):Promise<main.ConfigResult>;
 
 export function IsConnected():Promise<boolean>;
 
+export function ListProfileItems():Promise<Array<main.ProfileItem>>;
+
+export function ListProfiles():Promise<Array<string>>;
+
 export function LoadDefaultConfig():Promise<main.ConfigResult>;
+
+export function LoadProfile(arg1:string):Promise<main.ConfigResult>;

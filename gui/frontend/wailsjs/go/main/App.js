@@ -18,6 +18,18 @@ export function IsConnected() {
   return window['go']['main']['App']['IsConnected']();
 }
 
+export function ListProfileItems() {
+  return window['go']['main']['App']['ListProfileItems']();
+}
+
+export function ListProfiles() {
+  return window['go']['main']['App']['ListProfiles']();
+}
+
 export function LoadDefaultConfig() {
   return window['go']['main']['App']['LoadDefaultConfig']();
+}
+
+export function LoadProfile(arg1) {
+  return window['go']['main']['App']['LoadProfile'](arg1);
 }
