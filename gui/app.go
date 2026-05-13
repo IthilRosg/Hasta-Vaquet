@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"hasta-vaquet/core"
@@ -230,12 +231,18 @@ func (a *App) startPinging() {
 
 		doPing := func() {
 			rtt := -1
-			targets := []string{"8.8.8.8:443", "1.1.1.1:443", "10.0.0.2:9999"}
+			targets := []string{"10.0.0.2:22", "10.0.0.2:443", "10.0.0.2:9999", "8.8.8.8:443"}
 			for _, t := range targets {
 				start := time.Now()
-				conn, err := net.DialTimeout("tcp", t, 1*time.Second)
+				conn, err := net.DialTimeout("tcp", t, 2*time.Second)
 				if err == nil {
 					conn.Close()
+					rtt = int(time.Since(start).Milliseconds())
+					if rtt < 1 { rtt = 1 }
+					break
+				}
+				// RST (connection refused) = packet went through tunnel and back = valid RTT
+				if strings.Contains(err.Error(), "refused") {
 					rtt = int(time.Since(start).Milliseconds())
 					if rtt < 1 { rtt = 1 }
 					break
