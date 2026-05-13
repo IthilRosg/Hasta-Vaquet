@@ -187,8 +187,8 @@
 <div class="bottom-section">
   <div class="dropdown-wrap">
     <button class="dropdown-trigger" on:click={() => showProfileDropdown = !showProfileDropdown}>
-      <span class="dropdown-label">{profileName}</span>
-      <span class="dropdown-arrow">{showProfileDropdown ? '▲' : '▼'}</span>
+      <span>{profileName || 'Select Profile'}</span>
+      <span class="arrow">▼</span>
     </button>
     {#if showProfileDropdown}
     <div class="dropdown-menu">
@@ -208,7 +208,7 @@
     </div>
     {/if}
   </div>
-  <button class="add-btn" on:click={importProfile} title="Add Profile">
+  <button class="add-btn" on:click={importProfile}>
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
       <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
       <circle cx="12" cy="12" r="10"/>
@@ -281,17 +281,23 @@
   }
   .icon-btn:hover { color: var(--accent); background: var(--surface); }
 
-  /* Bottom: pure Flexbox, no absolute, no fixed children */
   .bottom-section {
-    position: fixed; bottom: 0; left: 0; right: 0;
-    display: flex; flex-direction: column; align-items: center;
-    justify-content: flex-end; gap: 16px; padding-bottom: 24px;
-    background: linear-gradient(transparent, var(--bg) 10%);
-    z-index: 10; pointer-events: none;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+    padding-bottom: 24px;
   }
-  .bottom-section > * { pointer-events: auto; }
 
-  .dropdown-wrap { position: relative; width: 100%; max-width: 340px; }
+  .dropdown-wrap {
+    position: relative;
+    width: 80%;
+    margin-bottom: 16px !important;
+  }
 
   .dropdown-trigger {
     display: flex; align-items: center; justify-content: space-between;
@@ -302,14 +308,19 @@
     transition: border 0.2s;
   }
   .dropdown-trigger:hover { border-color: var(--accent); }
-  .dropdown-arrow { color: var(--text-dim); font-size: 10px; }
+  .arrow { color: var(--text-dim); font-size: 10px; }
 
   .dropdown-menu {
-    position: absolute; bottom: 100%; margin-bottom: 8px; left: 0; right: 0;
+    position: absolute;
+    bottom: 100%;
+    left: 0;
+    width: 100%;
+    margin-bottom: 8px;
+    z-index: 50;
     background: var(--surface); border: 1px solid var(--border);
     border-radius: var(--radius); overflow: hidden;
     box-shadow: 0 -8px 32px rgba(0,0,0,0.5);
-    max-height: 200px; overflow-y: auto; z-index: 50;
+    max-height: 200px; overflow-y: auto;
   }
 
   .dropdown-item {
@@ -327,15 +338,17 @@
   .dropdown-empty { padding: 16px; text-align: center; color: var(--text-dim); font-size: 13px; }
 
   .add-btn {
+    position: relative !important;
+    transform: none !important;
+    margin: 0 !important;
     width: 40px; height: 40px;
     background: var(--surface); border: 2px dashed var(--border);
     color: var(--text-dim); cursor: pointer;
     border-radius: 50%; display: flex; align-items: center; justify-content: center;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
   .add-btn:hover {
     border-color: var(--accent); color: var(--accent);
-    background: var(--accent-glow); transform: scale(1.08);
+    background: var(--accent-glow);
   }
 
   @keyframes pulse {
