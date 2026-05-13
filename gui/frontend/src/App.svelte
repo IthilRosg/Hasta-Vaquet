@@ -130,18 +130,11 @@
         <path d="M6 9l6 6 6-6"/>
       </svg>
     </button>
-    <div class="profile-actions">
-      <button class="icon-btn" title="Import Profile" on:click={importProfile}>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
-        </svg>
-      </button>
-      <button class="icon-btn" title="Settings" on:click={toggleSettings}>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="12" r="3"/><path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72l1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
-        </svg>
-      </button>
-    </div>
+    <button class="icon-btn" title="Settings" on:click={toggleSettings}>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="3"/><path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72l1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+      </svg>
+    </button>
   </div>
 
   <!-- Profile dropdown -->
@@ -207,6 +200,14 @@
     </div>
   </div>
   {/if}
+
+  <!-- Import / Add Profile button -->
+  <button class="add-btn" on:click={importProfile} title="Add Profile">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+      <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+      <circle cx="12" cy="12" r="10"/>
+    </svg>
+  </button>
 </div>
 
 <!-- Settings panel -->
@@ -390,4 +391,18 @@
   }
 
   .import-btn:hover { border-color: var(--accent); background: var(--accent-glow); }
+
+  .add-btn {
+    position: fixed; bottom: 24px;
+    background: var(--surface); border: 2px dashed var(--border);
+    color: var(--text-dim); cursor: pointer; width: 48px; height: 48px;
+    border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 5;
+  }
+
+  .add-btn:hover {
+    border-color: var(--accent); color: var(--accent);
+    background: var(--accent-glow); transform: scale(1.08);
+  }
 </style>

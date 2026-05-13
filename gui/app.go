@@ -4,13 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	_ "embed"
+	"net"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
-	"strconv"
-	"strings"
-	"syscall"
+	"time"
 
 	"hasta-vaquet/core"
 
@@ -21,10 +19,9 @@ import (
 var wintunDLL []byte
 
 type App struct {
-	ctx       context.Context
-	vpn       *core.VPN
-	profiles  []string
-	pingStop  chan struct{}
+	ctx      context.Context
+	vpn      *core.VPN
+	profiles []string
 }
 
 func NewApp() *App {
@@ -126,12 +123,12 @@ func toResult(cfg core.Config) *ConfigResult {
 }
 
 type ProfileItem struct {
-	Name        string `json:"name"`
-	ServerIP    string `json:"server_ip"`
-	Port        int    `json:"port"`
-	ShortID     uint16 `json:"short_id"`
-	InternalIP  string `json:"internal_ip"`
-	DNS         string `json:"dns"`
+	Name       string `json:"name"`
+	ServerIP   string `json:"server_ip"`
+	Port       int    `json:"port"`
+	ShortID    uint16 `json:"short_id"`
+	InternalIP string `json:"internal_ip"`
+	DNS        string `json:"dns"`
 }
 
 func (a *App) ListProfileItems() []ProfileItem {
@@ -204,23 +201,19 @@ func (a *App) IsConnected() bool {
 }
 
 func (a *App) DoPing() map[string]int {
-	// First try pinging the server through tunnel via its internal IP
-	targets := []string{"10.0.0.2", "8.8.8.8", "1.1.1.1"}
-	for _, target := range targets {
-		cmd := exec.Command("ping", "-n", "1", "-w", "2000", target)
-		cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
-		out, _ := cmd.Output()
-		for _, l := range strings.Split(string(out), "\n") {
-			if idx := strings.Index(l, "time="); idx >= 0 {
-				after := l[idx+5:]
-				if end := strings.Index(after, "ms"); end > 0 {
-					v, _ := strconv.Atoi(strings.TrimSpace(after[:end]))
-					if v > 0 {
-						return map[string]int{"rtt": v, "loss": 0}
-					}
-				}
-			}
-		}
+	dialer := net.Dialer{Timeout: 3 * time.Second}
+	start := time.Now()
+	conn, err := dialer.DialContext(a.ctx, "tcp", "8.8.8.8:443")
+	if err != nil {
+		conn, err = dialer.DialContext(a.ctx, "tcp", "1.1.1.1:443")
 	}
-	return map[string]int{"rtt": 0, "loss": 100}
+	if err != nil {
+		return map[string]int{"rtt": 0, "loss": 100}
+	}
+	conn.Close()
+	rtt := int(time.Since(start).Milliseconds())
+	if rtt < 1 {
+		rtt = 1
+	}
+	return map[string]int{"rtt": rtt, "loss": 0}
 }
