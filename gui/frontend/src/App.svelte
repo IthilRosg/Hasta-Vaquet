@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { DoConnect, DoDisconnect, ImportConfig } from '../wailsjs/go/main/App'
+  import { DoConnect, DoDisconnect, ImportConfig, LoadDefaultConfig } from '../wailsjs/go/main/App'
   import { EventsOn } from '../wailsjs/runtime/runtime'
 
   let connected = false
@@ -17,6 +17,21 @@
   let internalIP = '10.0.0.10'
   let gatewayIP = '192.168.100.1'
   let dns = '1.1.1.1'
+
+  async function loadConfig() {
+    const cfg = await LoadDefaultConfig()
+    if (cfg) {
+      serverIP = cfg.server_ip || serverIP
+      port = cfg.port || port
+      shortID = cfg.short_id || shortID
+      secretKey = cfg.secret_key || secretKey
+      routingSalt = cfg.routing_salt || routingSalt
+      internalIP = cfg.internal_ip || internalIP
+      gatewayIP = cfg.gateway_ip || gatewayIP
+      dns = cfg.dns || dns
+    }
+  }
+  loadConfig()
 
   EventsOn('status', (s: string) => {
     statusText = s === 'connected' ? 'Connected' : 'Disconnected'

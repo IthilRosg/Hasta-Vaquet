@@ -17,3 +17,7 @@ export function ImportConfig(arg1) {
 export function IsConnected() {
   return window['go']['main']['App']['IsConnected']();
 }
+
+export function LoadDefaultConfig() {
+  return window['go']['main']['App']['LoadDefaultConfig']();
+}

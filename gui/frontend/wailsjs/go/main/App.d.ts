@@ -9,3 +9,5 @@ export function DoDisconnect():Promise<string>;
 export function ImportConfig(arg1:string):Promise<main.ConfigResult>;
 
 export function IsConnected():Promise<boolean>;
+
+export function LoadDefaultConfig():Promise<main.ConfigResult>;

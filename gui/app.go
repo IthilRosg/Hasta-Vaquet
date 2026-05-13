@@ -45,20 +45,41 @@ type ConfigResult struct {
 	DNS         string `json:"dns"`
 }
 
+func (a *App) LoadDefaultConfig() *ConfigResult {
+	exeDir := filepath.Dir(os.Args[0])
+	paths := []string{
+		filepath.Join(exeDir, "config.json"),
+		"config.json",
+	}
+	for _, p := range paths {
+		cfg, err := core.LoadConfig(p)
+		if err != nil {
+			continue
+		}
+		return &ConfigResult{
+			ServerIP:    cfg.ServerIP,
+			Port:        cfg.Port,
+			ShortID:     cfg.ShortID,
+			SecretKey:   cfg.SecretKey,
+			InternalIP:  cfg.InternalIP,
+			RoutingSalt: cfg.RoutingSalt,
+			GatewayIP:   cfg.GatewayIP,
+			DNS:         cfg.DNS,
+		}
+	}
+	return nil
+}
+
 func (a *App) ImportConfig(path string) *ConfigResult {
 	cfg, err := core.LoadConfig(path)
 	if err != nil {
 		return &ConfigResult{Error: err.Error()}
 	}
-	sk := ""
-	if len(cfg.SecretKey) > 8 {
-		sk = cfg.SecretKey[:8] + "********"
-	}
 	return &ConfigResult{
 		ServerIP:    cfg.ServerIP,
 		Port:        cfg.Port,
 		ShortID:     cfg.ShortID,
-		SecretKey:   sk,
+		SecretKey:   cfg.SecretKey,
 		InternalIP:  cfg.InternalIP,
 		RoutingSalt: cfg.RoutingSalt,
 		GatewayIP:   cfg.GatewayIP,
