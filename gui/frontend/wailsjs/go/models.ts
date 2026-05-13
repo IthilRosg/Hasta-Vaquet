@@ -8,6 +8,8 @@ export namespace main {
 	    secret_key: string;
 	    internal_ip: string;
 	    routing_salt: string;
+	    gateway_ip: string;
+	    dns: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new ConfigResult(source);
@@ -22,6 +24,8 @@ export namespace main {
 	        this.secret_key = source["secret_key"];
 	        this.internal_ip = source["internal_ip"];
 	        this.routing_salt = source["routing_salt"];
+	        this.gateway_ip = source["gateway_ip"];
+	        this.dns = source["dns"];
 	    }
 	}
 

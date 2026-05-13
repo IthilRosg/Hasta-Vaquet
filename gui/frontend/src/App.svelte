@@ -1,5 +1,6 @@
 <script lang="ts">
   import { DoConnect, DoDisconnect, ImportConfig } from '../wailsjs/go/main/App'
+  import { EventsOn } from '../wailsjs/runtime/runtime'
 
   let connected = false
   let statusText = 'Disconnected'
@@ -15,65 +16,36 @@
   let routingSalt = 'HastaVaquetGlobal'
   let internalIP = '10.0.0.10'
   let gatewayIP = '192.168.100.1'
+  let dns = '1.1.1.1'
+
+  EventsOn('status', (s: string) => {
+    statusText = s === 'connected' ? 'Connected' : 'Disconnected'
+    connected = s === 'connected'
+    if (!connected) { txSpeed = '0 B/s'; rxSpeed = '0 B/s' }
+  })
+
+  EventsOn('traffic', (data: {tx: number, rx: number}) => {
+    txSpeed = formatSpeed(data.tx)
+    rxSpeed = formatSpeed(data.rx)
+  })
 
   function toggle() {
     if (animating) return
-    if (connected) {
-      disconnect()
-    } else {
-      connect()
-    }
+    if (connected) { disconnect() } else { connect() }
   }
 
   async function connect() {
     animating = true
     statusText = 'Connecting...'
-    const res = await DoConnect(serverIP, secretKey, routingSalt, internalIP, gatewayIP, port, shortID)
-    if (res === 'connected') {
-      connected = true
-      statusText = 'Connected'
-      simulateTraffic()
-    } else {
-      statusText = res
-    }
+    const res = await DoConnect(serverIP, secretKey, routingSalt, internalIP, gatewayIP, dns, port, shortID)
+    if (res !== 'connected') { statusText = res }
     animating = false
   }
 
   async function disconnect() {
     animating = true
-    const res = await DoDisconnect()
-    if (res === 'disconnected') {
-      connected = false
-      statusText = 'Disconnected'
-      txSpeed = '0 B/s'
-      rxSpeed = '0 B/s'
-    }
+    await DoDisconnect()
     animating = false
-  }
-
-  let trafficTimer: number
-
-  function simulateTraffic() {
-    let tx = 0, rx = 0
-    trafficTimer = window.setInterval(() => {
-      if (!connected) {
-        txSpeed = '0 B/s'
-        rxSpeed = '0 B/s'
-        return
-      }
-      tx += Math.floor(Math.random() * 50000)
-      rx += Math.floor(Math.random() * 100000)
-      txSpeed = formatSpeed(tx)
-      rxSpeed = formatSpeed(rx)
-      tx = Math.floor(tx * 0.7)
-      rx = Math.floor(rx * 0.7)
-    }, 1000)
-  }
-
-  function formatSpeed(bps: number): string {
-    if (bps >= 1_000_000) return (bps / 1_000_000).toFixed(1) + ' MB/s'
-    if (bps >= 1_000) return (bps / 1_000).toFixed(0) + ' KB/s'
-    return bps + ' B/s'
   }
 
   async function importProfile() {
@@ -90,6 +62,8 @@
     secretKey = cfg.secret_key
     routingSalt = cfg.routing_salt
     internalIP = cfg.internal_ip
+    gatewayIP = cfg.gateway_ip
+    dns = cfg.dns || '1.1.1.1'
   }
 
   function toggleSettings() {
@@ -168,10 +142,16 @@
       <label>Internal IP</label>
       <input bind:value={internalIP} placeholder="10.0.0.10"/>
     </div>
+  <div class="field-row">
     <div class="field">
       <label>Gateway IP</label>
       <input bind:value={gatewayIP} placeholder="192.168.100.1"/>
     </div>
+    <div class="field">
+      <label>DNS</label>
+      <input bind:value={dns} placeholder="1.1.1.1"/>
+    </div>
+  </div>
   </div>
   <div class="field">
     <label>Routing Salt</label>

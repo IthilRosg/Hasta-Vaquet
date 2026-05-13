@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 
 	"hasta-vaquet/core"
+
+	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 //go:embed wintun.dll
@@ -31,21 +33,6 @@ func (a *App) startup(ctx context.Context) {
 	}
 }
 
-func (a *App) ImportConfig(path string) *ConfigResult {
-	cfg, err := core.LoadConfig(path)
-	if err != nil {
-		return &ConfigResult{Error: err.Error()}
-	}
-	return &ConfigResult{
-		ServerIP:    cfg.ServerIP,
-		Port:        cfg.Port,
-		ShortID:     cfg.ShortID,
-		SecretKey:   cfg.SecretKey[:8] + "********",
-		InternalIP:  cfg.InternalIP,
-		RoutingSalt: cfg.RoutingSalt,
-	}
-}
-
 type ConfigResult struct {
 	Error       string `json:"error,omitempty"`
 	ServerIP    string `json:"server_ip"`
@@ -54,23 +41,35 @@ type ConfigResult struct {
 	SecretKey   string `json:"secret_key"`
 	InternalIP  string `json:"internal_ip"`
 	RoutingSalt string `json:"routing_salt"`
+	GatewayIP   string `json:"gateway_ip"`
+	DNS         string `json:"dns"`
 }
 
-type StatusUpdate struct {
-	Status  string `json:"status"`
-	TXBytes int64  `json:"tx_bytes"`
-	RXBytes int64  `json:"rx_bytes"`
+func (a *App) ImportConfig(path string) *ConfigResult {
+	cfg, err := core.LoadConfig(path)
+	if err != nil {
+		return &ConfigResult{Error: err.Error()}
+	}
+	sk := ""
+	if len(cfg.SecretKey) > 8 {
+		sk = cfg.SecretKey[:8] + "********"
+	}
+	return &ConfigResult{
+		ServerIP:    cfg.ServerIP,
+		Port:        cfg.Port,
+		ShortID:     cfg.ShortID,
+		SecretKey:   sk,
+		InternalIP:  cfg.InternalIP,
+		RoutingSalt: cfg.RoutingSalt,
+		GatewayIP:   cfg.GatewayIP,
+		DNS:         cfg.DNS,
+	}
 }
 
-func (a *App) Connect(cfgJSON string) error {
-	return nil
-}
-
-func (a *App) DoConnect(serverIP, secretKey, routingSalt, internalIP, gatewayIP string, port int, shortID uint16) string {
+func (a *App) DoConnect(serverIP, secretKey, routingSalt, internalIP, gatewayIP, dns string, port int, shortID uint16) string {
 	if a.vpn != nil && a.vpn.IsRunning() {
 		return "already connected"
 	}
-
 	cfg := core.Config{
 		ServerIP:    serverIP,
 		Port:        port,
@@ -79,9 +78,16 @@ func (a *App) DoConnect(serverIP, secretKey, routingSalt, internalIP, gatewayIP 
 		RoutingSalt: routingSalt,
 		InternalIP:  internalIP,
 		GatewayIP:   gatewayIP,
+		DNS:         dns,
 	}
-
-	vpn := core.New(cfg, func(status string, tx, rx int64) {})
+	vpn := core.New(cfg, func(status string, tx, rx int64) {
+		if status == "connected" || status == "disconnected" {
+			runtime.EventsEmit(a.ctx, "status", status)
+		}
+		if tx > 0 || rx > 0 {
+			runtime.EventsEmit(a.ctx, "traffic", map[string]int64{"tx": tx, "rx": rx})
+		}
+	})
 	if err := vpn.Start(); err != nil {
 		return err.Error()
 	}
@@ -95,6 +101,7 @@ func (a *App) DoDisconnect() string {
 	}
 	a.vpn.Stop()
 	a.vpn = nil
+	runtime.EventsEmit(a.ctx, "status", "disconnected")
 	return "disconnected"
 }
 

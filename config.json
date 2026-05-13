@@ -4,5 +4,7 @@
   "short_id": 1,
   "secret_key": "AliceSecret2026",
   "routing_salt": "HastaVaquetGlobal",
-  "internal_ip": "10.0.0.10"
+  "internal_ip": "10.0.0.10",
+  "gateway_ip": "192.168.100.1",
+  "dns": "1.1.1.1"
 }

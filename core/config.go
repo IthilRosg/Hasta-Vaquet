@@ -14,6 +14,7 @@ type Config struct {
 	RoutingSalt string `json:"routing_salt"`
 	InternalIP  string `json:"internal_ip"`
 	GatewayIP   string `json:"gateway_ip"`
+	DNS         string `json:"dns"`
 }
 
 func LoadConfig(path string) (Config, error) {
@@ -32,6 +33,9 @@ func LoadConfig(path string) (Config, error) {
 	}
 	if cfg.GatewayIP == "" {
 		cfg.GatewayIP = "192.168.100.1"
+	}
+	if cfg.DNS == "" {
+		cfg.DNS = "1.1.1.1"
 	}
 	return cfg, nil
 }

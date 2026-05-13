@@ -61,6 +61,7 @@ func (v *VPN) Start() error {
 	}
 
 	run("netsh", "interface", "ip", "set", "address", "name=HastaVaquet", "static", v.config.InternalIP, "255.255.255.0")
+	run("netsh", "interface", "ip", "set", "dns", "name=HastaVaquet", "static", v.config.DNS)
 	run("route", "delete", v.config.ServerIP)
 	run("route", "add", v.config.ServerIP, "mask", "255.255.255.255", v.config.GatewayIP)
 	run("route", "delete", "0.0.0.0", v.config.InternalIP)
