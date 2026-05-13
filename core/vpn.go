@@ -137,15 +137,16 @@ func (v *VPN) callback(status string, txSpeed, rxSpeed int64, totalTx, totalRx u
 }
 
 func (v *VPN) keepAliveLoop() {
+	// Send keep-alive immediately, then every 10-30s
 	for {
+		packet, err := Encrypt([]byte{}, v.key[:], v.config.ShortID, v.config.RoutingSalt)
+		if err == nil {
+			v.conn.Write(packet)
+		}
 		select {
 		case <-v.stopCh:
 			return
 		case <-time.After(time.Duration(10+mathrand.Intn(21)) * time.Second):
-		}
-		packet, err := Encrypt([]byte{}, v.key[:], v.config.ShortID, v.config.RoutingSalt)
-		if err == nil {
-			v.conn.Write(packet)
 		}
 	}
 }

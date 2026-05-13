@@ -209,6 +209,7 @@ func (a *App) IsConnected() bool {
 var (
 	pingBuffer [1000]int
 	pingIndex  int
+	pingFilled int
 	pingCancel chan struct{}
 )
 
@@ -218,6 +219,7 @@ func (a *App) startPinging() {
 	}
 	pingCancel = make(chan struct{})
 	pingIndex = 0
+	pingFilled = 0
 	for i := range pingBuffer {
 		pingBuffer[i] = -1
 	}
@@ -241,10 +243,12 @@ func (a *App) startPinging() {
 			}
 			pingBuffer[pingIndex%1000] = rtt
 			pingIndex++
+			if pingFilled < 1000 { pingFilled++ }
 		}
 		emitPing := func() {
 			var sum, count, lossCount int
-			for _, v := range pingBuffer {
+			for i := 0; i < pingFilled; i++ {
+				v := pingBuffer[i]
 				if v >= 0 { sum += v; count++ }
 				if v == -1 { lossCount++ }
 			}
