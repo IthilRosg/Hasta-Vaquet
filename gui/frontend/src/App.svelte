@@ -36,7 +36,7 @@
   loadConfig()
 
   function applyCfg(cfg: any) {
-    profileName = cfg.profile_name || 'Default'
+    profileName = cfg.profile_name || ''
     serverIP = cfg.server_ip || serverIP
     port = cfg.port || port
     shortID = cfg.short_id || shortID
@@ -123,19 +123,10 @@
 </script>
 
 <div class="container">
-  <!-- Profile selector -->
-  <div class="profile-bar">
-    <button class="profile-btn" on:click={toggleSettings}>
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M20 8v6m-3-3h6"/>
-      </svg>
-      <span class="profile-name">{profileName}</span>
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M6 9l6 6 6-6"/>
-      </svg>
-    </button>
+  <!-- Settings gear only -->
+  <div class="top-bar">
     <button class="icon-btn" title="Settings" on:click={toggleSettings}>
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <circle cx="12" cy="12" r="3"/><path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72l1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
       </svg>
     </button>
@@ -278,30 +269,16 @@
     width: 100%; max-width: 360px;
   }
 
-  .profile-bar {
-    position: fixed; top: 0; left: 0; right: 0;
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 12px 16px; gap: 8px; z-index: 10;
+  .top-bar {
+    position: fixed; top: 0; right: 0;
+    display: flex; align-items: center; justify-content: flex-end;
+    padding: 12px 16px; z-index: 10;
   }
-
-  .profile-btn {
-    display: flex; align-items: center; gap: 6px;
-    background: var(--surface); border: 1px solid var(--border);
-    color: var(--text); padding: 6px 12px; border-radius: var(--radius);
-    cursor: pointer; font-size: 13px; transition: all 0.2s;
-  }
-
-  .profile-btn:hover { border-color: var(--accent); background: var(--surface-hover); }
-
-  .profile-name { font-weight: 600; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-  .profile-actions { display: flex; gap: 4px; }
 
   .icon-btn {
     background: none; border: none; color: var(--text-dim); cursor: pointer;
     padding: 8px; border-radius: var(--radius-sm); transition: all 0.2s;
   }
-
   .icon-btn:hover { color: var(--accent); background: var(--surface); }
 
   /* Bottom dropdown */

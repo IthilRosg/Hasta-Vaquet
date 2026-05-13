@@ -106,9 +106,9 @@ func (a *App) ImportConfig(path string) *ConfigResult {
 
 func toResult(cfg core.Config) *ConfigResult {
 	name := cfg.ProfileName
-	if name == "" {
+	/*if name == "" {
 		name = "Default"
-	}
+	}*/
 	return &ConfigResult{
 		ProfileName: name,
 		ServerIP:    cfg.ServerIP,
