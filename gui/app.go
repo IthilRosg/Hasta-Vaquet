@@ -5,8 +5,12 @@ import (
 	"encoding/json"
 	_ "embed"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
+	"strconv"
+	"strings"
+	"syscall"
 
 	"hasta-vaquet/core"
 
@@ -17,9 +21,10 @@ import (
 var wintunDLL []byte
 
 type App struct {
-	ctx      context.Context
-	vpn      *core.VPN
-	profiles []string
+	ctx       context.Context
+	vpn       *core.VPN
+	profiles  []string
+	pingStop  chan struct{}
 }
 
 func NewApp() *App {
@@ -196,4 +201,22 @@ func (a *App) DoDisconnect() string {
 
 func (a *App) IsConnected() bool {
 	return a.vpn != nil && a.vpn.IsRunning()
+}
+
+func (a *App) DoPing() map[string]int {
+	cmd := exec.Command("ping", "-n", "1", "-w", "3000", "8.8.8.8")
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	out, _ := cmd.Output()
+	for _, l := range strings.Split(string(out), "\n") {
+		if idx := strings.Index(l, "time="); idx >= 0 {
+			after := l[idx+5:]
+			if end := strings.Index(after, "ms"); end > 0 {
+				v, _ := strconv.Atoi(strings.TrimSpace(after[:end]))
+				if v > 0 {
+					return map[string]int{"rtt": v, "loss": 0}
+				}
+			}
+		}
+	}
+	return map[string]int{"rtt": 0, "loss": 100}
 }

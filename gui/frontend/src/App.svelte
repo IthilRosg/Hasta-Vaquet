@@ -1,11 +1,13 @@
 <script lang="ts">
-  import { DoConnect, DoDisconnect, ImportConfig, LoadDefaultConfig, ListProfiles, LoadProfile, ListProfileItems } from '../wailsjs/go/main/App'
+  import { DoConnect, DoDisconnect, ImportConfig, LoadDefaultConfig, ListProfiles, LoadProfile, ListProfileItems, DoPing } from '../wailsjs/go/main/App'
   import { EventsOn } from '../wailsjs/runtime/runtime'
 
   let connected = false
   let statusText = 'Disconnected'
   let txSpeed = '0 B/s'
   let rxSpeed = '0 B/s'
+  let rtt = 0
+  let loss = 0
   let showSettings = false
   let animating = false
   let profileName = 'Default'
@@ -56,11 +58,27 @@
     return bps + ' B/s'
   }
 
+  let pingTimer: number
+
   EventsOn('status', (s: string) => {
     statusText = s === 'connected' ? 'Connected' : 'Disconnected'
     connected = s === 'connected'
-    if (!connected) { txSpeed = '0 B/s'; rxSpeed = '0 B/s' }
+    if (!connected) {
+      txSpeed = '0 B/s'; rxSpeed = '0 B/s'; rtt = 0; loss = 0
+      if (pingTimer) { clearInterval(pingTimer); pingTimer = 0 }
+    } else {
+      if (!pingTimer) startPinging()
+    }
   })
+
+  async function startPinging() {
+    pingTimer = window.setInterval(async () => {
+      if (!connected) return
+      const res = await DoPing()
+      rtt = res.rtt || 0
+      loss = res.loss || 0
+    }, 3000)
+  }
 
   EventsOn('traffic', (data: {tx: number, rx: number}) => {
     txSpeed = formatSpeed(data.tx)
@@ -167,6 +185,21 @@
       <span class="speed-val">{rxSpeed}</span>
     </div>
   </div>
+
+  <!-- Ping & Loss -->
+  {#if connected}
+  <div class="ping-row">
+    <div class="ping-item">
+      <span class="ping-label">Ping</span>
+      <span class="ping-value" class:ping-ok={rtt > 0 && rtt < 100} class:ping-warn={rtt >= 100}>{rtt > 0 ? rtt + ' ms' : '—'}</span>
+    </div>
+    <div class="speed-divider"></div>
+    <div class="ping-item">
+      <span class="ping-label">Loss</span>
+      <span class="ping-value" class:ping-ok={loss === 0} class:ping-warn={loss > 0}>{loss}%</span>
+    </div>
+  </div>
+  {/if}
 </div>
 
 <!-- Settings panel -->
@@ -304,6 +337,18 @@
   .speed-arrow.down { color: var(--accent); }
   .speed-val { font-size: 14px; font-weight: 500; font-variant-numeric: tabular-nums; }
   .speed-divider { width: 1px; height: 24px; background: var(--border); }
+
+  .ping-row {
+    display: flex; align-items: center; gap: 20px;
+    padding: 8px 24px; border-radius: var(--radius);
+    border: 1px solid var(--border); background: var(--surface);
+  }
+
+  .ping-item { display: flex; align-items: center; gap: 8px; min-width: 80px; }
+  .ping-label { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; }
+  .ping-value { font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .ping-ok { color: var(--green); }
+  .ping-warn { color: var(--red); }
 
   .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100; }
 

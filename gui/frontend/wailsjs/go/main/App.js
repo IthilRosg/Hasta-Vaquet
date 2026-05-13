@@ -10,6 +10,10 @@ export function DoDisconnect() {
   return window['go']['main']['App']['DoDisconnect']();
 }
 
+export function DoPing() {
+  return window['go']['main']['App']['DoPing']();
+}
+
 export function ImportConfig(arg1) {
   return window['go']['main']['App']['ImportConfig'](arg1);
 }
