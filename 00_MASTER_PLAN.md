@@ -1,23 +1,171 @@
 # Master Plan: Hasta-Vaquet VPN Ecosystem
 
 ## 1. Vision
-Создание независимой, высокопроизводительной и устойчивой к DPI (Deep Packet Inspection) экосистемы VPN. 
-- **Транспорт:** Чистый UDP с кастомным криптографическим протоколом.
-- **Безопасность:** AES-256-GCM, защита от replay-атак, криптографическая обфускация.
-- **Клиенты:** Windows (нативный Wintun), Android (VpnService), CLI.
-- **Сервер:** Stateless Linux-шлюз с мультиплексированием клиентов и Web-панелью управления.
 
-## 2. Roadmap
+Создание независимой, высокопроизводительной и устойчивой к DPI экосистемы VPN —
+от уровня кастомного криптографического протокола до полноценного коммерческого продукта.
+
+**Принципы:**
+- **Протокол прежде всего.** Защита на уровне wire format — трафик неотличим от шума для любого DPI.
+- **Никаких внешних зависимостей.** AES-256-GCM, HMAC, UDP — стандартные примитивы, без сторонних VPN-библиотек.
+- **Продукт, а не инструмент.** Конечная цель — пользователь устанавливает клиент и жмёт одну кнопку.
+
+---
+
+## 2. Завершённые фазы
 
 - [x] **Phase 1: Proof of Concept.** Базовый UDP-туннель, передача сырых IP-пакетов, проверка связности.
-- [x] **Phase 2: Core Security.** Внедрение AES-256-GCM, решение проблемы фрагментации (префикс длины), MTU 1300.
-- [x] **Phase 3: Global Routing.** Заворачивание 0.0.0.0/0 на Windows через Wintun, исключение петли маршрутизации, перехват DNS.
-- [x] **Phase 4: Operationalization & Stability.** Избавление от хардкода (config.json / CLI флаги), внедрение Keep-Alive (анти-таймаут NAT), агрегированное логирование (30-сек интервал), корректное завершение работы (очистка маршрутов).
-- [x] **Phase 5: DPI Evasion (ЗАВЕРШЕНА).** In-band signaling через HMAC-SHA256-маркер. QUIC-маска заголовка (бит 6). Динамический паддинг (Nonce-ротация: Client 0-40, Server Medium/Chaos). Bloom Filter анти-Replay (64KB, 3×FNV-1a). Keep-Alive jitter 10-30с. Асимметричное логирование клиент/сервер. Фиксация: 90 Mbps throughput, 0% packet loss.
-- [x] **Phase 6: Multi-User Architecture (ЗАВЕРШЕНА).** Dynamic XOR Routing: ShortID ^ FNV-1a(RoutingSalt+nonce)[:2]. Wire Format V6 с DynamicID. O(1) маршрутизация через map[uint16]*Peer. Per-user HMAC+AES ключи. TUN dstIP → ipToPeer. Композитный Bloom фильтр (ShortID+Nonce). server_config.json с массивом users. Поддержка 1000+ клиентов.
-- [x] **Phase 7b: Windows GUI (ЗАВЕРШЕНА).** Wails + Svelte. Рефакторинг ядра в core/ (config, crypto, vpn). Мост app.go: Connect/Disconnect/ImportConfig. Стеклянные карточки статистики (2x2 Grid: SPEED, DATA, NETWORK, UPTIME). Профили через dropdown. HideWindow для всех exec.Command. Native UDP Echo Ping (keep-alive echo от сервера). IPv6 blackhole (::/0 через Wintun). Встроенный wintun.dll. Скорость ~90 Mbps.
-- [ ] **Phase 7c: Web Management Panel (ТЕКУЩАЯ СТАДИЯ).** HTTP API встроен в серверный бинарник (отдельный порт). Управление пользователями (CRUD над server_config.json), статистика трафика по каждому peer, генерация конфигов и QR-кодов для клиентов. Простой защищённый Web UI (admin token).
-- [ ] **Phase 8: Android Client + Mobile Ecosystem.** Рефакторинг core/ под build tags (vpn_windows.go / vpn_android.go). Gomobile bind с interface-based API. Android VpnService на Kotlin. QR-онбординг через Web-панель из Phase 7c.
+- [x] **Phase 2: Core Security.** AES-256-GCM, префикс длины для фрагментации, MTU 1300.
+- [x] **Phase 3: Global Routing.** 0.0.0.0/0 через Wintun, исключение петли маршрутизации, перехват DNS.
+- [x] **Phase 4: Operationalization.** config.json / CLI флаги, Keep-Alive (NAT anti-timeout), агрегированное логирование, корректный shutdown с очисткой маршрутов.
+- [x] **Phase 5: DPI Evasion.** HMAC-SHA256 in-band маркер. QUIC fixed bit маска. Асимметричный паддинг (Client 0-40, Server Medium/Chaos). Bloom Filter 64KB 3×FNV-1a. Keep-Alive jitter 10-30с. Результат: 90 Mbps, 0% packet loss.
+- [x] **Phase 6: Multi-User Architecture.** Wire Format V6: [HMAC(4)][DynamicID(2)][Nonce(12)][AES-GCM]. DynamicID = ShortID ^ FNV-1a(RoutingSalt+Nonce)[:2]. O(1) маршрутизация map[uint16]*Peer. Per-user ключи. Композитный Bloom (ShortID+Nonce). 1000+ клиентов.
+- [x] **Phase 7b: Windows GUI.** Wails + Svelte. Мост app.go. Статистика 2×2 (SPEED/DATA/NETWORK/UPTIME). Профили + dropdown. Native UDP Echo Ping (RTT + loss без ICMP/TCP). IPv6 blackhole. Встроенный wintun.dll. ~90 Mbps.
 
-## 3. Current Task
-**Phase 7c (Web Management Panel):** HTTP API поверх существующего server.go. Эндпоинты: список пользователей, добавление/удаление, статистика трафика (ByteIn/ByteOut из peer), генерация config.json + QR-код. Защита: статический admin-токен в server_config.json. UI: минималистичный HTML/JS, без внешних фреймворков.
+---
+
+## 3. Активная разработка
+
+- [ ] **Phase 7c: Web Management Panel (ТЕКУЩАЯ СТАДИЯ).**
+  HTTP API встроен в серверный бинарник на отдельном порту. Управление пользователями
+  (CRUD над server_config.json с горячей перезагрузкой без рестарта сервера). Статистика
+  трафика по каждому peer в реальном времени (ByteIn/ByteOut). Генерация config.json и
+  QR-кода для клиентов. Защита: статический admin_token в server_config.json.
+  UI: минималистичный HTML/JS встроен через embed.FS, без внешних фреймворков.
+
+- [ ] **Phase 8: Android Client + Mobile Ecosystem.**
+  Рефакторинг core/ под build tags: vpn_interface.go (общая логика), vpn_windows.go
+  (текущий Wintun-код), vpn_android.go (VpnService). Gomobile bind с interface-based API
+  (gomobile не поддерживает func-callbacks — нужны интерфейсы). Kotlin + VpnService +
+  нативный UI. QR-онбординг через Web-панель из Phase 7c.
+
+---
+
+## 4. Production Hardening — Phase 9
+
+Без этого блока продукт не готов к реальным пользователям:
+
+- [ ] **Auto-reconnect.** При обрыве соединения клиент автоматически переподключается
+  с экспоненциальным backoff (1s → 2s → 4s → ... → 60s cap). UI показывает «Reconnecting...»
+  с таймером следующей попытки.
+- [ ] **Kill Switch.** При падении тоннеля (UDP conn error / keep-alive timeout > 60s) —
+  блокировать весь трафик через WFP (Windows Filtering Platform) до восстановления соединения.
+  Никаких утечек реального IP в момент переподключения.
+- [ ] **Windows Installer.** Inno Setup: устанавливает клиент, wintun.dll, создаёт автозапуск,
+  ярлык на рабочем столе. Пользователь скачивает один `.exe`.
+- [ ] **Auto-update.** Клиент при старте проверяет endpoint на сервере (или GitHub Releases)
+  и предлагает/устанавливает обновление. Подписанные релизы.
+- [ ] **HTTPS для Web-панели.** TLS через self-signed cert (генерируется при первом запуске
+  и сохраняется). Опционально — интеграция Let's Encrypt (ACME) для серверов с доменом.
+- [ ] **Срок жизни аккаунтов.** Поле `expires_at` в user-конфиге. Сервер автоматически
+  отклоняет пакеты истёкших пользователей без рестарта.
+- [ ] **Graceful config reload.** SIGHUP → сервер перечитывает server_config.json и обновляет
+  список пиров без прерывания активных соединений.
+- [ ] **Systemd unit.** Готовый `hasta-vaquet.service` файл для автозапуска сервера на Linux.
+
+---
+
+## 5. Multi-Server Infrastructure — Phase 10
+
+Один VPS = единая точка отказа:
+
+- [ ] **Несколько серверов в конфиге клиента.** Список серверов с приоритетами. При недоступности
+  основного — автоматический failover на следующий.
+- [ ] **Выбор сервера по пингу.** Клиент при запуске пингует все серверы через Native UDP Echo
+  и подключается к ближайшему.
+- [ ] **Server Health API.** Каждый сервер отдаёт `/health`: load, connected_peers, uptime,
+  версия. Web-панель агрегирует статусы всех серверов.
+- [ ] **Shared Routing Salt.** Несколько серверных нод используют единый RoutingSalt —
+  клиент может переключиться между ними без смены конфига.
+
+---
+
+## 6. Advanced Client Features — Phase 11
+
+- [ ] **Split Tunneling (опциональный, по умолчанию OFF).**
+  Маршрутизация только выбранных IP/CIDR через тоннель, остальное — напрямую.
+  Два режима: «Include» (только перечисленные домены/IP через VPN) и «Exclude»
+  (все через VPN, кроме перечисленных — для доступа к локальным ресурсам).
+
+  ⚠️ **Предупреждение из vpn_detection.md:** Split tunneling создаёт дополнительные
+  аномалии в таблицах маршрутизации — маршруты к нестандартным шлюзам для разных
+  подсетей — что является косвенным признаком VPN для систем детектирования.
+  Full tunnel (по умолчанию) детектируется только по одному признаку (default route
+  через Wintun). Split tunneling добавляет несколько дополнительных.
+  Наша реальная защита — на уровне wire format (DPI не читает контент), а не маршрутов.
+  Рекомендуется использовать split tunneling только для доступа к локальным ресурсам
+  (офисная сеть, NAS), а не как основной режим.
+
+- [ ] **Per-domain bypass.** DNS-уровень: resolve домена → добавить маршрут этого IP
+  в исключения. Для split tunneling режима «Exclude».
+- [ ] **Autoconnect при запуске системы.** Опция в настройках + запись в реестр/автозапуск.
+- [ ] **Autoconnect на недоверенных сетях.** Клиент определяет тип сети (публичный Wi-Fi,
+  незнакомый SSID) и автоматически включает VPN.
+- [ ] **Bandwidth monitor в UI.** Суммарный трафик за сессию и за месяц. Уведомление при
+  превышении лимита (если задан в конфиге).
+- [ ] **История соединений.** Лог последних N сессий: время, сервер, трафик, средний RTT.
+
+---
+
+## 7. Advanced DPI Evasion — Phase 12
+
+Исследовательская фаза. Цель — сделать трафик неотличимым даже при ML-анализе:
+
+- [ ] **Traffic shaping.** Нормализация размеров пакетов к фиксированным значениям (256/512/1024).
+  Устраняет статистические признаки реального трафика в размерах пакетов.
+- [ ] **Timing obfuscation.** Искусственные задержки между пакетами по случайному распределению.
+  Разрушает timing-fingerprint соединения.
+- [ ] **Constant bitrate padding.** В периоды низкой активности — генерация dummy-пакетов
+  до фиксированного битрейта. Сравнивает трафик с видеостримингом.
+- [ ] **Domain Fronting / CDN routing.** Направление UDP через CDN-узел (Cloudflare/Fastly).
+  Реальный IP сервера скрыт даже от ISP.
+- [ ] **Protocol mimicry.** Первые N байт каждого соединения — валидный TLS ClientHello
+  (с нашими данными внутри). Пассивные DPI-системы классифицируют как HTTPS.
+
+---
+
+## 8. Platform Expansion — Phase 13
+
+- [ ] **macOS клиент.** utun API (аналог Wintun для macOS). Network Extension framework.
+  Wails + Svelte (переиспользовать GUI из Windows). Ограничение: требует подписанного
+  приложения и notarization от Apple.
+- [ ] **Linux GUI.** GTK или тот же Wails. Использовать /dev/net/tun. Целевая аудитория:
+  технические пользователи, которые сейчас используют CLI.
+- [ ] **Browser Extension.** SOCKS5-прокси внутри расширения. Не требует прав администратора.
+  Ограниченная защита (только браузерный трафик), но нулевой порог установки.
+
+---
+
+## 9. iOS — Phase 14 (сложная фаза)
+
+- [ ] **Network Extension.** Единственный легальный способ VPN на iOS — через
+  `NEPacketTunnelProvider`. Требует entitlements от Apple (платная программа разработчика).
+- [ ] **Общее Go-ядро.** Та же gomobile-библиотека из Phase 8, но скомпилированная для iOS.
+  Crypto и wire format идентичны — новый код только для платформы.
+- [ ] **App Store.** Публикация требует соответствия правилам Apple, включая политику
+  конфиденциальности, отсутствие обхода ограничений контента (тонкий момент для VPN).
+
+---
+
+## 10. Commercial Layer — Phase 15
+
+- [ ] **User management с подпиской.** `expires_at`, `quota_bytes` в конфиге пользователя.
+  Сервер автоматически блокирует истёкших / исчерпавших квоту без рестарта.
+- [ ] **Платёжный шлюз.** Интеграция Stripe (карты) + криптовалюта (USDT/BTC).
+  Автоматическая генерация конфига и QR после оплаты.
+- [ ] **Реферальная система.** Пользователь получает расширение подписки за каждого
+  приведённого друга. Отслеживается через уникальный ref_code в конфиге.
+- [ ] **Reseller панель.** Отдельный уровень доступа в Web-панели: партнёр создаёт
+  пользователей в своей квоте, видит только свою статистику.
+- [ ] **Уведомления.** Email/Telegram-бот: уведомление за N дней до истечения подписки,
+  при исчерпании квоты, при подозрительной активности.
+
+---
+
+## 11. Current Task
+
+**Phase 7c (Web Management Panel):** HTTP API поверх существующего server.go.
+Эндпоинты: список пользователей, добавление/удаление/редактирование, live-статистика
+трафика (ByteIn/ByteOut из peer), генерация config.json + QR-код.
+Защита: статический admin_token в server_config.json.
+UI: минималистичный HTML/JS встроен через `embed.FS`, без внешних фреймворков.
