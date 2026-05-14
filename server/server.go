@@ -41,6 +41,7 @@ var (
 	peersMu     sync.RWMutex
 	logger      *log.Logger
 	bloom       [8192]uint64
+	bloomCount  atomic.Int64 // кол-во уникальных записей в bloom
 )
 
 func fnv1a(data []byte, seed uint64) uint64 {
@@ -122,8 +123,14 @@ func encrypt(plaintext, peerKey []byte, peerShortID uint16) ([]byte, error) {
 	marker := mac.Sum(nil)[:4]
 	marker[0] |= 0x40
 
-	block, _ := aes.NewCipher(peerKey)
-	gcm, _ := cipher.NewGCM(block)
+	block, err := aes.NewCipher(peerKey)
+	if err != nil {
+		return nil, fmt.Errorf("encrypt: NewCipher: %w", err)
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, fmt.Errorf("encrypt: NewGCM: %w", err)
+	}
 	ciphertext := gcm.Seal(nil, nonce, inner, nil)
 
 	buf := make([]byte, 4+2+12+len(ciphertext))
@@ -161,8 +168,14 @@ func decrypt(packet, peerKey []byte) ([]byte, error) {
 		return nil, fmt.Errorf("HMAC mismatch")
 	}
 
-	block, _ := aes.NewCipher(peerKey)
-	gcm, _ := cipher.NewGCM(block)
+	block, err := aes.NewCipher(peerKey)
+	if err != nil {
+		return nil, fmt.Errorf("decrypt: NewCipher: %w", err)
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, fmt.Errorf("decrypt: NewGCM: %w", err)
+	}
 	plaintext, err := gcm.Open(nil, nonce, ciphertext, nil)
 	if err != nil {
 		return nil, err
@@ -187,6 +200,7 @@ type ConfigUser struct {
 type Config struct {
 	Port        int          `json:"port"`
 	RoutingSalt string       `json:"routing_salt"`
+	LogFile     string       `json:"log_file"`
 	Users       []ConfigUser `json:"users"`
 }
 
@@ -204,9 +218,18 @@ func loadConfig() Config {
 		f.Close()
 	}
 
-	if cfg.Port == 0 { cfg.Port = 9999 }
-	if cfg.RoutingSalt == "" { cfg.RoutingSalt = "HastaVaquetGlobal" }
-	if len(cfg.Users) == 0 { log.Fatal("[ОШИБКА] Нет пользователей в конфиге") }
+	if cfg.Port == 0 {
+		cfg.Port = 9999
+	}
+	if cfg.RoutingSalt == "" {
+		cfg.RoutingSalt = "HastaVaquetGlobal"
+	}
+	if cfg.LogFile == "" {
+		cfg.LogFile = "server.log"
+	}
+	if len(cfg.Users) == 0 {
+		log.Fatal("[ОШИБКА] Нет пользователей в конфиге")
+	}
 
 	return cfg
 }
@@ -215,7 +238,7 @@ func main() {
 	cfg := loadConfig()
 	routingSalt = cfg.RoutingSalt
 
-	f, _ := os.OpenFile("/root/hasvaq/server.log", os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0666)
+	f, _ := os.OpenFile(cfg.LogFile, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	defer f.Close()
 	logger = log.New(f, "", log.LstdFlags)
 
@@ -264,10 +287,31 @@ func main() {
 	}()
 
 	go func() {
+		// Сброс bloom filter: каждые 60 сек ИЛИ при заполнении >70%.
+		// 8192 слов * 64 бита = 524288 бит; при 3 хешах ёмкость ~121000 записей.
+		// 70% от 121000 ≈ 85000 — безопасный порог до роста ложных срабатываний.
+		const bloomCapacity int64 = 85000
+		ticker := time.NewTicker(60 * time.Second)
+		checkTicker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+		defer checkTicker.Stop()
 		for {
-			time.Sleep(60 * time.Second)
-			for i := range bloom {
-				bloom[i] = 0
+			reset := false
+			select {
+			case <-ticker.C:
+				reset = true
+			case <-checkTicker.C:
+				if bloomCount.Load() >= bloomCapacity {
+					reset = true
+				}
+			}
+			if reset {
+				count := bloomCount.Load()
+				for i := range bloom {
+					bloom[i] = 0
+				}
+				bloomCount.Store(0)
+				logger.Printf("[BLOOM] Фильтр сброшен, было записей: %d\n", count)
 			}
 		}
 	}()
@@ -276,16 +320,22 @@ func main() {
 		packet := make([]byte, 65535)
 		for {
 			n, _ := ifce.Read(packet)
-			if n < 20 { continue }
+			if n < 20 {
+				continue
+			}
 			dstIP := net.IP(packet[16:20]).String()
 			peersMu.RLock()
 			peer := ipToPeer[dstIP]
 			peersMu.RUnlock()
-			if peer == nil { continue }
+			if peer == nil {
+				continue
+			}
 			peer.udpMu.Lock()
 			addr := peer.UDPAddr
 			peer.udpMu.Unlock()
-			if addr == nil { continue }
+			if addr == nil {
+				continue
+			}
 			enc, _ := encrypt(packet[:n], peer.Key[:], peer.ShortID)
 			conn.WriteToUDP(enc, addr)
 			peer.ByteOut.Add(int64(n))
@@ -296,7 +346,9 @@ func main() {
 	buffer := make([]byte, 65535)
 	for {
 		n, addr, err := conn.ReadFromUDP(buffer)
-		if err != nil || n < 4+2+12 { continue }
+		if err != nil || n < 4+2+12 {
+			continue
+		}
 
 		dynamicID := binary.BigEndian.Uint16(buffer[4:6])
 		nonce := buffer[6:18]
@@ -306,14 +358,19 @@ func main() {
 		peersMu.RLock()
 		peer := peers[shortID]
 		peersMu.RUnlock()
-		if peer == nil { continue }
+		if peer == nil {
+			continue
+		}
 
 		bkey := bloomKey(shortID, nonce)
-		if !bloomCheck(bkey) { continue }
+		if !bloomCheck(bkey) {
+			continue
+		}
 
 		decrypted, err := decrypt(buffer[:n], peer.Key[:])
 		if err == nil {
 			bloomSet(bkey)
+			bloomCount.Add(1)
 			if len(decrypted) == 0 {
 				logger.Printf("[KEEP-ALIVE] ShortID=%d\n", shortID)
 				peer.udpMu.Lock()

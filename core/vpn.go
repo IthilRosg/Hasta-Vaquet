@@ -18,24 +18,24 @@ import (
 type StatusCallback func(status string, txSpeed, rxSpeed int64, totalTx, totalRx uint64, pingMs int, lossPct int)
 
 type VPN struct {
-	config          Config
-	key             [32]byte
-	conn            *net.UDPConn
-	session         *wintun.Session
-	adapter         *wintun.Adapter
-	running         atomic.Bool
-	stopCh          chan struct{}
-	txBytes         atomic.Int64
-	rxBytes         atomic.Int64
-	sessionTotalTx  atomic.Uint64
-	sessionTotalRx  atomic.Uint64
-	onStatus        StatusCallback
-	mu              sync.Mutex
-	lastAliveMs     atomic.Int64  // unix milli of last keep-alive sent
-	echoReceived    atomic.Bool   // true if at least one echo came back
-	echoRtt         atomic.Int64  // latest RTT in ms
-	echoSent        atomic.Int64  // keep-alives sent
-	echoAcked       atomic.Int64  // echos received
+	config         Config
+	key            [32]byte
+	conn           *net.UDPConn
+	session        *wintun.Session
+	adapter        *wintun.Adapter
+	running        atomic.Bool
+	stopCh         chan struct{}
+	txBytes        atomic.Int64
+	rxBytes        atomic.Int64
+	sessionTotalTx atomic.Uint64
+	sessionTotalRx atomic.Uint64
+	onStatus       StatusCallback
+	mu             sync.Mutex
+	lastAliveMs    atomic.Int64 // unix milli of last keep-alive sent
+	echoReceived   atomic.Bool  // true if at least one echo came back
+	echoRtt        atomic.Int64 // latest RTT in ms
+	echoSent       atomic.Int64 // keep-alives sent
+	echoAcked      atomic.Int64 // echos received
 }
 
 func New(cfg Config, cb StatusCallback) *VPN {
@@ -222,10 +222,10 @@ func (v *VPN) writerLoop() {
 		if err == nil {
 			if len(packet) >= 20 && (packet[0]>>4) == 4 {
 				encrypted, err := Encrypt(packet, v.key[:], v.config.ShortID, v.config.RoutingSalt)
-			if err == nil {
-				v.conn.Write(encrypted)
-				v.txBytes.Add(int64(len(encrypted)))
-				v.sessionTotalTx.Add(uint64(len(encrypted)))
+				if err == nil {
+					v.conn.Write(encrypted)
+					v.txBytes.Add(int64(len(encrypted)))
+					v.sessionTotalTx.Add(uint64(len(encrypted)))
 				}
 			}
 			v.session.ReleaseReceivePacket(packet)
