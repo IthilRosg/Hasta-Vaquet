@@ -1238,6 +1238,8 @@
                 users: [],
                 refreshTimer: null,
                 refreshInterval: 30_000,
+                uptimeSec: 0,
+                uptimeTimer: null,
             };
 
             /* ════════════════════════════════════════════════════════════
@@ -1406,12 +1408,13 @@
    ════════════════════════════════════════════════════════════ */
 
             function renderStats(stats) {
+                STATE.uptimeSec = stats.uptime_sec || 0;
                 document.getElementById("stat-peers").textContent =
                     stats.peers_online ?? "—";
                 document.getElementById("stat-peers-sub").textContent =
                     `из ${stats.peers_total ?? "—"} всего`;
                 document.getElementById("stat-uptime").textContent = fmtUptime(
-                    stats.uptime_sec,
+                    STATE.uptimeSec,
                 );
                 document.getElementById("stat-out").textContent = fmtBytes(
                     stats.total_out,
@@ -1564,11 +1567,21 @@
 
                 refreshAll();
                 scheduleRefresh();
+
+                // Тикер аптайма — обновление каждую секунду
+                clearInterval(STATE.uptimeTimer);
+                STATE.uptimeTimer = setInterval(() => {
+                    STATE.uptimeSec++;
+                    document.getElementById("stat-uptime").textContent =
+                        fmtUptime(STATE.uptimeSec);
+                }, 1000);
             }
 
             function logout() {
                 clearInterval(STATE.refreshTimer);
+                clearInterval(STATE.uptimeTimer);
                 STATE.token = "";
+                STATE.uptimeSec = 0;
                 localStorage.removeItem("hv_admin_token");
 
                 document.getElementById("app").classList.add("hidden");
