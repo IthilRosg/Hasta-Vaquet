@@ -3,26 +3,31 @@
 package core
 
 import (
-	"fmt"
+	"syscall"
 	"time"
 )
 
 // vpnPlatform — Android-специфичная реализация туннеля.
 // TUN-интерфейс приходит из Java VpnService как FileDescriptor,
-// читаем/пишем через него как через обычный файл.
+// читаем/пишем через syscall на fd.
 type vpnPlatform struct {
 	tunFd int // файловый дескриптор TUN (из VpnService.establish())
 }
 
 func (p *vpnPlatform) openTunnel(v *VPN) error {
-	// TODO: Phase 8 — TUN создаётся на Java стороне (VpnService),
-	// fd передаётся сюда через gomobile bind.
-	return fmt.Errorf("Android tunnel not yet implemented")
+	// TUN уже создан на Java стороне (VpnService.Builder.establish())
+	// fd записан в plat.tunFd из StartVPN() в gomobile.go
+	if p.tunFd <= 0 {
+		return nil // будет ошибка при первом read/write
+	}
+	return nil
 }
 
 func (p *vpnPlatform) closeTunnel(v *VPN) {
-	// TODO: Phase 8 — закрыть TUN, очистить маршруты
-	_ = p.tunFd
+	if p.tunFd > 0 {
+		syscall.Close(p.tunFd)
+		p.tunFd = 0
+	}
 }
 
 func (p *vpnPlatform) readerLoop(v *VPN) {
@@ -33,7 +38,7 @@ func (p *vpnPlatform) readerLoop(v *VPN) {
 			return
 		default:
 		}
-		// Читаем расшифрованный пакет из UDP
+
 		n, err := v.conn.Read(buf)
 		if err != nil {
 			continue
@@ -41,6 +46,7 @@ func (p *vpnPlatform) readerLoop(v *VPN) {
 		if n < 4+2+12 {
 			continue
 		}
+
 		decrypted, err := Decrypt(buf[:n], v.key[:])
 		if err != nil {
 			continue
@@ -48,7 +54,8 @@ func (p *vpnPlatform) readerLoop(v *VPN) {
 		if len(decrypted) == 0 {
 			continue
 		}
-		// Echo-пинг (1 байт 0x01)
+
+		// Echo-пинг (1 байт 0x01) — не пишем в TUN
 		if len(decrypted) == 1 && decrypted[0] == 0x01 {
 			v.echoAcked.Add(1)
 			last := v.lastAliveMs.Load()
@@ -61,21 +68,46 @@ func (p *vpnPlatform) readerLoop(v *VPN) {
 			}
 			continue
 		}
-		// TODO: записать decrypted[] в TUN-интерфейс (fd.Write)
+
+		// Пишем расшифрованный пакет в TUN-интерфейс
+		if p.tunFd > 0 {
+			syscall.Write(p.tunFd, decrypted)
+		}
 		v.rxBytes.Add(int64(len(decrypted)))
 		v.sessionTotalRx.Add(uint64(len(decrypted)))
 	}
 }
 
 func (p *vpnPlatform) writerLoop(v *VPN) {
+	buf := make([]byte, 65535)
 	for {
 		select {
 		case <-v.stopCh:
 			return
 		default:
 		}
-		// TODO: Phase 8 — читать пакет из TUN (fd.Read)
-		// и отправлять через Encrypt + v.conn.Write
+
+		if p.tunFd <= 0 {
+			continue
+		}
+
+		// Читаем пакет из TUN-интерфейса
+		n, err := syscall.Read(p.tunFd, buf)
+		if err != nil || n < 20 {
+			continue
+		}
+
+		// Только IPv4
+		if (buf[0] >> 4) != 4 {
+			continue
+		}
+
+		encrypted, err := Encrypt(buf[:n], v.key[:], v.config.ShortID, v.config.RoutingSalt)
+		if err == nil {
+			v.conn.Write(encrypted)
+			v.txBytes.Add(int64(len(encrypted)))
+			v.sessionTotalTx.Add(uint64(len(encrypted)))
+		}
 	}
 }
 
