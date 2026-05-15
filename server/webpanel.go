@@ -18,21 +18,36 @@ import (
 //go:embed static/index.html
 var indexHTML []byte
 
+// adminPath хранит URL-префикс панели (например "/hasta-vaquet").
+// Используется хендлерами для корректной маршрутизации.
+var adminPath string
+
 // startWebPanel запускает HTTP-сервер панели управления.
 // Вызывается только если admin_token задан в конфиге.
 func startWebPanel() {
+	adminPath = serverCfg.AdminPath
+	p := adminPath // удобный alias
+
+	// HTML с подставленным API_BASE
+	servedHTML := strings.ReplaceAll(string(indexHTML), "{{API_BASE}}", p)
+
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	// Корень — отдаём панель
+	mux.HandleFunc(p+"/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.Write(indexHTML)
+		w.Write([]byte(servedHTML))
 	})
-	mux.HandleFunc("/api/stats", withAuth(handleStats))
-	mux.HandleFunc("/api/users", withAuth(handleUsersRoute))
-	mux.HandleFunc("/api/users/", withAuth(handleUserRoute))
+	// Редирект с голого пути без трейлинг-слэша
+	mux.HandleFunc(p, func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, p+"/", http.StatusMovedPermanently)
+	})
+	mux.HandleFunc(p+"/api/stats", withAuth(handleStats))
+	mux.HandleFunc(p+"/api/users", withAuth(handleUsersRoute))
+	mux.HandleFunc(p+"/api/users/", withAuth(handleUserRoute))
 
 	addr := fmt.Sprintf(":%d", serverCfg.AdminPort)
-	logger.Printf("[WEB] Панель управления запущена на порту %d\n", serverCfg.AdminPort)
+	logger.Printf("[WEB] Панель запущена: http://localhost%s%s/\n", addr, p)
 	if err := http.ListenAndServe(addr, mux); err != nil {
 		logger.Printf("[WEB] Ошибка запуска: %v\n", err)
 	}
@@ -184,7 +199,7 @@ func createUser(w http.ResponseWriter, r *http.Request) {
 
 func handleUserRoute(w http.ResponseWriter, r *http.Request) {
 	// Парсим путь: /api/users/{id}  или  /api/users/{id}/config  или  /api/users/{id}/qr
-	trimmed := strings.TrimPrefix(r.URL.Path, "/api/users/")
+	trimmed := strings.TrimPrefix(r.URL.Path, adminPath+"/api/users/")
 	parts := strings.SplitN(trimmed, "/", 2)
 
 	id64, err := strconv.ParseUint(parts[0], 10, 16)

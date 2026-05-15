@@ -209,6 +209,7 @@ type Config struct {
 	Port        int          `json:"port"`
 	AdminPort   int          `json:"admin_port"`
 	AdminToken  string       `json:"admin_token"`
+	AdminPath   string       `json:"admin_path"`
 	ServerIP    string       `json:"server_ip"`
 	GatewayIP   string       `json:"gateway_ip"`
 	DNS         string       `json:"dns"`
@@ -236,6 +237,9 @@ func loadConfig() Config {
 	}
 	if cfg.AdminPort == 0 {
 		cfg.AdminPort = 9998
+	}
+	if cfg.AdminPath == "" {
+		cfg.AdminPath = "/hasta-vaquet"
 	}
 	if cfg.GatewayIP == "" {
 		cfg.GatewayIP = "192.168.100.1"
