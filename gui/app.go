@@ -23,6 +23,24 @@ type App struct {
 	profiles []string
 }
 
+// vpnListener реализует core.StatusListener для отправки событий в UI.
+type vpnListener struct {
+	ctx context.Context
+}
+
+func (l *vpnListener) OnStatus(status string, txSpeed, rxSpeed int64, totalTx, totalRx uint64, pingMs, lossPct int) {
+	if status == "connected" || status == "disconnected" {
+		runtime.EventsEmit(l.ctx, "status", status)
+	}
+	if txSpeed > 0 || rxSpeed > 0 || pingMs > 0 {
+		runtime.EventsEmit(l.ctx, "traffic", map[string]interface{}{
+			"tx_speed": txSpeed, "rx_speed": rxSpeed,
+			"total_tx": totalTx, "total_rx": totalRx,
+		})
+	}
+	runtime.EventsEmit(l.ctx, "ping", map[string]int{"rtt": pingMs, "loss": lossPct})
+}
+
 func NewApp() *App {
 	return &App{}
 }
@@ -214,18 +232,7 @@ func (a *App) DoConnect(serverIP, secretKey, routingSalt, internalIP, gatewayIP,
 		GatewayIP:   gatewayIP,
 		DNS:         dns,
 	}
-	vpn := core.New(cfg, func(status string, txSpeed, rxSpeed int64, totalTx, totalRx uint64, pingMs, lossPct int) {
-		if status == "connected" || status == "disconnected" {
-			runtime.EventsEmit(a.ctx, "status", status)
-		}
-		if txSpeed > 0 || rxSpeed > 0 || pingMs > 0 {
-			runtime.EventsEmit(a.ctx, "traffic", map[string]interface{}{
-				"tx_speed": txSpeed, "rx_speed": rxSpeed,
-				"total_tx": totalTx, "total_rx": totalRx,
-			})
-		}
-		runtime.EventsEmit(a.ctx, "ping", map[string]int{"rtt": pingMs, "loss": lossPct})
-	})
+	vpn := core.New(cfg, &vpnListener{ctx: a.ctx})
 	if err := vpn.Start(); err != nil {
 		return err.Error()
 	}
