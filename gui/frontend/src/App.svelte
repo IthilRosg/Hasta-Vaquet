@@ -111,6 +111,7 @@
   }
 
   async function connect() {
+    if (!serverIP) { statusText = 'No profile selected'; return }
     animating = true; statusText = 'Connecting...'
     const res = await DoConnect(serverIP, secretKey, routingSalt, internalIP, gatewayIP, dns, port, shortID)
     if (res !== 'connected') { statusText = res }
@@ -147,7 +148,10 @@
       // Сбросить настройки подключения
       serverIP = ''; port = 9999; shortID = 0
       secretKey = ''; internalIP = ''; gatewayIP = ''; dns = ''
-      await loadConfig()
+      // Очистить last_profile.txt чтобы loadDefault не сработал
+      await SaveLastProfile('')
+      // Обновить только список профилей, не загружать никакие конфиги
+      profiles = (await ListProfileItems()) || []
     } else {
       statusText = res
     }
