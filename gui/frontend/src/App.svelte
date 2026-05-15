@@ -16,6 +16,7 @@
   let showProfileDropdown = false
 
   let pingTimer: number
+  let uptimeTimer: number
   let startTime: number
   let totalTX = 0
   let totalRX = 0
@@ -75,11 +76,18 @@
   EventsOn('status', (s: string) => {
     statusText = s === 'connected' ? 'Connected' : 'Disconnected'
     connected = s === 'connected'
-    if (!connected) {
-      txSpeed = '0 B/s'; rxSpeed = '0 B/s'; rtt = 0; loss = 0; uptime = '00:00'
-    } else {
+    if (connected) {
       startTime = Date.now()
       uptime = '00:00'
+      // Таймер обновления uptime каждую секунду
+      clearInterval(uptimeTimer)
+      uptimeTimer = setInterval(() => {
+        const sec = Math.floor((Date.now() - startTime) / 1000)
+        uptime = formatTime(sec)
+      }, 1000)
+    } else {
+      txSpeed = '0 B/s'; rxSpeed = '0 B/s'; rtt = 0; loss = 0; uptime = '00:00'
+      clearInterval(uptimeTimer)
     }
   })
 
@@ -98,7 +106,7 @@
   })
 
   function toggle() {
-    if (animating) return
+    if (animating || !serverIP) return
     if (connected) { disconnect() } else { connect() }
   }
 
@@ -136,7 +144,10 @@
     if (res === 'deleted') {
       profileName = ''
       statusText = 'Profile deleted'
-      loadConfig()
+      // Сбросить настройки подключения
+      serverIP = ''; port = 9999; shortID = 0
+      secretKey = ''; internalIP = ''; gatewayIP = ''; dns = ''
+      await loadConfig()
     } else {
       statusText = res
     }
@@ -158,7 +169,7 @@
   <!-- Main action: button + status -->
   <div class="main-block">
     <div class="button-wrapper" class:connected>
-      <button class="big-btn" on:click={toggle} disabled={animating}>
+      <button class="big-btn" on:click={toggle} disabled={animating || !serverIP}>
         <div class="icon">
           {#if connected}
           <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
