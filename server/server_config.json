@@ -1,8 +1,24 @@
 {
   "port": 9999,
+  "admin_port": 9998,
+  "admin_token": "",
+  "server_ip": "YOUR_SERVER_IP",
+  "gateway_ip": "192.168.100.1",
+  "dns": "1.1.1.1",
   "routing_salt": "HastaVaquetGlobal",
+  "log_file": "server.log",
   "users": [
-    { "short_id": 1, "secret_key": "AliceSecret2026", "ip": "10.0.0.10" },
-    { "short_id": 2, "secret_key": "BobSecret2026", "ip": "10.0.0.11" }
+    {
+      "short_id": 1,
+      "name": "Alice",
+      "secret_key": "AliceSecret2026",
+      "ip": "10.0.0.10"
+    },
+    {
+      "short_id": 2,
+      "name": "Bob",
+      "secret_key": "BobSecret2026",
+      "ip": "10.0.0.11"
+    }
   ]
 }

@@ -26,22 +26,29 @@ import (
 
 type Peer struct {
 	ShortID  uint16
+	Name     string
+	KeyRaw   string // оригинальный ключ для генерации клиентских конфигов
 	Key      [32]byte
 	Internal string
 	UDPAddr  *net.UDPAddr
 	udpMu    sync.Mutex
 	ByteOut  atomic.Int64
 	ByteIn   atomic.Int64
+	LastSeen atomic.Int64 // unix timestamp последнего пакета
 }
 
 var (
-	routingSalt string
-	peers       map[uint16]*Peer
-	ipToPeer    map[string]*Peer
-	peersMu     sync.RWMutex
-	logger      *log.Logger
-	bloom       [8192]uint64
-	bloomCount  atomic.Int64 // кол-во уникальных записей в bloom
+	routingSalt     string
+	peers           map[uint16]*Peer
+	ipToPeer        map[string]*Peer
+	peersMu         sync.RWMutex
+	logger          *log.Logger
+	bloom           [8192]uint64
+	bloomCount      atomic.Int64 // кол-во уникальных записей в bloom
+	configFilePath  string
+	serverStartTime time.Time
+	serverCfg       Config
+	configMu        sync.Mutex // защита saveConfig от concurrent writes
 )
 
 func fnv1a(data []byte, seed uint64) uint64 {
@@ -193,12 +200,18 @@ func decrypt(packet, peerKey []byte) ([]byte, error) {
 
 type ConfigUser struct {
 	ShortID   uint16 `json:"short_id"`
+	Name      string `json:"name"`
 	SecretKey string `json:"secret_key"`
 	IP        string `json:"ip"`
 }
 
 type Config struct {
 	Port        int          `json:"port"`
+	AdminPort   int          `json:"admin_port"`
+	AdminToken  string       `json:"admin_token"`
+	ServerIP    string       `json:"server_ip"`
+	GatewayIP   string       `json:"gateway_ip"`
+	DNS         string       `json:"dns"`
 	RoutingSalt string       `json:"routing_salt"`
 	LogFile     string       `json:"log_file"`
 	Users       []ConfigUser `json:"users"`
@@ -221,6 +234,15 @@ func loadConfig() Config {
 	if cfg.Port == 0 {
 		cfg.Port = 9999
 	}
+	if cfg.AdminPort == 0 {
+		cfg.AdminPort = 9998
+	}
+	if cfg.GatewayIP == "" {
+		cfg.GatewayIP = "192.168.100.1"
+	}
+	if cfg.DNS == "" {
+		cfg.DNS = "1.1.1.1"
+	}
 	if cfg.RoutingSalt == "" {
 		cfg.RoutingSalt = "HastaVaquetGlobal"
 	}
@@ -231,11 +253,14 @@ func loadConfig() Config {
 		log.Fatal("[ОШИБКА] Нет пользователей в конфиге")
 	}
 
+	configFilePath = configFile
 	return cfg
 }
 
 func main() {
 	cfg := loadConfig()
+	serverCfg = cfg
+	serverStartTime = time.Now()
 	routingSalt = cfg.RoutingSalt
 
 	f, _ := os.OpenFile(cfg.LogFile, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
@@ -247,6 +272,8 @@ func main() {
 	for _, u := range cfg.Users {
 		p := &Peer{
 			ShortID:  u.ShortID,
+			Name:     u.Name,
+			KeyRaw:   u.SecretKey,
 			Key:      sha256.Sum256([]byte(u.SecretKey)),
 			Internal: u.IP,
 		}
@@ -262,6 +289,12 @@ func main() {
 	}
 
 	logger.Printf("[ЗАПУСК] Сервер Phase 6, порт %d, пиров: %d\n", cfg.Port, len(peers))
+
+	if cfg.AdminToken != "" {
+		go startWebPanel()
+	} else {
+		logger.Printf("[WEB] admin_token не задан — панель отключена\n")
+	}
 
 	ifce, _ := water.New(water.Config{DeviceType: water.TUN})
 	exec.Command("ip", "addr", "add", "10.0.0.2/24", "dev", ifce.Name()).Run()
@@ -371,6 +404,7 @@ func main() {
 		if err == nil {
 			bloomSet(bkey)
 			bloomCount.Add(1)
+			peer.LastSeen.Store(time.Now().Unix())
 			if len(decrypted) == 0 {
 				logger.Printf("[KEEP-ALIVE] ShortID=%d\n", shortID)
 				peer.udpMu.Lock()

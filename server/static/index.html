@@ -1,0 +1,1509 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hasta-Vaquet Admin</title>
+  <style>
+    /* ─── CSS Variables ─────────────────────────────────────────── */
+    :root {
+      --bg:            #0d1117;
+      --surface:       #161b22;
+      --surface-hover: #1c2128;
+      --border:        rgba(255,255,255,0.08);
+      --accent:        #58a6ff;
+      --green:         #3fb950;
+      --red:           #f85149;
+      --yellow:        #d29922;
+      --text:          #e6edf3;
+      --text-dim:      #8b949e;
+      --radius:        10px;
+      --font:          'Segoe UI', system-ui, -apple-system, sans-serif;
+      --font-mono:     'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+    }
+
+    /* ─── Reset & Base ──────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 14px;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* ─── Scrollbar ─────────────────────────────────────────────── */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.25); }
+
+    /* ─── Utility ───────────────────────────────────────────────── */
+    .hidden { display: none !important; }
+    .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }
+
+    /* ─── Buttons ───────────────────────────────────────────────── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 16px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--surface-hover);
+      color: var(--text);
+      font-size: 13px;
+      font-family: var(--font);
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s, opacity 0.15s;
+      user-select: none;
+    }
+    .btn:hover { background: #2d333b; border-color: rgba(255,255,255,0.16); }
+    .btn:active { opacity: 0.75; }
+
+    .btn-primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #0d1117;
+      font-weight: 600;
+    }
+    .btn-primary:hover { background: #79b8ff; border-color: #79b8ff; }
+
+    .btn-danger { border-color: rgba(248,81,73,0.4); color: var(--red); }
+    .btn-danger:hover { background: rgba(248,81,73,0.12); border-color: var(--red); }
+
+    .btn-ghost {
+      background: transparent;
+      border-color: transparent;
+      padding: 5px 8px;
+      font-size: 15px;
+      color: var(--text-dim);
+    }
+    .btn-ghost:hover { background: var(--surface-hover); color: var(--text); border-color: var(--border); }
+
+    .btn-sm { padding: 4px 10px; font-size: 12px; }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; pointer-events: none; }
+
+    /* ─── Input / Select ────────────────────────────────────────── */
+    .input {
+      width: 100%;
+      padding: 8px 12px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-size: 13px;
+      font-family: var(--font);
+      transition: border-color 0.15s, box-shadow 0.15s;
+      outline: none;
+    }
+    .input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(88,166,255,0.15);
+    }
+    .input::placeholder { color: var(--text-dim); }
+    .input.error { border-color: var(--red); box-shadow: 0 0 0 3px rgba(248,81,73,0.15); }
+
+    .input-group { display: flex; gap: 6px; align-items: center; }
+    .input-group .input { flex: 1; }
+
+    /* ─── ════════════════════════════════════════ ─── */
+    /*              LOGIN SCREEN                        */
+    /* ─── ════════════════════════════════════════ ─── */
+
+    #login-screen {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(ellipse at 50% 0%, rgba(88,166,255,0.07) 0%, transparent 60%),
+                  var(--bg);
+    }
+
+    .login-card {
+      width: 360px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 40px 36px;
+      box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+    }
+
+    .login-logo {
+      text-align: center;
+      margin-bottom: 28px;
+    }
+
+    .login-logo .logo-icon {
+      display: inline-block;
+      width: 56px;
+      height: 56px;
+      background: linear-gradient(135deg, var(--accent) 0%, #1f6feb 100%);
+      border-radius: 14px;
+      margin-bottom: 12px;
+      position: relative;
+      box-shadow: 0 4px 20px rgba(88,166,255,0.3);
+    }
+
+    .login-logo .logo-icon svg {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+    }
+
+    .login-logo h1 {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--text);
+      letter-spacing: -0.3px;
+    }
+
+    .login-logo p {
+      font-size: 12px;
+      color: var(--text-dim);
+      margin-top: 2px;
+    }
+
+    .login-card label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+    }
+
+    #login-error {
+      margin-top: 10px;
+      padding: 8px 12px;
+      background: rgba(248,81,73,0.12);
+      border: 1px solid rgba(248,81,73,0.3);
+      border-radius: 6px;
+      color: var(--red);
+      font-size: 12px;
+      text-align: center;
+    }
+
+    #login-btn {
+      width: 100%;
+      margin-top: 18px;
+      padding: 10px;
+      font-size: 14px;
+      justify-content: center;
+    }
+
+    /* ─── ════════════════════════════════════════ ─── */
+    /*              MAIN APP LAYOUT                     */
+    /* ─── ════════════════════════════════════════ ─── */
+
+    #app { display: flex; flex-direction: column; min-height: 100vh; }
+
+    /* ── Header ────────────────────────────────────── */
+    .header {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      height: 56px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      padding: 0 24px;
+      gap: 12px;
+      backdrop-filter: blur(8px);
+    }
+
+    .header-brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex: 1;
+    }
+
+    .header-brand .brand-icon {
+      width: 30px;
+      height: 30px;
+      background: linear-gradient(135deg, var(--accent) 0%, #1f6feb 100%);
+      border-radius: 7px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      box-shadow: 0 2px 10px rgba(88,166,255,0.25);
+    }
+
+    .header-brand h1 {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--text);
+      letter-spacing: -0.2px;
+    }
+
+    .header-brand .version-badge {
+      font-size: 10px;
+      padding: 1px 7px;
+      background: rgba(88,166,255,0.12);
+      border: 1px solid rgba(88,166,255,0.25);
+      color: var(--accent);
+      border-radius: 20px;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+    }
+
+    .header-status {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--text-dim);
+    }
+
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 6px var(--green);
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    /* ── Main Content ───────────────────────────────── */
+    .main {
+      flex: 1;
+      padding: 24px;
+      max-width: 1200px;
+      width: 100%;
+      margin: 0 auto;
+    }
+
+    /* ─── Stats Grid ────────────────────────────────── */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 28px;
+    }
+
+    @media (max-width: 900px) {
+      .stats-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (max-width: 500px) {
+      .stats-grid { grid-template-columns: 1fr; }
+    }
+
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px 22px;
+      position: relative;
+      overflow: hidden;
+      transition: border-color 0.2s, transform 0.15s;
+    }
+    .stat-card:hover { border-color: rgba(255,255,255,0.15); transform: translateY(-1px); }
+
+    .stat-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      border-radius: var(--radius) var(--radius) 0 0;
+    }
+    .stat-card.accent::before  { background: var(--accent); }
+    .stat-card.green::before   { background: var(--green); }
+    .stat-card.yellow::before  { background: var(--yellow); }
+    .stat-card.purple::before  { background: #bc8cff; }
+
+    .stat-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      margin-bottom: 10px;
+    }
+
+    .stat-value {
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--text);
+      line-height: 1;
+      letter-spacing: -0.5px;
+    }
+
+    .stat-sub {
+      font-size: 12px;
+      color: var(--text-dim);
+      margin-top: 6px;
+    }
+
+    .stat-icon {
+      position: absolute;
+      top: 18px;
+      right: 18px;
+      font-size: 22px;
+      opacity: 0.18;
+      user-select: none;
+    }
+
+    /* ─── Section Header ────────────────────────────── */
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .section-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .count-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 22px;
+      height: 20px;
+      padding: 0 6px;
+      background: rgba(255,255,255,0.08);
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-dim);
+    }
+
+    /* ─── Table ─────────────────────────────────────── */
+    .table-wrap {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    .table-wrap.loading { opacity: 0.6; pointer-events: none; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    thead tr {
+      background: rgba(255,255,255,0.03);
+      border-bottom: 1px solid var(--border);
+    }
+
+    th {
+      padding: 10px 16px;
+      text-align: left;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      white-space: nowrap;
+    }
+
+    tbody tr {
+      border-bottom: 1px solid var(--border);
+      transition: background 0.12s;
+    }
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover { background: var(--surface-hover); }
+
+    td {
+      padding: 12px 16px;
+      font-size: 13px;
+      color: var(--text);
+      vertical-align: middle;
+    }
+
+    /* Badge for ID */
+    .id-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      background: rgba(88,166,255,0.1);
+      border: 1px solid rgba(88,166,255,0.2);
+      border-radius: 4px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--accent);
+      font-weight: 500;
+    }
+
+    /* Code for IP */
+    code {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid var(--border);
+      padding: 2px 7px;
+      border-radius: 4px;
+      color: #a5d6ff;
+    }
+
+    /* Online/Offline status */
+    .peer-status {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      white-space: nowrap;
+    }
+    .peer-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .peer-dot.online  { background: var(--green); box-shadow: 0 0 6px var(--green); }
+    .peer-dot.offline { background: var(--text-dim); }
+
+    .peer-status .status-text { font-size: 12px; color: var(--text-dim); }
+    .peer-status.online .status-text { color: var(--green); }
+
+    /* Traffic cells */
+    .traffic-val {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--text-dim);
+    }
+
+    /* Action buttons cell */
+    .actions-cell {
+      display: flex;
+      gap: 4px;
+      align-items: center;
+    }
+
+    /* Empty state */
+    .empty-state {
+      padding: 56px 24px;
+      text-align: center;
+      color: var(--text-dim);
+    }
+    .empty-state .empty-icon { font-size: 40px; opacity: 0.25; margin-bottom: 12px; }
+    .empty-state p { font-size: 14px; }
+
+    /* ─── ════════════════════════════════════════ ─── */
+    /*              MODALS                              */
+    /* ─── ════════════════════════════════════════ ─── */
+
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 200;
+      background: rgba(0,0,0,0.7);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      backdrop-filter: blur(3px);
+      animation: fadeIn 0.15s ease;
+    }
+
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes slideUp { from { opacity: 0; transform: translateY(16px) scale(0.98); } to { opacity: 1; transform: none; } }
+
+    .modal {
+      background: var(--surface);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: var(--radius);
+      width: 100%;
+      max-width: 460px;
+      box-shadow: 0 24px 80px rgba(0,0,0,0.7);
+      animation: slideUp 0.18s ease;
+      overflow: hidden;
+    }
+
+    .modal-header {
+      padding: 20px 24px 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .modal-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .modal-close {
+      background: transparent;
+      border: none;
+      color: var(--text-dim);
+      font-size: 20px;
+      cursor: pointer;
+      padding: 2px 6px;
+      border-radius: 4px;
+      line-height: 1;
+      transition: color 0.1s, background 0.1s;
+    }
+    .modal-close:hover { color: var(--text); background: var(--surface-hover); }
+
+    .modal-body { padding: 20px 24px; }
+
+    .modal-footer {
+      padding: 16px 24px;
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      border-top: 1px solid var(--border);
+      background: rgba(0,0,0,0.1);
+    }
+
+    /* Form fields */
+    .form-field { margin-bottom: 16px; }
+    .form-field:last-child { margin-bottom: 0; }
+
+    .form-field label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-dim);
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+
+    .field-hint {
+      font-size: 11px;
+      color: var(--text-dim);
+      margin-top: 5px;
+    }
+
+    .field-error {
+      font-size: 11px;
+      color: var(--red);
+      margin-top: 5px;
+    }
+
+    /* QR Modal */
+    .qr-modal { max-width: 380px; }
+
+    .qr-container {
+      text-align: center;
+      padding: 10px 0;
+    }
+
+    .qr-container img {
+      width: 220px;
+      height: 220px;
+      border-radius: 10px;
+      background: #fff;
+      padding: 12px;
+      display: block;
+      margin: 0 auto 14px;
+    }
+
+    .qr-hint {
+      font-size: 13px;
+      color: var(--text-dim);
+      margin-top: 4px;
+    }
+
+    /* ─── Refresh indicator ─────────────────────────── */
+    .refresh-info {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      color: var(--text-dim);
+      margin-bottom: 28px;
+      margin-top: -16px;
+    }
+
+    .refresh-spinner {
+      width: 12px;
+      height: 12px;
+      border: 2px solid rgba(255,255,255,0.1);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .refresh-spinner.spinning { animation: spin 0.7s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ─── Toasts ────────────────────────────────────── */
+    #toast-container {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      z-index: 500;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      pointer-events: none;
+    }
+
+    .toast {
+      padding: 10px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+      animation: toastIn 0.2s ease;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      max-width: 320px;
+    }
+    .toast.success { border-color: rgba(63,185,80,0.3); color: var(--green); }
+    .toast.error   { border-color: rgba(248,81,73,0.3); color: var(--red); }
+    .toast.info    { border-color: rgba(88,166,255,0.3); color: var(--accent); }
+
+    @keyframes toastIn {
+      from { opacity: 0; transform: translateY(10px) scale(0.95); }
+      to   { opacity: 1; transform: none; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ────────────────────────────────────────────────────────── -->
+<!--                     LOGIN SCREEN                          -->
+<!-- ────────────────────────────────────────────────────────── -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="logo-icon">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
+          <path d="M12 2L4 6v6c0 5.25 3.5 10.15 8 11.35C16.5 22.15 20 17.25 20 12V6L12 2z"
+                fill="rgba(255,255,255,0.9)"/>
+          <path d="M10 12l2 2 4-4" stroke="#0d1117" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <h1>Hasta-Vaquet Admin</h1>
+      <p>Панель управления VPN-сервером</p>
+    </div>
+
+    <div class="form-field">
+      <label for="token-input">Admin Token</label>
+      <input
+        id="token-input"
+        class="input"
+        type="password"
+        placeholder="Введите токен администратора…"
+        autocomplete="current-password"
+      />
+    </div>
+
+    <div id="login-error" class="hidden"></div>
+
+    <button id="login-btn" class="btn btn-primary">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+        <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      Войти
+    </button>
+  </div>
+</div>
+
+<!-- ────────────────────────────────────────────────────────── -->
+<!--                      MAIN APP                             -->
+<!-- ────────────────────────────────────────────────────────── -->
+<div id="app" class="hidden">
+
+  <!-- Header -->
+  <header class="header">
+    <div class="header-brand">
+      <div class="brand-icon">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+          <path d="M12 2L4 6v6c0 5.25 3.5 10.15 8 11.35C16.5 22.15 20 17.25 20 12V6L12 2z"
+                fill="rgba(255,255,255,0.9)"/>
+        </svg>
+      </div>
+      <h1>Hasta-Vaquet</h1>
+      <span class="version-badge">Admin</span>
+    </div>
+
+    <div class="header-status">
+      <div class="status-dot" id="header-status-dot"></div>
+      <span id="header-status-text">Соединение…</span>
+    </div>
+
+    <button class="btn btn-sm" id="logout-btn" style="margin-left:12px;">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      Выйти
+    </button>
+  </header>
+
+  <!-- Main Content -->
+  <main class="main">
+
+    <!-- Refresh indicator -->
+    <div class="refresh-info">
+      <div class="refresh-spinner" id="refresh-spinner"></div>
+      <span id="refresh-text">Обновление…</span>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats-grid">
+      <div class="stat-card accent">
+        <div class="stat-label">Пиров Online</div>
+        <div class="stat-value" id="stat-peers">—</div>
+        <div class="stat-sub" id="stat-peers-sub">из — всего</div>
+        <div class="stat-icon">🖧</div>
+      </div>
+      <div class="stat-card green">
+        <div class="stat-label">Uptime</div>
+        <div class="stat-value" id="stat-uptime">—</div>
+        <div class="stat-sub" id="stat-uptime-sub">Сервер работает</div>
+        <div class="stat-icon">⏱</div>
+      </div>
+      <div class="stat-card yellow">
+        <div class="stat-label">Отдано</div>
+        <div class="stat-value" id="stat-out">—</div>
+        <div class="stat-sub">Исходящий трафик</div>
+        <div class="stat-icon">⬆</div>
+      </div>
+      <div class="stat-card purple">
+        <div class="stat-label">Получено</div>
+        <div class="stat-value" id="stat-in">—</div>
+        <div class="stat-sub">Входящий трафик</div>
+        <div class="stat-icon">⬇</div>
+      </div>
+    </div>
+
+    <!-- Users Section -->
+    <div class="section-header">
+      <div class="section-title">
+        Пользователи
+        <span class="count-badge" id="users-count">0</span>
+      </div>
+      <button class="btn btn-primary" id="add-user-btn">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+          <path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.5"
+                stroke-linecap="round"/>
+        </svg>
+        Добавить пользователя
+      </button>
+    </div>
+
+    <!-- Users Table -->
+    <div class="table-wrap" id="table-wrap">
+      <table id="users-table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Имя</th>
+            <th>IP-адрес</th>
+            <th>Статус</th>
+            <th>Получено</th>
+            <th>Отдано</th>
+            <th style="text-align:right;">Действия</th>
+          </tr>
+        </thead>
+        <tbody id="users-tbody">
+          <tr>
+            <td colspan="7">
+              <div class="empty-state">
+                <div class="empty-icon">◌</div>
+                <p>Загрузка пользователей…</p>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+  </main>
+</div>
+
+<!-- ────────────────────────────────────────────────────────── -->
+<!--                  MODAL: ADD USER                          -->
+<!-- ────────────────────────────────────────────────────────── -->
+<div id="modal-add" class="modal-overlay hidden">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="add-modal-title">
+    <div class="modal-header">
+      <span class="modal-title" id="add-modal-title">Добавить пользователя</span>
+      <button class="modal-close" id="add-modal-close" title="Закрыть">✕</button>
+    </div>
+    <div class="modal-body">
+
+      <div class="form-field">
+        <label for="field-name">Имя пользователя</label>
+        <input id="field-name" class="input" type="text" placeholder="Например: alice" />
+        <div class="field-error hidden" id="err-name"></div>
+      </div>
+
+      <div class="form-field">
+        <label for="field-short-id">Short ID</label>
+        <input id="field-short-id" class="input" type="text" placeholder="Например: 001" />
+        <div class="field-hint">Уникальный идентификатор пира (число или строка)</div>
+        <div class="field-error hidden" id="err-short-id"></div>
+      </div>
+
+      <div class="form-field">
+        <label for="field-ip">Internal IP</label>
+        <input id="field-ip" class="input" type="text" placeholder="10.0.0.2" />
+        <div class="field-hint">Адрес в туннельной сети (10.0.0.X)</div>
+        <div class="field-error hidden" id="err-ip"></div>
+      </div>
+
+      <div class="form-field">
+        <label for="field-secret">Secret Key</label>
+        <div class="input-group">
+          <input id="field-secret" class="input" type="text" placeholder="Сгенерируйте или введите вручную" />
+          <button class="btn" id="gen-secret-btn" title="Сгенерировать случайный ключ" style="white-space:nowrap;">
+            🎲 Генерировать
+          </button>
+        </div>
+        <div class="field-hint">Случайная строка для шифрования туннеля</div>
+        <div class="field-error hidden" id="err-secret"></div>
+      </div>
+
+      <div class="field-error hidden" id="err-general" style="margin-top:4px;font-size:13px;"></div>
+
+    </div>
+    <div class="modal-footer">
+      <button class="btn" id="add-cancel-btn">Отмена</button>
+      <button class="btn btn-primary" id="add-submit-btn">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+          <path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+        </svg>
+        Создать
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ────────────────────────────────────────────────────────── -->
+<!--                   MODAL: QR CODE                          -->
+<!-- ────────────────────────────────────────────────────────── -->
+<div id="modal-qr" class="modal-overlay hidden">
+  <div class="modal qr-modal" role="dialog" aria-modal="true" aria-labelledby="qr-modal-title">
+    <div class="modal-header">
+      <span class="modal-title" id="qr-modal-title">QR-код</span>
+      <button class="modal-close" id="qr-modal-close" title="Закрыть">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="qr-container">
+        <img id="qr-img" src="" alt="QR-код конфигурации" />
+        <div style="font-size:13px;font-weight:600;color:var(--text);margin-top:4px;"
+             id="qr-user-name"></div>
+        <div class="qr-hint">Отсканируйте в мобильном клиенте Hasta-Vaquet</div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" id="qr-close-btn">Закрыть</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast container -->
+<div id="toast-container"></div>
+
+<!-- ────────────────────────────────────────────────────────── -->
+<!--                       JAVASCRIPT                          -->
+<!-- ────────────────────────────────────────────────────────── -->
+<script>
+/* ════════════════════════════════════════════════════════════
+   STATE
+   ════════════════════════════════════════════════════════════ */
+const STATE = {
+  token: '',
+  users: [],
+  refreshTimer: null,
+  refreshInterval: 30_000,
+};
+
+/* ════════════════════════════════════════════════════════════
+   UTILITY HELPERS
+   ════════════════════════════════════════════════════════════ */
+
+/**
+ * Format bytes into human-readable string.
+ * @param {number} b - bytes
+ */
+function fmtBytes(b) {
+  if (b == null || isNaN(b)) return '—';
+  if (b >= 1_073_741_824) return (b / 1_073_741_824).toFixed(1) + ' GB';
+  if (b >= 1_048_576)     return (b / 1_048_576).toFixed(1)     + ' MB';
+  if (b >= 1_024)         return (b / 1_024).toFixed(0)         + ' KB';
+  return b + ' B';
+}
+
+/**
+ * Format uptime seconds into "2ч 34м" or "45м 12с".
+ * @param {number} sec
+ */
+function fmtUptime(sec) {
+  if (sec == null || isNaN(sec)) return '—';
+  const s = Math.floor(sec);
+  const days = Math.floor(s / 86400);
+  const hrs  = Math.floor((s % 86400) / 3600);
+  const min  = Math.floor((s % 3600) / 60);
+  const rem  = s % 60;
+
+  if (days > 0) return `${days}д ${hrs}ч ${min}м`;
+  if (hrs  > 0) return `${hrs}ч ${min}м`;
+  if (min  > 0) return `${min}м ${rem}с`;
+  return `${rem}с`;
+}
+
+/**
+ * Format a unix timestamp as "X минут назад" / "только что".
+ * @param {number} unixTs
+ */
+function timeAgo(unixTs) {
+  if (!unixTs) return 'никогда';
+  const diff = Math.floor(Date.now() / 1000) - unixTs;
+  if (diff < 30)          return 'только что';
+  if (diff < 3600)        return `${Math.floor(diff / 60)}м назад`;
+  if (diff < 86400)       return `${Math.floor(diff / 3600)}ч назад`;
+  return `${Math.floor(diff / 86400)}д назад`;
+}
+
+/** Generate a cryptographically random hex string of given byte-length. */
+function randomHex(bytes = 24) {
+  const arr = new Uint8Array(bytes);
+  crypto.getRandomValues(arr);
+  return Array.from(arr, b => b.toString(16).padStart(2, '0')).join('');
+}
+
+/** Suggest next Short ID based on existing users. */
+function nextShortId(users) {
+  const nums = users
+    .map(u => parseInt(u.short_id, 10))
+    .filter(n => !isNaN(n));
+  const max = nums.length ? Math.max(...nums) : 0;
+  return String(max + 1).padStart(3, '0');
+}
+
+/** Suggest next internal IP based on existing users. */
+function nextIP(users) {
+  const octets = users
+    .map(u => {
+      const parts = (u.ip || '').split('.');
+      return parseInt(parts[3], 10);
+    })
+    .filter(n => !isNaN(n) && n > 0);
+  const max = octets.length ? Math.max(...octets) : 1;
+  return `10.0.0.${max + 1}`;
+}
+
+/* ════════════════════════════════════════════════════════════
+   API
+   ════════════════════════════════════════════════════════════ */
+
+async function apiFetch(path, options = {}) {
+  const headers = {
+    'Content-Type': 'application/json',
+    'X-Admin-Token': STATE.token,
+    ...(options.headers || {}),
+  };
+  const res = await fetch(path, { ...options, headers });
+  if (res.status === 401) throw new Error('Неверный токен. Войдите снова.');
+  if (!res.ok) {
+    let msg = `HTTP ${res.status}`;
+    try { const d = await res.json(); msg = d.error || d.message || msg; } catch {}
+    throw new Error(msg);
+  }
+  const ct = res.headers.get('content-type') || '';
+  if (ct.includes('application/json')) return res.json();
+  return res;
+}
+
+async function fetchStats() {
+  return apiFetch('/api/stats');
+}
+
+async function fetchUsers() {
+  const data = await apiFetch('/api/users');
+  return data.users || data || [];
+}
+
+async function createUser(payload) {
+  return apiFetch('/api/users', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+async function deleteUser(id) {
+  return apiFetch(`/api/users/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+
+function configDownloadUrl(id) {
+  return `/api/users/${encodeURIComponent(id)}/config?token=${encodeURIComponent(STATE.token)}`;
+}
+
+function qrUrl(id) {
+  return `/api/users/${encodeURIComponent(id)}/qr?token=${encodeURIComponent(STATE.token)}`;
+}
+
+/* ════════════════════════════════════════════════════════════
+   TOAST NOTIFICATIONS
+   ════════════════════════════════════════════════════════════ */
+
+function showToast(message, type = 'info', duration = 3500) {
+  const container = document.getElementById('toast-container');
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`;
+
+  const icons = { success: '✓', error: '✕', info: 'ℹ' };
+  toast.innerHTML = `<span style="font-size:15px;">${icons[type] || '·'}</span><span>${message}</span>`;
+
+  container.appendChild(toast);
+  setTimeout(() => {
+    toast.style.transition = 'opacity 0.3s, transform 0.3s';
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateY(8px)';
+    setTimeout(() => toast.remove(), 350);
+  }, duration);
+}
+
+/* ════════════════════════════════════════════════════════════
+   RENDER
+   ════════════════════════════════════════════════════════════ */
+
+function renderStats(stats) {
+  document.getElementById('stat-peers').textContent     = stats.peers_online ?? '—';
+  document.getElementById('stat-peers-sub').textContent = `из ${stats.peers_total ?? '—'} всего`;
+  document.getElementById('stat-uptime').textContent    = fmtUptime(stats.uptime_sec);
+  document.getElementById('stat-out').textContent       = fmtBytes(stats.total_out);
+  document.getElementById('stat-in').textContent        = fmtBytes(stats.total_in);
+}
+
+function renderUsers(users) {
+  STATE.users = users;
+  document.getElementById('users-count').textContent = users.length;
+
+  const tbody = document.getElementById('users-tbody');
+  if (!users.length) {
+    tbody.innerHTML = `
+      <tr><td colspan="7">
+        <div class="empty-state">
+          <div class="empty-icon">👥</div>
+          <p>Нет пользователей. Добавьте первого!</p>
+        </div>
+      </td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = users.map(u => {
+    const online = !!u.online;
+    const statusClass = online ? 'online' : '';
+    const statusLabel = online ? 'Online' : (u.last_seen ? timeAgo(u.last_seen) : 'Offline');
+
+    return `
+      <tr data-id="${escHtml(String(u.short_id))}">
+        <td><span class="id-badge">${escHtml(String(u.short_id))}</span></td>
+        <td style="font-weight:500;">${escHtml(u.name || '—')}</td>
+        <td><code>${escHtml(u.ip || '—')}</code></td>
+        <td>
+          <div class="peer-status ${statusClass}">
+            <span class="peer-dot ${statusClass}"></span>
+            <span class="status-text">${statusLabel}</span>
+          </div>
+        </td>
+        <td class="traffic-val">${fmtBytes(u.byte_in)}</td>
+        <td class="traffic-val">${fmtBytes(u.byte_out)}</td>
+        <td>
+          <div class="actions-cell" style="justify-content:flex-end;">
+            <button class="btn btn-ghost btn-sm"
+                    title="Скачать config.json"
+                    onclick="downloadConfig(${JSON.stringify(String(u.short_id))})">⬇</button>
+            <button class="btn btn-ghost btn-sm"
+                    title="Показать QR-код"
+                    onclick="openQr(${JSON.stringify(String(u.short_id))}, ${JSON.stringify(u.name || '')})">📱</button>
+            <button class="btn btn-ghost btn-sm btn-danger"
+                    title="Удалить пользователя"
+                    onclick="confirmDelete(${JSON.stringify(String(u.short_id))}, ${JSON.stringify(u.name || '')})">🗑</button>
+          </div>
+        </td>
+      </tr>`;
+  }).join('');
+}
+
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+/* ════════════════════════════════════════════════════════════
+   DATA REFRESH
+   ════════════════════════════════════════════════════════════ */
+
+let _refreshing = false;
+
+async function refreshAll(silent = false) {
+  if (_refreshing) return;
+  _refreshing = true;
+
+  const spinner = document.getElementById('refresh-spinner');
+  const txt     = document.getElementById('refresh-text');
+  const dot     = document.getElementById('header-status-dot');
+  const hdrTxt  = document.getElementById('header-status-text');
+
+  spinner.classList.add('spinning');
+  if (!silent) txt.textContent = 'Обновление…';
+
+  try {
+    const [stats, users] = await Promise.all([fetchStats(), fetchUsers()]);
+    renderStats(stats);
+    renderUsers(users);
+
+    dot.style.background    = 'var(--green)';
+    dot.style.boxShadow     = '0 0 6px var(--green)';
+    hdrTxt.textContent      = 'Сервер онлайн';
+
+    const now = new Date();
+    txt.textContent = `Обновлено в ${now.toLocaleTimeString('ru-RU', {hour:'2-digit', minute:'2-digit', second:'2-digit'})} · авто через 30с`;
+
+  } catch (err) {
+    dot.style.background  = 'var(--red)';
+    dot.style.boxShadow   = '0 0 6px var(--red)';
+    hdrTxt.textContent    = 'Ошибка соединения';
+    txt.textContent       = 'Не удалось обновить данные';
+    if (!silent) showToast(err.message, 'error');
+
+    if (err.message.includes('токен') || err.message.includes('401')) {
+      logout();
+    }
+  } finally {
+    spinner.classList.remove('spinning');
+    _refreshing = false;
+  }
+}
+
+function scheduleRefresh() {
+  clearInterval(STATE.refreshTimer);
+  STATE.refreshTimer = setInterval(() => refreshAll(true), STATE.refreshInterval);
+}
+
+/* ════════════════════════════════════════════════════════════
+   AUTH
+   ════════════════════════════════════════════════════════════ */
+
+function login(token) {
+  STATE.token = token.trim();
+  localStorage.setItem('hv_admin_token', STATE.token);
+
+  document.getElementById('login-screen').classList.add('hidden');
+  document.getElementById('app').classList.remove('hidden');
+
+  refreshAll();
+  scheduleRefresh();
+}
+
+function logout() {
+  clearInterval(STATE.refreshTimer);
+  STATE.token = '';
+  localStorage.removeItem('hv_admin_token');
+
+  document.getElementById('app').classList.add('hidden');
+  document.getElementById('login-screen').classList.remove('hidden');
+  document.getElementById('token-input').value = '';
+  setLoginError('');
+}
+
+function setLoginError(msg) {
+  const el = document.getElementById('login-error');
+  if (msg) {
+    el.textContent = msg;
+    el.classList.remove('hidden');
+  } else {
+    el.classList.add('hidden');
+  }
+}
+
+async function attemptLogin() {
+  const tokenInput = document.getElementById('token-input');
+  const token = tokenInput.value.trim();
+  if (!token) {
+    setLoginError('Введите токен администратора.');
+    tokenInput.classList.add('error');
+    return;
+  }
+  tokenInput.classList.remove('error');
+
+  const btn = document.getElementById('login-btn');
+  btn.disabled = true;
+  btn.textContent = 'Проверка…';
+
+  try {
+    STATE.token = token;
+    await fetchStats(); // validation request
+    login(token);
+    setLoginError('');
+  } catch (err) {
+    STATE.token = '';
+    setLoginError('Неверный токен или сервер недоступен.');
+    tokenInput.classList.add('error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = `
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+        <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      Войти`;
+  }
+}
+
+/* ════════════════════════════════════════════════════════════
+   USER ACTIONS
+   ════════════════════════════════════════════════════════════ */
+
+function downloadConfig(id) {
+  const url = configDownloadUrl(id);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `config-${id}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  showToast(`Скачиваю конфиг для ${id}…`, 'info');
+}
+
+function openQr(id, name) {
+  document.getElementById('qr-modal-title').textContent = `QR-код — ${name || id}`;
+  document.getElementById('qr-user-name').textContent   = name || id;
+
+  const img = document.getElementById('qr-img');
+  img.src = '';
+  img.alt = 'Загрузка QR…';
+
+  document.getElementById('modal-qr').classList.remove('hidden');
+
+  // set src after modal shown so browser starts loading
+  setTimeout(() => { img.src = qrUrl(id); }, 50);
+  img.onerror = () => { img.alt = 'Не удалось загрузить QR-код'; };
+}
+
+function closeQr() {
+  document.getElementById('modal-qr').classList.add('hidden');
+  document.getElementById('qr-img').src = '';
+}
+
+async function confirmDelete(id, name) {
+  const label = name ? `"${name}" (${id})` : id;
+  if (!confirm(`Удалить пользователя ${label}?\nДействие необратимо.`)) return;
+
+  try {
+    await deleteUser(id);
+    showToast(`Пользователь ${label} удалён.`, 'success');
+    await refreshAll(true);
+  } catch (err) {
+    showToast(`Ошибка удаления: ${err.message}`, 'error');
+  }
+}
+
+/* ════════════════════════════════════════════════════════════
+   ADD USER MODAL
+   ════════════════════════════════════════════════════════════ */
+
+function openAddModal() {
+  // Autofill suggestions
+  document.getElementById('field-name').value     = '';
+  document.getElementById('field-short-id').value = nextShortId(STATE.users);
+  document.getElementById('field-ip').value       = nextIP(STATE.users);
+  document.getElementById('field-secret').value   = randomHex(24);
+
+  // Clear errors
+  ['err-name','err-short-id','err-ip','err-secret','err-general'].forEach(id => {
+    const el = document.getElementById(id);
+    el.textContent = '';
+    el.classList.add('hidden');
+  });
+  ['field-name','field-short-id','field-ip','field-secret'].forEach(id => {
+    document.getElementById(id).classList.remove('error');
+  });
+
+  document.getElementById('modal-add').classList.remove('hidden');
+  setTimeout(() => document.getElementById('field-name').focus(), 100);
+}
+
+function closeAddModal() {
+  document.getElementById('modal-add').classList.add('hidden');
+}
+
+function showFieldError(fieldId, errId, msg) {
+  const field = document.getElementById(fieldId);
+  const err   = document.getElementById(errId);
+  field.classList.add('error');
+  err.textContent = msg;
+  err.classList.remove('hidden');
+}
+
+async function submitAddUser() {
+  // Collect
+  const name     = document.getElementById('field-name').value.trim();
+  const shortId  = document.getElementById('field-short-id').value.trim();
+  const ip       = document.getElementById('field-ip').value.trim();
+  const secret   = document.getElementById('field-secret').value.trim();
+
+  // Clear previous errors
+  ['err-name','err-short-id','err-ip','err-secret','err-general'].forEach(id => {
+    const el = document.getElementById(id);
+    el.textContent = '';
+    el.classList.add('hidden');
+  });
+  ['field-name','field-short-id','field-ip','field-secret'].forEach(id => {
+    document.getElementById(id).classList.remove('error');
+  });
+
+  let hasError = false;
+
+  if (!name) {
+    showFieldError('field-name', 'err-name', 'Укажите имя пользователя.');
+    hasError = true;
+  }
+  if (!shortId) {
+    showFieldError('field-short-id', 'err-short-id', 'Укажите Short ID.');
+    hasError = true;
+  } else if (STATE.users.some(u => String(u.short_id) === shortId)) {
+    showFieldError('field-short-id', 'err-short-id', 'Этот Short ID уже занят.');
+    hasError = true;
+  }
+  if (!ip) {
+    showFieldError('field-ip', 'err-ip', 'Укажите IP-адрес.');
+    hasError = true;
+  } else if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(ip)) {
+    showFieldError('field-ip', 'err-ip', 'Некорректный IP-адрес.');
+    hasError = true;
+  } else if (STATE.users.some(u => u.ip === ip)) {
+    showFieldError('field-ip', 'err-ip', 'Этот IP уже используется.');
+    hasError = true;
+  }
+  if (!secret) {
+    showFieldError('field-secret', 'err-secret', 'Укажите или сгенерируйте ключ.');
+    hasError = true;
+  }
+
+  if (hasError) return;
+
+  const submitBtn = document.getElementById('add-submit-btn');
+  submitBtn.disabled = true;
+  submitBtn.textContent = 'Создание…';
+
+  try {
+    await createUser({ short_id: shortId, name, secret_key: secret, ip });
+    closeAddModal();
+    showToast(`Пользователь "${name}" создан!`, 'success');
+    await refreshAll(true);
+  } catch (err) {
+    const errEl = document.getElementById('err-general');
+    errEl.textContent = `Ошибка: ${err.message}`;
+    errEl.classList.remove('hidden');
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = `
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+        <path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+      </svg>
+      Создать`;
+  }
+}
+
+/* ════════════════════════════════════════════════════════════
+   CLOSE ON OVERLAY CLICK
+   ════════════════════════════════════════════════════════════ */
+
+document.getElementById('modal-add').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeAddModal();
+});
+document.getElementById('modal-qr').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeQr();
+});
+
+/* ════════════════════════════════════════════════════════════
+   EVENT WIRING
+   ════════════════════════════════════════════════════════════ */
+
+// Login
+document.getElementById('login-btn').addEventListener('click', attemptLogin);
+document.getElementById('token-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') attemptLogin();
+  document.getElementById('token-input').classList.remove('error');
+  setLoginError('');
+});
+
+// Logout
+document.getElementById('logout-btn').addEventListener('click', logout);
+
+// Add User modal
+document.getElementById('add-user-btn').addEventListener('click', openAddModal);
+document.getElementById('add-modal-close').addEventListener('click', closeAddModal);
+document.getElementById('add-cancel-btn').addEventListener('click', closeAddModal);
+document.getElementById('add-submit-btn').addEventListener('click', submitAddUser);
+
+// Generate secret
+document.getElementById('gen-secret-btn').addEventListener('click', () => {
+  document.getElementById('field-secret').value = randomHex(24);
+  document.getElementById('field-secret').classList.remove('error');
+  document.getElementById('err-secret').classList.add('hidden');
+});
+
+// QR modal close
+document.getElementById('qr-modal-close').addEventListener('click', closeQr);
+document.getElementById('qr-close-btn').addEventListener('click', closeQr);
+
+// Enter in add-user form fields
+['field-name','field-short-id','field-ip','field-secret'].forEach(id => {
+  document.getElementById(id).addEventListener('keydown', e => {
+    if (e.key === 'Enter') submitAddUser();
+  });
+});
+
+// Escape closes modals
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    closeAddModal();
+    closeQr();
+  }
+});
+
+/* ════════════════════════════════════════════════════════════
+   INIT — AUTO-LOGIN FROM localStorage
+   ════════════════════════════════════════════════════════════ */
+
+(function init() {
+  const saved = localStorage.getItem('hv_admin_token');
+  if (saved) {
+    document.getElementById('token-input').value = saved;
+    STATE.token = saved;
+    // Try silent auto-login
+    fetchStats()
+      .then(() => login(saved))
+      .catch(() => {
+        STATE.token = '';
+        localStorage.removeItem('hv_admin_token');
+        document.getElementById('token-input').value = '';
+      });
+  }
+})();
+</script>
+</body>
+</html>
