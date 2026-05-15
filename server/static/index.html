@@ -1462,16 +1462,21 @@
         <td class="traffic-val">${fmtBytes(u.byte_in)}</td>
         <td class="traffic-val">${fmtBytes(u.byte_out)}</td>
         <td>
-          <div class="actions-cell" style="justify-content:flex-end;">
+          <div class="actions-cell">
             <button class="btn btn-ghost btn-sm"
                     title="Скачать config.json"
-                    onclick="downloadConfig(${JSON.stringify(String(u.short_id))})">⬇</button>
+                    data-action="download"
+                    data-id="${escHtml(String(u.short_id))}">⬇</button>
             <button class="btn btn-ghost btn-sm"
                     title="Показать QR-код"
-                    onclick="openQr(${JSON.stringify(String(u.short_id))}, ${JSON.stringify(u.name || "")})">📱</button>
+                    data-action="qr"
+                    data-id="${escHtml(String(u.short_id))}"
+                    data-name="${escHtml(u.name || "")}">📱</button>
             <button class="btn btn-ghost btn-sm btn-danger"
                     title="Удалить пользователя"
-                    onclick="confirmDelete(${JSON.stringify(String(u.short_id))}, ${JSON.stringify(u.name || "")})">🗑</button>
+                    data-action="delete"
+                    data-id="${escHtml(String(u.short_id))}"
+                    data-name="${escHtml(u.name || "")}">🗑</button>
           </div>
         </td>
       </tr>`;
@@ -1824,7 +1829,7 @@
 
                 try {
                     await createUser({
-                        short_id: shortId,
+                        short_id: parseInt(shortId, 10),
                         name,
                         secret_key: secret,
                         ip,
@@ -1864,6 +1869,20 @@
             /* ════════════════════════════════════════════════════════════
    EVENT WIRING
    ════════════════════════════════════════════════════════════ */
+
+            // Делегирование кликов по кнопкам таблицы пользователей
+            document
+                .getElementById("users-tbody")
+                .addEventListener("click", function (e) {
+                    const btn = e.target.closest("button[data-action]");
+                    if (!btn) return;
+                    const action = btn.dataset.action;
+                    const id = btn.dataset.id;
+                    const name = btn.dataset.name || "";
+                    if (action === "download") downloadConfig(id);
+                    if (action === "qr") openQr(id, name);
+                    if (action === "delete") confirmDelete(id, name);
+                });
 
             // Login
             document

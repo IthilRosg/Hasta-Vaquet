@@ -2,8 +2,9 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	_ "embed"
+	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -95,11 +96,55 @@ func (a *App) LoadProfile(name string) *ConfigResult {
 }
 
 func (a *App) ImportConfig(path string) *ConfigResult {
+	return importToProfiles(path)
+}
+
+// ImportConfigFromDialog открывает проводник Windows для выбора .json файла
+// с конфигом и копирует его в папку profiles/.
+func (a *App) ImportConfigFromDialog() *ConfigResult {
+	path, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
+		Title: "Выберите config.json",
+		Filters: []runtime.FileFilter{
+			{DisplayName: "JSON Files (*.json)", Pattern: "*.json"},
+		},
+	})
+	if err != nil || path == "" {
+		if err != nil {
+			return &ConfigResult{ProfileName: "error: " + err.Error()}
+		}
+		return nil
+	}
+	return importToProfiles(path)
+}
+
+// importToProfiles читает конфиг и копирует его в profiles/<имя>.json
+func importToProfiles(path string) *ConfigResult {
 	cfg, err := core.LoadConfig(path)
 	if err != nil {
-		return &ConfigResult{ProfileName: "error:" + err.Error()}
+		return &ConfigResult{ProfileName: "error: " + err.Error()}
 	}
+	exeDir := filepath.Dir(os.Args[0])
+	profilesDir := filepath.Join(exeDir, "profiles")
+	os.MkdirAll(profilesDir, 0755)
+
+	name := cfg.ProfileName
+	if name == "" {
+		name = fmt.Sprintf("profile-%d", cfg.ShortID)
+	}
+	dst := filepath.Join(profilesDir, name+".json")
+	data, _ := json.MarshalIndent(cfg, "", "  ")
+	os.WriteFile(dst, data, 0644)
 	return toResult(cfg)
+}
+
+// DeleteProfile удаляет профиль из папки profiles/.
+func (a *App) DeleteProfile(name string) string {
+	exeDir := filepath.Dir(os.Args[0])
+	p := filepath.Join(exeDir, "profiles", name+".json")
+	if err := os.Remove(p); err != nil {
+		return "error: " + err.Error()
+	}
+	return "deleted"
 }
 
 func toResult(cfg core.Config) *ConfigResult {

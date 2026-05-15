@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { DoConnect, DoDisconnect, ImportConfig, LoadDefaultConfig, LoadProfile, ListProfileItems, SaveLastProfile, LoadLastProfile } from '../wailsjs/go/main/App'
+  import { DoConnect, DoDisconnect, ImportConfigFromDialog, LoadDefaultConfig, LoadProfile, ListProfileItems, SaveLastProfile, LoadLastProfile, DeleteProfile } from '../wailsjs/go/main/App'
   import { EventsOn } from '../wailsjs/runtime/runtime'
 
   let connected = false
@@ -119,11 +119,27 @@
   }
 
   async function importProfile() {
-    const path = prompt('Enter path to config.json:')
-    if (!path) return
-    const cfg = await ImportConfig(path)
-    if (cfg && cfg.profile_name !== 'error') { applyCfg(cfg) }
-    else { statusText = cfg?.profile_name || 'Import failed' }
+    const cfg = await ImportConfigFromDialog()
+    if (!cfg) return
+    if (cfg.profile_name && !cfg.profile_name.startsWith('error')) {
+      applyCfg(cfg)
+      loadConfig()
+    } else {
+      statusText = cfg?.profile_name || 'Import failed'
+    }
+  }
+
+  async function deleteCurrentProfile() {
+    if (!profileName) return
+    if (!confirm(`Удалить профиль "${profileName}"?`)) return
+    const res = await DeleteProfile(profileName)
+    if (res === 'deleted') {
+      profileName = ''
+      statusText = 'Profile deleted'
+      loadConfig()
+    } else {
+      statusText = res
+    }
   }
 
   function toggleSettings() { showSettings = !showSettings }
@@ -209,12 +225,19 @@
         </div>
         {/if}
       </div>
-      <button class="add-btn" on:click={importProfile}>
+      <button class="add-btn" on:click={importProfile} title="Импорт профиля">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
           <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
           <circle cx="12" cy="12" r="10"/>
         </svg>
       </button>
+      {#if profileName}
+      <button class="add-btn" on:click={deleteCurrentProfile} title="Удалить профиль" style="border-color: rgba(248,81,73,0.3);">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#f85149" stroke-width="2" stroke-linecap="round">
+          <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+        </svg>
+      </button>
+      {/if}
     </div>
   </div>
 </div>
