@@ -26,14 +26,14 @@
 
 ## 3. Активная разработка
 
-- [ ] **Phase 7c: Web Management Panel (ТЕКУЩАЯ СТАДИЯ).**
+- [x] **Phase 7c: Web Management Panel (ЗАВЕРШЕНА).**
   HTTP API встроен в серверный бинарник на отдельном порту. Управление пользователями
   (CRUD над server_config.json с горячей перезагрузкой без рестарта сервера). Статистика
   трафика по каждому peer в реальном времени (ByteIn/ByteOut). Генерация config.json и
   QR-кода для клиентов. Защита: статический admin_token в server_config.json.
   UI: минималистичный HTML/JS встроен через embed.FS, без внешних фреймворков.
 
-- [ ] **Phase 8: Android Client + Mobile Ecosystem.**
+- [ ] **Phase 8: Android Client + Mobile Ecosystem. (ТЕКУЩАЯ СТАДИЯ)**
   Рефакторинг core/ под build tags: vpn_interface.go (общая логика), vpn_windows.go
   (текущий Wintun-код), vpn_android.go (VpnService). Gomobile bind с interface-based API
   (gomobile не поддерживает func-callbacks — нужны интерфейсы). Kotlin + VpnService +
