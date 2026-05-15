@@ -2,7 +2,6 @@ package core
 
 import (
 	"encoding/json"
-	"flag"
 	"os"
 )
 
@@ -39,13 +38,4 @@ func LoadConfig(path string) (Config, error) {
 		cfg.DNS = "1.1.1.1"
 	}
 	return cfg, nil
-}
-
-func ParseFlags() (string, bool) {
-	var configFile string
-	var showHelp bool
-	flag.StringVar(&configFile, "config", "config.json", "Path to config.json")
-	flag.BoolVar(&showHelp, "help", false, "Show help")
-	flag.Parse()
-	return configFile, showHelp
 }
