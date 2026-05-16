@@ -63,14 +63,20 @@ class HastaVaquetVpnService : VpnService() {
         val fd: Int = tunFd!!.detachFd()
         AppLogger.log("VPN", "TUN fd=$fd, opening protected UDP socket...")
 
-        // Создаём UDP-сокет и защищаем его от TUN (protect)
-        // Это критично: без protect() UDP идёт через TUN → петля маршрутизации
-        val udpSocket = java.net.DatagramSocket()
-        protect(udpSocket)
-        udpSocket.connect(java.net.InetAddress.getByName(srvIp), srvPort)
-        val udpPfd = android.os.ParcelFileDescriptor.fromDatagramSocket(udpSocket)
-        val udpFd: Int = udpPfd.detachFd()
-        AppLogger.log("VPN", "UDP fd=$udpFd (protected), target=$srvIp:$srvPort")
+        var udpFd = -1
+        try {
+            val udpSocket = java.net.DatagramSocket()
+            udpSocket.connect(java.net.InetAddress.getByName(srvIp), srvPort)
+            // Защищаем сокет через его fd (protect(int) надёжнее protect(Socket))
+            val udpPfd = android.os.ParcelFileDescriptor.fromDatagramSocket(udpSocket)
+            udpFd = udpPfd.detachFd()
+            protect(udpFd)
+            AppLogger.log("VPN", "UDP fd=$udpFd protected, target=$srvIp:$srvPort")
+        } catch (e: Exception) {
+            AppLogger.log("VPN", "ERROR creating UDP socket: ${e.message}")
+            stopSelf()
+            return START_NOT_STICKY
+        }
 
         val result = Core.startVPN(configJson, fd.toLong(), udpFd.toLong())
         AppLogger.log("VPN", "Core.startVPN result: $result")
