@@ -26,7 +26,33 @@ class ScannerActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(android.widget.FrameLayout(this).apply { id = android.R.id.content })
+        val layout = android.widget.FrameLayout(this).apply {
+            setBackgroundColor(0xFF000000.toInt())
+        }
+        val scanText = android.widget.TextView(this).apply {
+            text = "Наведите камеру на QR-код"
+            setTextColor(0xFFFFFFFF.toInt())
+            textSize = 16f
+            gravity = android.view.Gravity.CENTER
+        }
+        val cancelBtn = android.widget.Button(this).apply {
+            text = "Отмена"
+            setTextColor(0xFFFFFFFF.toInt())
+            setBackgroundColor(0x33FFFFFF.toInt())
+            val params = android.widget.FrameLayout.LayoutParams(
+                android.widget.FrameLayout.LayoutParams.WRAP_CONTENT,
+                android.widget.FrameLayout.LayoutParams.WRAP_CONTENT
+            ).apply { gravity = android.view.Gravity.BOTTOM or android.view.Gravity.CENTER_HORIZONTAL
+                     bottomMargin = 80 }
+            layoutParams = params
+            setOnClickListener { finish() }
+        }
+        layout.addView(scanText, android.widget.FrameLayout.LayoutParams(
+            android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
+            android.widget.FrameLayout.LayoutParams.MATCH_PARENT
+        ))
+        layout.addView(cancelBtn)
+        setContentView(layout)
 
         barcodeScanner = BarcodeScanning.getClient()
 
