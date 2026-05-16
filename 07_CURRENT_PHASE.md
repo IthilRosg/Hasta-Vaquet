@@ -1,43 +1,108 @@
 # Phase 8: Android Client — журнал разработки
 
-> Живой документ. Обновляется каждый шаг, чтобы не терять контекст.
+> Живой документ. Обновляется каждый шаг.
 
-## Текущее состояние (2026-05-16)
+## Текущее состояние (2026-05-16 22:20)
 
-**Билд:** ✅ проходит  
-**Сервер:** ✅ работает, 31.42.120.154:9999, пользователи Alice(#1) Bob(#2) Android(#13)  
-**AAR:** ✅ core.aar собран, в android/app/libs/  
+**Билд:** ✅  
+**Сервер:** ✅ 31.42.120.154:9999  
+**QR-сканер:** ✅ камера работает (PreviewView + ImageAnalysis + ML Kit)  
+**Профили:** ✅ CRUD SharedPreferences, дропдаун  
+**Disconnect:** ✅ останавливает Core + сервис  
+**UDP-сокет:** ✅ background thread (NetworkOnMainThreadException fix)  
+**protect():** ✅ reflection impl→fd→dup→detach  
+**TUN:** ✅ os.File.Read/Write (EAGAIN fix)  
 
-**Не работают:**
-- [ ] **VPN-соединение** — VpnService стартует, `Core.startVPN() → "ok"`, но трафика нет  
-- [ ] **QR-сканер** — CameraX стартует, Preview есть, но ML Kit не сканирует (или сканирует, но не отображает результат)
+**Не работает:**
+- [ ] **VPN-соединение** — Go стартует, но трафика нет. Причина выясняется.
 
-## Архитектура Android
+## Найденные и исправленные баги
+
+| Баг | Симптом | Причина | Исправление |
+|---|---|---|---|
+| `EAGAIN` спам | writerLoop: TUN read error | fd в non-blocking режиме, syscall.Read не ждёт | `os.File.Read()` через runtime poller |
+| `NetworkOnMainThreadException` | UDP socket ERROR: null | `DatagramSocket.connect()` на main thread | `Thread{...}.start()` |
+| `fromDatagramSocket() → null` | ERROR: NullPointerException | API возвращает null на Xiaomi | Reflection: `impl.fd` → `ParcelFileDescriptor.dup()` → `detachFd()` |
+| `protect()` не работал | UDP через TUN → петля | Сокет не защищён от VPN-маршрутизации | `protect(udpSocket)` + `protect(int fd)` |
+| PreviewView GONE | Камера не включалась | GONE убирает View из layout → surface provider мёртв | Full-screen PreviewView (стандартная схема) |
+| `onclick` с JSON.stringify | Кнопки не работали в web-панели | Двойные кавычки ломали HTML-парсер | Data-атрибуты + event delegation |
+| `short_id` как строка | "invalid json" | JS отправлял "003", Go ждал uint16 | `parseInt(shortId, 10)` |
+| Профиль удалялся — коннект оставался | Фантомное подключение | `loadConfig()` → `LoadDefaultConfig()` восстанавливал настройки | `SaveLastProfile('')` + без `loadConfig()` |
+| Uptime не обновлялся | 00:00 навсегда | Обновление только при трафике | `setInterval` каждую секунду |
+
+## Архитектура Android-клиента
 
 ```
-MainActivity → VpnService → TUN fd → gomobile → core (Go)
-                     ↑                   ↓
-              addDisallowedApp    UDP ↔ сервер 31.42.120.154:9999
-              (Smart Bypass)
+┌─ MainActivity ──────────────────────────────────────────┐
+│  SharedPreferences: профили (CRUD)                       │
+│  onConnect → startVpn(config)                            │
+│    ↓                                                     │
+│  VpnService.prepare() → разрешение пользователя          │
+│    ↓                                                     │
+│  startForegroundService(VpnService, config)              │
+└──────────────────────────────────────────────────────────┘
+                         ↓
+┌─ HastaVaquetVpnService ─────────────────────────────────┐
+│  1. Builder.setMtu(1300).addRoute("0.0.0.0",0)          │
+│  2. addDisallowedApplication(pkg) — Smart Bypass        │
+│  3. establish() → detachFd() → TUN fd                   │
+│  4. Thread:                                              │
+│     - DatagramSocket().connect(server)                   │
+│     - protect(socket)                                    │
+│     - reflection: impl.fd → dup → detach → UDP fd       │
+│     - Core.startVPN(configJson, tunFd, udpFd)            │
+│  5. onRevoke/doStop → Core.stopVPN() + stopForeground   │
+└──────────────────────────────────────────────────────────┘
+                         ↓
+┌─ core (Go, gomobile) ───────────────────────────────────┐
+│  gomobile.go: StartVPN(config, tunFd, udpFd)            │
+│    plat.tunFile = os.NewFile(tunFd, "tun")               │
+│    plat.protectedConn = os.NewFile(udpFd, "udp")         │
+│    vpn.Start() →                                          │
+│      openTunnel: net.FileConn(protectedConn) → UDPConn   │
+│      keepAliveLoop, readerLoop, writerLoop, statsLoop    │
+│                                                          │
+│  vpn_android.go:                                         │
+│    openTunnel: net.FileConn → защищённый UDP             │
+│    readerLoop: UDP Read → Decrypt → TUN Write            │
+│    writerLoop: TUN Read → Encrypt → UDP Write            │
+│    closeTunnel: закрыть оба fd                           │
+└──────────────────────────────────────────────────────────┘
 ```
 
-Ключевые файлы:
-- `android/.../HastaVaquetVpnService.kt` — VpnService, establish() → detachFd() → Go
-- `android/.../MainActivity.kt` — профили (SharedPreferences), лаунчеры
-- `android/.../ScannerActivity.kt` — CameraX + ML Kit
-- `core/vpn_android.go` — platform hooks: syscall.Read/Write fd
-- `core/gomobile.go` — StartVPN/StopVPN/GetStats
-- `core/vpn.go` — общая логика (StatusListener, keepAlive, stats)
+## Ключевые пути
 
-## Отладка
+```
+android/app/src/main/java/com/hastavaquet/
+├── MainActivity.kt            — точка входа, профили, лаунчеры
+├── HastaVaquetVpnService.kt   — VpnService, TUN + UDP socket
+├── ScannerActivity.kt         — CameraX + ML Kit QR
+├── AppLogger.kt               — логгер в файл + logcat
+└── ui/
+    ├── ConnectScreen.kt       — Compose UI (кнопка, карточки, профили)
+    └── Theme.kt               — тёмная тема
 
-Логи Go в Android доступны через `adb logcat -s HastaVaquet:V GoLog:V`.
-Включены в `vpn_android.go`: лог каждого UDP-пакета, ошибок read/write.
+core/
+├── vpn.go                     — общая логика (StatusListener, циклы)
+├── vpn_windows.go             — Windows: Wintun + netsh
+├── vpn_android.go             — Android: os.File TUN + protected UDP
+├── gomobile.go                — StartVPN/StopVPN/GetStats
+├── crypto.go                  — AES-GCM, HMAC, DynamicID
+└── config.go                  — Config, LoadConfig
+```
 
-## Последние изменения
+## Команды
 
-- `vpn_android.go`: добавлен `net.DialUDP` в openTunnel (был nil conn!)  
-- `gomobile.go`: убран `os.NewFile()` (GC закрывал fd)  
-- `ScannerActivity`: добавлен PreviewView 1×1 (CameraX требует Preview)  
-- `MainActivity`: профили SharedPreferences, VPN-лаунчер через ActivityResultContracts
-- `MainActivity`: deprecated `startActivityForResult` → `registerForActivityResult`
+```sh
+# Сборка AAR
+cd core && gomobile bind -target android -androidapi 35 -o ../android/app/libs/core.aar hasta-vaquet/core
+
+# Логи с устройства
+cd android/logs && capture_logs.bat     # весь logcat → hastavaquet_live.txt
+
+# Ядерная очистка кеша
+cd android && clean_build.bat
+
+# Логи Go в logcat
+adb logcat -s GoLog:V
+```
