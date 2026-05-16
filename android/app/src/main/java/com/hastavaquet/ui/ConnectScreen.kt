@@ -39,10 +39,29 @@ fun MainScreen(
     var connected by remember { mutableStateOf(false) }
     var statusText by remember { mutableStateOf("Выберите профиль") }
     var showDropdown by remember { mutableStateOf(false) }
+    var startTime by remember { mutableStateOf(0L) }
+    var uptime by remember { mutableStateOf("00:00") }
     val scrollState = rememberScrollState()
 
     val currentConfig = profiles.find { it.name == selectedProfile }?.configJson ?: ""
     val hasProfile = currentConfig.isNotEmpty()
+
+    // Таймер uptime + смена статуса после хэндшейка
+    LaunchedEffect(connected) {
+        if (connected) {
+            startTime = System.currentTimeMillis()
+            delay(2000)
+            statusText = "Подключение установлено"
+            while (connected) {
+                val sec = (System.currentTimeMillis() - startTime) / 1000
+                uptime = "%02d:%02d".format(sec / 60, sec % 60)
+                delay(1000)
+            }
+        } else {
+            uptime = "00:00"
+            startTime = 0L
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -241,7 +260,7 @@ fun MainScreen(
 
         // ── Карточки статистики ──────────────────────────
         if (connected) {
-            StatsGrid(connected)
+            StatsGrid(connected, uptime)
             Spacer(Modifier.height(16.dp))
         }
 
@@ -273,7 +292,7 @@ fun MainScreen(
 }
 
 @Composable
-private fun StatsGrid(connected: Boolean) {
+private fun StatsGrid(connected: Boolean, uptime: String) {
     val stats = remember { mutableStateOf(StatsData()) }
 
     LaunchedEffect(connected) {
