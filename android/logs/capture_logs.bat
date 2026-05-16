@@ -1,4 +1,6 @@
 @echo off
+set ADB=C:\Users\Admin\AppData\Local\Android\Sdk\platform-tools\adb.exe
+
 echo ============================================
 echo  Hasta-Vaquet Log Capture
 echo  Saving to: %~dp0live_logs.txt
@@ -9,5 +11,5 @@ echo  3. Press Connect
 echo  4. Come back here and press Ctrl+C
 echo ============================================
 
-adb logcat -c
-adb logcat -v threadtime > "%~dp0live_logs.txt"
+%ADB% logcat -c
+%ADB% logcat -v threadtime > "%~dp0live_logs.txt"
