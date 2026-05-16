@@ -28,38 +28,41 @@ class HastaVaquetVpnService : VpnService() {
     }
 
     override fun onStartCommand(intent: android.content.Intent?, flags: Int, startId: Int): Int {
+        AppLogger.log("VPN", "onStartCommand called")
         if (intent?.hasExtra("config") == true) {
             configJson = intent.getStringExtra("config") ?: ""
+            AppLogger.log("VPN", "config received, length=${configJson.length}")
+        } else {
+            AppLogger.log("VPN", "WARNING: no config in intent!")
         }
         val builder = Builder()
         builder.setSession("Hasta-Vaquet")
         builder.setMtu(1300)
 
-        // Разбор конфига для настройки TUN
         val cfg = parseConfig(configJson)
         builder.addAddress(cfg.internalIp, 24)
         builder.addRoute("0.0.0.0", 0)
 
-        // Smart Bypass — исключить РФ-приложения из VPN
         for (pkg in cfg.bypassPackages) {
             builder.addDisallowedApplication(pkg)
         }
 
+        AppLogger.log("VPN", "establishing TUN...")
         tunFd = builder.establish()
         if (tunFd == null) {
+            AppLogger.log("VPN", "ERROR: TUN establish returned null!")
             stopSelf()
             return START_NOT_STICKY
         }
 
-        // Запуск Go-ядра: StartVPN(configJson, fd)
         val fd: Int = tunFd!!.detachFd()
+        AppLogger.log("VPN", "TUN fd=$fd, calling Core.startVPN...")
         val result = Core.startVPN(configJson, fd.toLong())
+        AppLogger.log("VPN", "Core.startVPN result: $result")
         if (result != "ok") {
-            android.util.Log.e("HastaVaquet", "Core.startVPN failed: $result")
             stopSelf()
             return START_NOT_STICKY
         }
-        android.util.Log.i("HastaVaquet", "VPN started OK, fd=$fd")
         return START_STICKY
     }
 
