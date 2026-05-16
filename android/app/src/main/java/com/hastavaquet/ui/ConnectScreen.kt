@@ -5,8 +5,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -18,51 +20,162 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.hastavaquet.MainActivity
 
 @Composable
 fun MainScreen(
-    initialConfig: String?,
+    profiles: List<MainActivity.ProfileInfo> = emptyList(),
+    selectedProfile: String? = null,
+    onSelectProfile: (String) -> Unit = {},
+    onDeleteProfile: (String) -> Unit = {},
     onConnect: (String) -> Unit,
     onDisconnect: () -> Unit,
     onScanQR: () -> Unit,
     onAddFromFile: () -> Unit
 ) {
     var connected by remember { mutableStateOf(false) }
-    var statusText by remember { mutableStateOf("Готов к подключению") }
-    var configJson by remember { mutableStateOf(initialConfig ?: "") }
+    var statusText by remember { mutableStateOf("Выберите профиль") }
+    var showDropdown by remember { mutableStateOf(false) }
+    val scrollState = rememberScrollState()
+
+    val currentConfig = profiles.find { it.name == selectedProfile }?.configJson ?: ""
+    val hasProfile = currentConfig.isNotEmpty()
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
+            .verticalScroll(scrollState)
             .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Spacer(Modifier.height(60.dp))
+        Spacer(Modifier.height(40.dp))
 
-        // Логотип
         Text(
             "Hasta-Vaquet",
             style = MaterialTheme.typography.headlineLarge,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onBackground
         )
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(4.dp))
         Text(
             "Безопасное VPN-подключение",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
-        Spacer(Modifier.height(48.dp))
+        Spacer(Modifier.height(32.dp))
 
-        // Кнопка Connect (круглая, как в Windows GUI)
+        // ── Профили ──────────────────────────────────────
+        Text(
+            "ПРОФИЛИ",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            letterSpacing = 1.sp
+        )
+        Spacer(Modifier.height(8.dp))
+
+        if (profiles.isEmpty()) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surface
+                ),
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                Text(
+                    "Добавьте профиль из файла или QR-кода",
+                    modifier = Modifier.padding(20.dp),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
+            }
+        } else {
+            // Дропдаун выбора профиля
+            Box(modifier = Modifier.fillMaxWidth()) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showDropdown = !showDropdown },
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surface
+                    ),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(14.dp, 12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                selectedProfile ?: "Выберите профиль",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (selectedProfile != null)
+                                    MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            if (selectedProfile != null) {
+                                val p = profiles.find { it.name == selectedProfile }
+                                if (p != null) {
+                                    Text(
+                                        "${p.serverIp}:${p.port}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                        Text(
+                            if (showDropdown) "▲" else "▼",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                DropdownMenu(
+                    expanded = showDropdown,
+                    onDismissRequest = { showDropdown = false },
+                    modifier = Modifier.fillMaxWidth(0.85f)
+                ) {
+                    profiles.forEach { profile ->
+                        DropdownMenuItem(
+                            text = {
+                                Column {
+                                    Text(profile.name, fontWeight = FontWeight.SemiBold)
+                                    Text(
+                                        "${profile.serverIp}:${profile.port}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            },
+                            onClick = {
+                                onSelectProfile(profile.name)
+                                showDropdown = false
+                            },
+                            trailingIcon = {
+                                TextButton(
+                                    onClick = { onDeleteProfile(profile.name) }
+                                ) {
+                                    Text("🗑", fontSize = 14.sp)
+                                }
+                            }
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(28.dp))
+
+        // ── Кнопка Connect ───────────────────────────────
         val infiniteTransition = rememberInfiniteTransition()
         val pulseAlpha by infiniteTransition.animateFloat(
             initialValue = 0.3f, targetValue = 0.0f,
-            animationSpec = infiniteRepeatable(
-                tween(2000), RepeatMode.Reverse
-            )
+            animationSpec = infiniteRepeatable(tween(2000), RepeatMode.Reverse)
         )
 
         Box(
@@ -71,28 +184,25 @@ fun MainScreen(
                 .clip(CircleShape)
                 .background(
                     if (connected) Brush.radialGradient(
-                        listOf(
-                            Color(0x333FB950),
-                            Color(0x003FB950)
-                        )
+                        listOf(Color(0x333FB950), Color(0x003FB950))
                     ) else Brush.radialGradient(listOf(
-                        Color(0x3358A6FF),
-                        Color(0x0058A6FF)
+                        Color(0x3358A6FF), Color(0x0058A6FF)
                     ))
                 )
                 .border(
                     width = 2.dp,
                     color = if (connected) Color(0xFF3FB950)
-                    else MaterialTheme.colorScheme.outline,
+                    else if (hasProfile) MaterialTheme.colorScheme.outline
+                    else Color(0xFF30363D),
                     shape = CircleShape
                 )
-                .clickable {
+                .clickable(enabled = hasProfile || connected) {
                     if (connected) {
                         onDisconnect()
                         connected = false
                         statusText = "Отключено"
-                    } else if (configJson.isNotEmpty()) {
-                        onConnect(configJson)
+                    } else if (hasProfile) {
+                        onConnect(currentConfig)
                         connected = true
                         statusText = "Подключаюсь..."
                     }
@@ -104,13 +214,15 @@ fun MainScreen(
                     if (connected) "⬆" else "⬇",
                     fontSize = 36.sp,
                     color = if (connected) Color(0xFF3FB950)
-                    else MaterialTheme.colorScheme.onSurface
+                    else if (hasProfile) MaterialTheme.colorScheme.onSurface
+                    else MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
                     if (connected) "Отключить" else "Подключить",
                     style = MaterialTheme.typography.labelSmall,
                     color = if (connected) Color(0xFF3FB950)
-                    else MaterialTheme.colorScheme.onSurfaceVariant
+                    else if (hasProfile) MaterialTheme.colorScheme.onSurfaceVariant
+                    else Color(0xFF484F58)
                 )
             }
         }
@@ -122,40 +234,33 @@ fun MainScreen(
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
-        Spacer(Modifier.height(32.dp))
+        Spacer(Modifier.height(28.dp))
 
-        // Карточки статистики (active only когда connected)
+        // ── Карточки статистики ──────────────────────────
         if (connected) {
             StatsGrid()
             Spacer(Modifier.height(16.dp))
         }
 
-        // Кнопка сканирования QR
+        // ── Кнопки действий ──────────────────────────────
         Button(
-            onClick = { onScanQR() },
+            onClick = onScanQR,
             modifier = Modifier.fillMaxWidth(),
             colors = ButtonDefaults.buttonColors(
                 containerColor = MaterialTheme.colorScheme.surface
             ),
             shape = RoundedCornerShape(10.dp)
-        ) {
-            Text("📷 Сканировать QR-код")
-        }
+        ) { Text("📷 Сканировать QR-код") }
 
         Spacer(Modifier.height(8.dp))
 
-        // Кнопка добавления файла
         OutlinedButton(
-            onClick = { onAddFromFile() },
+            onClick = onAddFromFile,
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(10.dp)
-        ) {
-            Text("Добавить из файла")
-        }
+        ) { Text("📁 Добавить из файла") }
 
         Spacer(Modifier.height(16.dp))
-
-        // Версия
         Text(
             "v0.0.1",
             style = MaterialTheme.typography.labelSmall,
@@ -167,29 +272,13 @@ fun MainScreen(
 @Composable
 private fun StatsGrid() {
     val stats = remember { mutableStateOf(StatsData()) }
-
-    // TODO: Phase 8 — Poll Core.GetStats() каждую секунду
-    // LaunchedEffect(Unit) {
-    //     while (true) {
-    //         val json = Core.getStats()
-    //         // парсинг json -> stats.value
-    //         delay(1000)
-    //     }
-    // }
-
     Column(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             StatCard("SPEED", "↑ ${stats.value.txSpeed}\n↓ ${stats.value.rxSpeed}", Modifier.weight(1f))
             StatCard("DATA", "↑ ${stats.value.totalTx}\n↓ ${stats.value.totalRx}", Modifier.weight(1f))
         }
         Spacer(Modifier.height(12.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             StatCard("NETWORK", "Ping: ${stats.value.ping}ms\nLoss: ${stats.value.loss}%", Modifier.weight(1f))
             StatCard("UPTIME", "00:00", Modifier.weight(1f))
         }
@@ -200,35 +289,21 @@ private fun StatsGrid() {
 private fun StatCard(title: String, body: String, modifier: Modifier = Modifier) {
     Card(
         modifier = modifier,
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        ),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         shape = RoundedCornerShape(12.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                title,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                letterSpacing = 1.sp
-            )
+            Text(title, style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant, letterSpacing = 1.sp)
             Spacer(Modifier.height(8.dp))
-            Text(
-                body,
-                style = MaterialTheme.typography.bodySmall,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
+            Text(body, style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
         }
     }
 }
 
 data class StatsData(
-    val txSpeed: String = "0 B/s",
-    val rxSpeed: String = "0 B/s",
-    val totalTx: String = "0 B",
-    val totalRx: String = "0 B",
-    val ping: Int = 0,
-    val loss: Int = 0,
-    val uptime: String = "00:00"
+    val txSpeed: String = "0 B/s", val rxSpeed: String = "0 B/s",
+    val totalTx: String = "0 B", val totalRx: String = "0 B",
+    val ping: Int = 0, val loss: Int = 0, val uptime: String = "00:00"
 )

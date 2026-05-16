@@ -11,7 +11,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
-import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.content.ContextCompat
 import com.google.mlkit.vision.barcode.BarcodeScanner
@@ -52,9 +51,6 @@ class ScannerActivity : ComponentActivity() {
         val cameraProviderFuture = ProcessCameraProvider.getInstance(this)
         cameraProviderFuture.addListener({
             val cameraProvider = cameraProviderFuture.get()
-            val preview = Preview.Builder().build().also {
-                it.setSurfaceProvider(null) // без SurfaceView — только анализ
-            }
 
             val imageAnalysis = ImageAnalysis.Builder()
                 .setTargetResolution(Size(1280, 720))
@@ -66,17 +62,15 @@ class ScannerActivity : ComponentActivity() {
                     }
                 }
 
-            val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
-
             cameraProvider.unbindAll()
             cameraProvider.bindToLifecycle(
-                this, cameraSelector, preview, imageAnalysis
+                this, CameraSelector.DEFAULT_BACK_CAMERA, imageAnalysis
             )
         }, ContextCompat.getMainExecutor(this))
     }
 
     private fun processImage(imageProxy: ImageProxy) {
-        @androidx.camera.core.ExperimentalGetImage val mediaImage = imageProxy.image
+        val mediaImage = imageProxy.image
         if (mediaImage != null) {
             val inputImage = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
             barcodeScanner?.process(inputImage)
