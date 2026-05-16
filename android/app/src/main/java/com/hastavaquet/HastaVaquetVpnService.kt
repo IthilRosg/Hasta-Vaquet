@@ -28,7 +28,8 @@ class HastaVaquetVpnService : VpnService() {
     }
 
     override fun onStartCommand(intent: android.content.Intent?, flags: Int, startId: Int): Int {
-        AppLogger.log("VPN", "onStartCommand called")
+        android.widget.Toast.makeText(this, "VPN v7 REFLECTION", android.widget.Toast.LENGTH_LONG).show()
+        AppLogger.log("VPN", "onStartCommand v7 called")
 
         // Если сервис запущен для остановки
         if (intent?.getBooleanExtra("stop", false) == true) {

@@ -69,6 +69,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        android.widget.Toast.makeText(this, "HastaVaquet v7", android.widget.Toast.LENGTH_SHORT).show()
         AppLogger.init(this)
         loadProfiles()
 
