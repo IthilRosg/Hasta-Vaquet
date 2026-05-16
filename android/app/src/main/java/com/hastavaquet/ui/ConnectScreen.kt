@@ -21,6 +21,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hastavaquet.MainActivity
+import core.Core
+import kotlinx.coroutines.delay
+import org.json.JSONObject
 
 @Composable
 fun MainScreen(
@@ -238,7 +241,7 @@ fun MainScreen(
 
         // ── Карточки статистики ──────────────────────────
         if (connected) {
-            StatsGrid()
+            StatsGrid(connected)
             Spacer(Modifier.height(16.dp))
         }
 
@@ -270,8 +273,28 @@ fun MainScreen(
 }
 
 @Composable
-private fun StatsGrid() {
+private fun StatsGrid(connected: Boolean) {
     val stats = remember { mutableStateOf(StatsData()) }
+
+    LaunchedEffect(connected) {
+        while (connected) {
+            try {
+                val json = core.Core.getStats()
+                val obj = org.json.JSONObject(json)
+                if (obj.optBoolean("online", false)) {
+                    stats.value = StatsData(
+                        txSpeed = fmtBytes(obj.optLong("tx_speed", 0)),
+                        rxSpeed = fmtBytes(obj.optLong("rx_speed", 0)),
+                        totalTx = fmtBytes(obj.optLong("total_tx", 0)),
+                        totalRx = fmtBytes(obj.optLong("total_rx", 0)),
+                        ping = obj.optInt("ping_ms", 0),
+                        loss = obj.optInt("loss_pct", 0)
+                    )
+                }
+            } catch (_: Exception) {}
+            kotlinx.coroutines.delay(1000)
+        }
+    }
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             StatCard("SPEED", "↑ ${stats.value.txSpeed}\n↓ ${stats.value.rxSpeed}", Modifier.weight(1f))
@@ -307,3 +330,10 @@ data class StatsData(
     val totalTx: String = "0 B", val totalRx: String = "0 B",
     val ping: Int = 0, val loss: Int = 0, val uptime: String = "00:00"
 )
+
+private fun fmtBytes(b: Long): String = when {
+    b >= 1_073_741_824 -> "%.1f GB".format(b / 1_073_741_824.0)
+    b >= 1_048_576 -> "%.1f MB".format(b / 1_048_576.0)
+    b >= 1_024 -> "%d KB".format(b / 1_024)
+    else -> "$b B"
+}
