@@ -5,20 +5,20 @@ package core
 import (
 	"log"
 	"net"
-	"syscall"
+	"os"
 	"time"
 )
 
 // vpnPlatform — Android-специфичная реализация туннеля.
-// TUN-интерфейс приходит из Java VpnService как FileDescriptor,
-// читаем/пишем через syscall на fd.
+// TUN-интерфейс приходит из Java VpnService как FileDescriptor.
+// fd — неблокирующий → используем os.File (runtime poller) вместо syscall.
 type vpnPlatform struct {
-	tunFd int // файловый дескриптор TUN (из VpnService.establish())
+	tunFile *os.File // os.File из fd (runtime poller корректно ждёт данные)
 }
 
 func (p *vpnPlatform) openTunnel(v *VPN) error {
-	if p.tunFd <= 0 {
-		log.Printf("[ANDROID] openTunnel: tunFd=%d — INVALID", p.tunFd)
+	if p.tunFile == nil {
+		log.Printf("[ANDROID] openTunnel: tunFile is nil")
 		return nil
 	}
 
@@ -37,14 +37,14 @@ func (p *vpnPlatform) openTunnel(v *VPN) error {
 }
 
 func (p *vpnPlatform) closeTunnel(v *VPN) {
-	log.Printf("[ANDROID] closeTunnel: closing tunnel (fd=%d)", p.tunFd)
+	log.Printf("[ANDROID] closeTunnel: closing tunnel")
 	if v.conn != nil {
 		v.conn.Close()
 		v.conn = nil
 	}
-	if p.tunFd > 0 {
-		syscall.Close(p.tunFd)
-		p.tunFd = 0
+	if p.tunFile != nil {
+		p.tunFile.Close()
+		p.tunFile = nil
 	}
 }
 
@@ -67,24 +67,23 @@ func (p *vpnPlatform) readerLoop(v *VPN) {
 			continue
 		}
 		if n < 4+2+12 {
-			log.Printf("[ANDROID] readerLoop: short packet (%d bytes)", n)
 			continue
 		}
 
 		decrypted, err := Decrypt(buf[:n], v.key[:])
 		if err != nil {
-			log.Printf("[ANDROID] readerLoop: decrypt FAILED: %v", err)
 			continue
 		}
 		if len(decrypted) == 0 {
 			pktCount++
 			if pktCount%10 == 0 {
-				log.Printf("[ANDROID] readerLoop: keep-alive (pkts=%d)", pktCount)
+				log.Printf("[ANDROID] readerLoop: keep-alive OK, rtt=%dms (pkts=%d)",
+					int(time.Now().UnixMilli()-v.lastAliveMs.Load()), pktCount)
 			}
 			continue
 		}
 
-		// Echo-пинг (1 байт 0x01) — не пишем в TUN
+		// Echo-пинг (1 байт 0x01)
 		if len(decrypted) == 1 && decrypted[0] == 0x01 {
 			v.echoAcked.Add(1)
 			last := v.lastAliveMs.Load()
@@ -95,19 +94,13 @@ func (p *vpnPlatform) readerLoop(v *VPN) {
 					v.echoReceived.Store(true)
 				}
 			}
-			if pktCount%10 == 0 {
-				log.Printf("[ANDROID] readerLoop: echo OK RTT=%dms", int(time.Now().UnixMilli()-v.lastAliveMs.Load()))
-			}
 			continue
 		}
 
-		// Пишем расшифрованный пакет в TUN-интерфейс
-		if p.tunFd > 0 {
-			wrote, err := syscall.Write(p.tunFd, decrypted)
-			if err != nil {
-				log.Printf("[ANDROID] readerLoop: TUN write error (fd=%d): %v", p.tunFd, err)
-			} else if wrote != len(decrypted) {
-				log.Printf("[ANDROID] readerLoop: TUN short write: %d/%d", wrote, len(decrypted))
+		// Пишем расшифрованный пакет в TUN через os.File (блокирующийся)
+		if p.tunFile != nil {
+			if _, err := p.tunFile.Write(decrypted); err != nil {
+				log.Printf("[ANDROID] readerLoop: TUN write error: %v", err)
 			}
 		}
 		v.rxBytes.Add(int64(len(decrypted)))
@@ -128,22 +121,21 @@ func (p *vpnPlatform) writerLoop(v *VPN) {
 		default:
 		}
 
-		if p.tunFd <= 0 {
+		if p.tunFile == nil {
 			continue
 		}
 
-		// Читаем пакет из TUN-интерфейса
-		n, err := syscall.Read(p.tunFd, buf)
+		// Читаем пакет из TUN через os.File (runtime poller ждёт данные)
+		n, err := p.tunFile.Read(buf)
 		if err != nil || n < 20 {
-			if err != nil {
-				log.Printf("[ANDROID] writerLoop: TUN read error (fd=%d): %v", p.tunFd, err)
+			if err != nil && pktCount < 5 {
+				log.Printf("[ANDROID] writerLoop: TUN read error: %v", err)
 			}
 			continue
 		}
 		pktCount++
 
-		// Только IPv4
-		if (buf[0] >> 4) != 4 {
+		if (buf[0] >> 4) != 4 { // только IPv4
 			continue
 		}
 
@@ -155,8 +147,6 @@ func (p *vpnPlatform) writerLoop(v *VPN) {
 			if pktCount%50 == 0 {
 				log.Printf("[ANDROID] writerLoop: sent %d pkts, last=%d bytes", pktCount, n)
 			}
-		} else {
-			log.Printf("[ANDROID] writerLoop: encrypt FAILED: %v", err)
 		}
 	}
 }
