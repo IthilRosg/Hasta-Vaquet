@@ -32,7 +32,7 @@ class HastaVaquetVpnService : VpnService() {
             configJson = intent.getStringExtra("config") ?: ""
         }
         val builder = Builder()
-        builder.setName("Hasta-Vaquet")
+        builder.setSession("Hasta-Vaquet")
         builder.setMtu(1300)
 
         // Разбор конфига для настройки TUN
@@ -53,7 +53,7 @@ class HastaVaquetVpnService : VpnService() {
 
         // Запуск Go-ядра: StartVPN(configJson, fd)
         val fd: Int = tunFd!!.detachFd()
-        val result = Core.startVPN(configJson, fd)
+        val result = Core.startVPN(configJson, fd.toLong())
         if (result != "ok") {
             stopSelf()
         }

@@ -23,12 +23,13 @@ import androidx.compose.ui.unit.sp
 fun MainScreen(
     initialConfig: String?,
     onConnect: (String) -> Unit,
-    onDisconnect: () -> Unit
+    onDisconnect: () -> Unit,
+    onScanQR: () -> Unit,
+    onAddFromFile: () -> Unit
 ) {
     var connected by remember { mutableStateOf(false) }
     var statusText by remember { mutableStateOf("Готов к подключению") }
     var configJson by remember { mutableStateOf(initialConfig ?: "") }
-    var showScanner by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -131,7 +132,7 @@ fun MainScreen(
 
         // Кнопка сканирования QR
         Button(
-            onClick = { showScanner = true },
+            onClick = { onScanQR() },
             modifier = Modifier.fillMaxWidth(),
             colors = ButtonDefaults.buttonColors(
                 containerColor = MaterialTheme.colorScheme.surface
@@ -143,20 +144,20 @@ fun MainScreen(
 
         Spacer(Modifier.height(8.dp))
 
-        // Кнопка ввода конфига вручную
+        // Кнопка добавления файла
         OutlinedButton(
-            onClick = { /* TODO: ручной ввод */ },
+            onClick = { onAddFromFile() },
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(10.dp)
         ) {
-            Text("Ввести конфигурацию вручную")
+            Text("Добавить из файла")
         }
 
         Spacer(Modifier.height(16.dp))
 
         // Версия
         Text(
-            "v1.0.0",
+            "v0.0.1",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
