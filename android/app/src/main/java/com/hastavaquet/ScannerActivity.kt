@@ -85,10 +85,10 @@ class ScannerActivity : ComponentActivity() {
             val previewView = PreviewView(this).apply {
                 implementationMode = PreviewView.ImplementationMode.COMPATIBLE
                 scaleType = PreviewView.ScaleType.FILL_CENTER
-                visibility = android.view.View.GONE
+                visibility = android.view.View.INVISIBLE
             }
             (findViewById(android.R.id.content) as android.widget.FrameLayout)
-                .addView(previewView, 0, android.widget.FrameLayout.LayoutParams(1, 1))
+                .addView(previewView, 0, android.widget.FrameLayout.LayoutParams(80, 80))
             preview.setSurfaceProvider(previewView.surfaceProvider)
 
             val imageAnalysis = ImageAnalysis.Builder()

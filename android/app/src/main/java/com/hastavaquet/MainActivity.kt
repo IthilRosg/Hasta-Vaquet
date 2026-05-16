@@ -184,6 +184,8 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun stopVpn() {
+        // Форсированная остановка: Go core + Android service
+        core.Core.stopVPN()
         stopService(Intent(this, HastaVaquetVpnService::class.java))
     }
 

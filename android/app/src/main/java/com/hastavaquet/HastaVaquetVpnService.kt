@@ -88,6 +88,7 @@ class HastaVaquetVpnService : VpnService() {
     }
 
     override fun onRevoke() {
+        AppLogger.log("VPN", "onRevoke called")
         Core.stopVPN()
         tunFd?.close()
         tunFd = null
@@ -96,6 +97,7 @@ class HastaVaquetVpnService : VpnService() {
     }
 
     override fun onDestroy() {
+        AppLogger.log("VPN", "onDestroy called")
         Core.stopVPN()
         tunFd?.close()
         tunFd = null
