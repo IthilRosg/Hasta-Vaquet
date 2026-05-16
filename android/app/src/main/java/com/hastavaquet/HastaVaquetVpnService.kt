@@ -67,13 +67,19 @@ class HastaVaquetVpnService : VpnService() {
         try {
             val udpSocket = java.net.DatagramSocket()
             udpSocket.connect(java.net.InetAddress.getByName(srvIp), srvPort)
-            // Защищаем сокет через его fd (protect(int) надёжнее protect(Socket))
-            val udpPfd = android.os.ParcelFileDescriptor.fromDatagramSocket(udpSocket)
-            udpFd = udpPfd.detachFd()
-            protect(udpFd)
+            protect(udpSocket)
+            // Достаём fd через reflection (fromDatagramSocket может вернуть null)
+            val implField = java.net.DatagramSocket::class.java.getDeclaredField("impl")
+            implField.isAccessible = true
+            val impl = implField.get(udpSocket)
+            val fdField = impl.javaClass.getDeclaredField("fd")
+            fdField.isAccessible = true
+            val fileDesc = fdField.get(impl) as java.io.FileDescriptor
+            val pfd = android.os.ParcelFileDescriptor.dup(fileDesc)
+            udpFd = pfd.detachFd()
             AppLogger.log("VPN", "UDP fd=$udpFd protected, target=$srvIp:$srvPort")
         } catch (e: Exception) {
-            AppLogger.log("VPN", "ERROR creating UDP socket: ${e.message}")
+            AppLogger.log("VPN", "ERROR creating UDP socket: ${e.javaClass.simpleName}: ${e.message}")
             stopSelf()
             return START_NOT_STICKY
         }

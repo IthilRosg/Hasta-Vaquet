@@ -8,14 +8,10 @@ import android.util.Size
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.camera.core.CameraSelector
-import androidx.camera.core.ImageAnalysis
-import androidx.camera.core.ImageProxy
-import androidx.camera.core.Preview
+import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
-import com.google.mlkit.vision.barcode.BarcodeScanner
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
@@ -24,39 +20,16 @@ import java.util.concurrent.Executors
 class ScannerActivity : ComponentActivity() {
 
     private val cameraExecutor = Executors.newSingleThreadExecutor()
-    private var barcodeScanner: BarcodeScanner? = null
+    private var barcodeScanner = BarcodeScanning.getClient()
+    private lateinit var previewView: PreviewView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val layout = android.widget.FrameLayout(this).apply {
-            setBackgroundColor(0xFF000000.toInt())
-        }
-        val scanText = android.widget.TextView(this).apply {
-            text = "Наведите камеру на QR-код"
-            setTextColor(0xFFFFFFFF.toInt())
-            textSize = 16f
-            gravity = android.view.Gravity.CENTER
-        }
-        val cancelBtn = android.widget.Button(this).apply {
-            text = "Отмена"
-            setTextColor(0xFFFFFFFF.toInt())
-            setBackgroundColor(0x33FFFFFF.toInt())
-            val params = android.widget.FrameLayout.LayoutParams(
-                android.widget.FrameLayout.LayoutParams.WRAP_CONTENT,
-                android.widget.FrameLayout.LayoutParams.WRAP_CONTENT
-            ).apply { gravity = android.view.Gravity.BOTTOM or android.view.Gravity.CENTER_HORIZONTAL
-                     bottomMargin = 80 }
-            layoutParams = params
-            setOnClickListener { finish() }
-        }
-        layout.addView(scanText, android.widget.FrameLayout.LayoutParams(
-            android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
-            android.widget.FrameLayout.LayoutParams.MATCH_PARENT
-        ))
-        layout.addView(cancelBtn)
-        setContentView(layout)
 
-        barcodeScanner = BarcodeScanning.getClient()
+        previewView = PreviewView(this).apply {
+            scaleType = PreviewView.ScaleType.FILL_CENTER
+        }
+        setContentView(previewView)
 
         if (checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
             startCamera()
@@ -69,10 +42,7 @@ class ScannerActivity : ComponentActivity() {
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         if (granted) startCamera()
-        else {
-            Toast.makeText(this, "Разрешение на камеру необходимо", Toast.LENGTH_LONG).show()
-            finish()
-        }
+        else { Toast.makeText(this, "Нужна камера", Toast.LENGTH_LONG).show(); finish() }
     }
 
     private fun startCamera() {
@@ -80,26 +50,15 @@ class ScannerActivity : ComponentActivity() {
         cameraProviderFuture.addListener({
             val cameraProvider = cameraProviderFuture.get()
 
-            // Preview нужен для активации камеры (даже если не показываем)
-            val preview = Preview.Builder().build()
-            val previewView = PreviewView(this).apply {
-                implementationMode = PreviewView.ImplementationMode.COMPATIBLE
-                scaleType = PreviewView.ScaleType.FILL_CENTER
-                visibility = android.view.View.INVISIBLE
+            val preview = Preview.Builder().build().also {
+                it.setSurfaceProvider(previewView.surfaceProvider)
             }
-            (findViewById(android.R.id.content) as android.widget.FrameLayout)
-                .addView(previewView, 0, android.widget.FrameLayout.LayoutParams(80, 80))
-            preview.setSurfaceProvider(previewView.surfaceProvider)
 
             val imageAnalysis = ImageAnalysis.Builder()
                 .setTargetResolution(Size(1280, 720))
                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                 .build()
-                .also { analysis ->
-                    analysis.setAnalyzer(cameraExecutor) { imageProxy ->
-                        processImage(imageProxy)
-                    }
-                }
+                .also { it.setAnalyzer(cameraExecutor) { image -> processImage(image) } }
 
             cameraProvider.unbindAll()
             cameraProvider.bindToLifecycle(
@@ -108,40 +67,32 @@ class ScannerActivity : ComponentActivity() {
         }, ContextCompat.getMainExecutor(this))
     }
 
-    private fun processImage(imageProxy: ImageProxy) {
-        val mediaImage = imageProxy.image
+    private fun processImage(image: ImageProxy) {
+        val mediaImage = image.image
         if (mediaImage != null) {
-            val inputImage = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
-            barcodeScanner?.process(inputImage)
-                ?.addOnSuccessListener { barcodes ->
+            val input = InputImage.fromMediaImage(mediaImage, image.imageInfo.rotationDegrees)
+            barcodeScanner.process(input)
+                .addOnSuccessListener { barcodes ->
                     for (barcode in barcodes) {
-                        val rawValue = barcode.rawValue ?: continue
-                        if (barcode.valueType == Barcode.TYPE_TEXT || barcode.valueType == Barcode.TYPE_URL) {
-                            // Проверяем что это JSON-конфиг
-                            if (rawValue.contains("server_ip") || rawValue.contains("secret_key")) {
-                                val result = Intent().apply { putExtra("config", rawValue) }
-                                setResult(RESULT_OK, result)
-                                finish()
-                                return@addOnSuccessListener
-                            }
+                        val value = barcode.rawValue ?: continue
+                        if (barcode.valueType == Barcode.TYPE_TEXT && (
+                            value.contains("server_ip") || value.contains("secret_key")
+                        )) {
+                            setResult(RESULT_OK, Intent().putExtra(EXTRA_CONFIG, value))
+                            finish()
+                            return@addOnSuccessListener
                         }
                     }
                 }
-                ?.addOnFailureListener {
-                    // ignore
-                }
-                ?.addOnCompleteListener {
-                    imageProxy.close()
-                }
+                .addOnCompleteListener { image.close() }
         } else {
-            imageProxy.close()
+            image.close()
         }
     }
 
     override fun onDestroy() {
         super.onDestroy()
         cameraExecutor.shutdown()
-        barcodeScanner?.close()
     }
 
     companion object {
