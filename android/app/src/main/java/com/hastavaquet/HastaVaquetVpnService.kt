@@ -70,35 +70,34 @@ class HastaVaquetVpnService : VpnService() {
         }
 
         val fd: Int = tunFd!!.detachFd()
-        AppLogger.log("VPN", "TUN fd=$fd, opening protected UDP socket...")
+        AppLogger.log("VPN", "TUN fd=$fd, creating UDP in background...")
 
-        var udpFd = -1
-        try {
-            val udpSocket = java.net.DatagramSocket()
-            udpSocket.connect(java.net.InetAddress.getByName(srvIp), srvPort)
-            protect(udpSocket)
-            val implField = java.net.DatagramSocket::class.java.getDeclaredField("impl")
-            implField.isAccessible = true
-            val impl = implField.get(udpSocket)
-            val fdField = impl.javaClass.getDeclaredField("fd")
-            fdField.isAccessible = true
-            val fileDesc = fdField.get(impl) as java.io.FileDescriptor
-            val pfd = android.os.ParcelFileDescriptor.dup(fileDesc)
-            udpFd = pfd.detachFd()
-            udpSocket.close()
-            AppLogger.log("VPN", "UDP fd=$udpFd protected, target=$srvIp:$srvPort")
-        } catch (e: Exception) {
-            AppLogger.log("VPN", "ERROR UDP socket: ${e.javaClass.simpleName}: ${e.message}")
-            stopSelf()
-            return START_NOT_STICKY
-        }
+        // Сеть на фоне (NetworkOnMainThreadException запрещает connect на main thread)
+        Thread {
+            var udpFd = -1
+            try {
+                val udpSocket = java.net.DatagramSocket()
+                udpSocket.connect(java.net.InetAddress.getByName(srvIp), srvPort)
+                protect(udpSocket)
+                val implField = java.net.DatagramSocket::class.java.getDeclaredField("impl")
+                implField.isAccessible = true
+                val impl = implField.get(udpSocket)
+                val fdField = impl.javaClass.getDeclaredField("fd")
+                fdField.isAccessible = true
+                val fileDesc = fdField.get(impl) as java.io.FileDescriptor
+                val pfd = android.os.ParcelFileDescriptor.dup(fileDesc)
+                udpFd = pfd.detachFd()
+                udpSocket.close()
+                AppLogger.log("VPN", "UDP fd=$udpFd protected, target=$srvIp:$srvPort")
+                val result = Core.startVPN(configJson, fd.toLong(), udpFd.toLong())
+                AppLogger.log("VPN", "Core.startVPN result: $result")
+                if (result != "ok") doStop()
+            } catch (e: Exception) {
+                AppLogger.log("VPN", "ERROR: ${e.javaClass.simpleName}: ${e.message}")
+                doStop()
+            }
+        }.start()
 
-        val result = Core.startVPN(configJson, fd.toLong(), udpFd.toLong())
-        AppLogger.log("VPN", "Core.startVPN result: $result")
-        if (result != "ok") {
-            doStop()
-            return START_NOT_STICKY
-        }
         return START_STICKY
     }
 
