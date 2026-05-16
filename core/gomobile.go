@@ -15,7 +15,6 @@ package core
 
 import (
 	"encoding/json"
-	"os"
 )
 
 var globalVPN *VPN
@@ -51,9 +50,8 @@ func StartVPN(configJSON string, tunFd int) string {
 		cfg.DNS = "1.1.1.1"
 	}
 
-	// Подставляем fd в платформу
+	// Подставляем fd в платформу (используется через syscall напрямую)
 	plat.tunFd = tunFd
-	_ = os.NewFile(uintptr(tunFd), "tun")
 
 	vpn := New(cfg, &androidListener{})
 	if err := vpn.Start(); err != nil {

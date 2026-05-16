@@ -3,6 +3,7 @@
 package core
 
 import (
+	"net"
 	"syscall"
 	"time"
 )
@@ -15,15 +16,26 @@ type vpnPlatform struct {
 }
 
 func (p *vpnPlatform) openTunnel(v *VPN) error {
-	// TUN уже создан на Java стороне (VpnService.Builder.establish())
-	// fd записан в plat.tunFd из StartVPN() в gomobile.go
 	if p.tunFd <= 0 {
-		return nil // будет ошибка при первом read/write
+		return nil
 	}
+
+	conn, err := net.DialUDP("udp", nil, &net.UDPAddr{
+		IP:   net.ParseIP(v.config.ServerIP),
+		Port: v.config.Port,
+	})
+	if err != nil {
+		return err
+	}
+	v.conn = conn
 	return nil
 }
 
 func (p *vpnPlatform) closeTunnel(v *VPN) {
+	if v.conn != nil {
+		v.conn.Close()
+		v.conn = nil
+	}
 	if p.tunFd > 0 {
 		syscall.Close(p.tunFd)
 		p.tunFd = 0
