@@ -35,6 +35,11 @@ class HastaVaquetVpnService : VpnService() {
         } else {
             AppLogger.log("VPN", "WARNING: no config in intent!")
         }
+
+        val root = org.json.JSONObject(configJson)
+        val srvIp = root.optString("server_ip", "31.42.120.154")
+        val srvPort = root.optInt("port", 9999)
+
         val builder = Builder()
         builder.setSession("Hasta-Vaquet")
         builder.setMtu(1300)
@@ -56,8 +61,18 @@ class HastaVaquetVpnService : VpnService() {
         }
 
         val fd: Int = tunFd!!.detachFd()
-        AppLogger.log("VPN", "TUN fd=$fd, calling Core.startVPN...")
-        val result = Core.startVPN(configJson, fd.toLong())
+        AppLogger.log("VPN", "TUN fd=$fd, opening protected UDP socket...")
+
+        // Создаём UDP-сокет и защищаем его от TUN (protect)
+        // Это критично: без protect() UDP идёт через TUN → петля маршрутизации
+        val udpSocket = java.net.DatagramSocket()
+        protect(udpSocket)
+        udpSocket.connect(java.net.InetAddress.getByName(srvIp), srvPort)
+        val udpPfd = android.os.ParcelFileDescriptor.fromDatagramSocket(udpSocket)
+        val udpFd: Int = udpPfd.detachFd()
+        AppLogger.log("VPN", "UDP fd=$udpFd (protected), target=$srvIp:$srvPort")
+
+        val result = Core.startVPN(configJson, fd.toLong(), udpFd.toLong())
         AppLogger.log("VPN", "Core.startVPN result: $result")
         if (result != "ok") {
             stopSelf()

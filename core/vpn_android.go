@@ -13,26 +13,26 @@ import (
 // TUN-интерфейс приходит из Java VpnService как FileDescriptor.
 // fd — неблокирующий → используем os.File (runtime poller) вместо syscall.
 type vpnPlatform struct {
-	tunFile *os.File // os.File из fd (runtime poller корректно ждёт данные)
+	tunFile       *os.File // TUN-интерфейс
+	protectedConn *os.File // UDP-сокет, защищённый VpnService.protect()
 }
 
 func (p *vpnPlatform) openTunnel(v *VPN) error {
-	if p.tunFile == nil {
-		log.Printf("[ANDROID] openTunnel: tunFile is nil")
+	if p.tunFile == nil || p.protectedConn == nil {
+		log.Printf("[ANDROID] openTunnel: tunFile=%v protectedConn=%v", p.tunFile != nil, p.protectedConn != nil)
 		return nil
 	}
 
-	log.Printf("[ANDROID] openTunnel: connecting UDP to %s:%d", v.config.ServerIP, v.config.Port)
-	conn, err := net.DialUDP("udp", nil, &net.UDPAddr{
-		IP:   net.ParseIP(v.config.ServerIP),
-		Port: v.config.Port,
-	})
+	// Создаём net.UDPConn из защищённого fd (уже protect'нут VpnService)
+	// Этот сокет идёт в обход TUN → нет петли маршрутизации
+	f := p.protectedConn
+	pc, err := net.FileConn(f)
 	if err != nil {
-		log.Printf("[ANDROID] openTunnel: DialUDP FAILED: %v", err)
+		log.Printf("[ANDROID] openTunnel: FileConn FAILED: %v", err)
 		return err
 	}
-	v.conn = conn
-	log.Printf("[ANDROID] openTunnel: UDP connected OK, local=%v", conn.LocalAddr())
+	v.conn = pc.(*net.UDPConn)
+	log.Printf("[ANDROID] openTunnel: UDP connected OK (protected), local=%v", v.conn.LocalAddr())
 	return nil
 }
 
@@ -45,6 +45,10 @@ func (p *vpnPlatform) closeTunnel(v *VPN) {
 	if p.tunFile != nil {
 		p.tunFile.Close()
 		p.tunFile = nil
+	}
+	if p.protectedConn != nil {
+		p.protectedConn.Close()
+		p.protectedConn = nil
 	}
 }
 
