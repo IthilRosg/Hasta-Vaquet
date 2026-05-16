@@ -55,8 +55,11 @@ class HastaVaquetVpnService : VpnService() {
         val fd: Int = tunFd!!.detachFd()
         val result = Core.startVPN(configJson, fd.toLong())
         if (result != "ok") {
+            android.util.Log.e("HastaVaquet", "Core.startVPN failed: $result")
             stopSelf()
+            return START_NOT_STICKY
         }
+        android.util.Log.i("HastaVaquet", "VPN started OK, fd=$fd")
         return START_STICKY
     }
 

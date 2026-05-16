@@ -11,7 +11,9 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
+import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import com.google.mlkit.vision.barcode.BarcodeScanner
 import com.google.mlkit.vision.barcode.BarcodeScanning
@@ -78,6 +80,17 @@ class ScannerActivity : ComponentActivity() {
         cameraProviderFuture.addListener({
             val cameraProvider = cameraProviderFuture.get()
 
+            // Preview нужен для активации камеры (даже если не показываем)
+            val preview = Preview.Builder().build()
+            val previewView = PreviewView(this).apply {
+                implementationMode = PreviewView.ImplementationMode.COMPATIBLE
+                scaleType = PreviewView.ScaleType.FILL_CENTER
+                visibility = android.view.View.GONE
+            }
+            (findViewById(android.R.id.content) as android.widget.FrameLayout)
+                .addView(previewView, 0, android.widget.FrameLayout.LayoutParams(1, 1))
+            preview.setSurfaceProvider(previewView.surfaceProvider)
+
             val imageAnalysis = ImageAnalysis.Builder()
                 .setTargetResolution(Size(1280, 720))
                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
@@ -90,7 +103,7 @@ class ScannerActivity : ComponentActivity() {
 
             cameraProvider.unbindAll()
             cameraProvider.bindToLifecycle(
-                this, CameraSelector.DEFAULT_BACK_CAMERA, imageAnalysis
+                this, CameraSelector.DEFAULT_BACK_CAMERA, preview, imageAnalysis
             )
         }, ContextCompat.getMainExecutor(this))
     }
