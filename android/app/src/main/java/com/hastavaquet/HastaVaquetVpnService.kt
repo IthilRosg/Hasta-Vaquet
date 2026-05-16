@@ -29,6 +29,14 @@ class HastaVaquetVpnService : VpnService() {
 
     override fun onStartCommand(intent: android.content.Intent?, flags: Int, startId: Int): Int {
         AppLogger.log("VPN", "onStartCommand called")
+
+        // Если сервис запущен для остановки
+        if (intent?.getBooleanExtra("stop", false) == true) {
+            AppLogger.log("VPN", "stop intent received")
+            doStop()
+            return START_NOT_STICKY
+        }
+
         if (intent?.hasExtra("config") == true) {
             configJson = intent.getStringExtra("config") ?: ""
             AppLogger.log("VPN", "config received, length=${configJson.length}")
@@ -68,7 +76,6 @@ class HastaVaquetVpnService : VpnService() {
             val udpSocket = java.net.DatagramSocket()
             udpSocket.connect(java.net.InetAddress.getByName(srvIp), srvPort)
             protect(udpSocket)
-            // Достаём fd через reflection (fromDatagramSocket может вернуть null)
             val implField = java.net.DatagramSocket::class.java.getDeclaredField("impl")
             implField.isAccessible = true
             val impl = implField.get(udpSocket)
@@ -77,9 +84,10 @@ class HastaVaquetVpnService : VpnService() {
             val fileDesc = fdField.get(impl) as java.io.FileDescriptor
             val pfd = android.os.ParcelFileDescriptor.dup(fileDesc)
             udpFd = pfd.detachFd()
+            udpSocket.close()
             AppLogger.log("VPN", "UDP fd=$udpFd protected, target=$srvIp:$srvPort")
         } catch (e: Exception) {
-            AppLogger.log("VPN", "ERROR creating UDP socket: ${e.javaClass.simpleName}: ${e.message}")
+            AppLogger.log("VPN", "ERROR UDP socket: ${e.javaClass.simpleName}: ${e.message}")
             stopSelf()
             return START_NOT_STICKY
         }
@@ -87,10 +95,19 @@ class HastaVaquetVpnService : VpnService() {
         val result = Core.startVPN(configJson, fd.toLong(), udpFd.toLong())
         AppLogger.log("VPN", "Core.startVPN result: $result")
         if (result != "ok") {
-            stopSelf()
+            doStop()
             return START_NOT_STICKY
         }
         return START_STICKY
+    }
+
+    private fun doStop() {
+        AppLogger.log("VPN", "doStop called")
+        Core.stopVPN()
+        tunFd?.close()
+        tunFd = null
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
     }
 
     override fun onRevoke() {
