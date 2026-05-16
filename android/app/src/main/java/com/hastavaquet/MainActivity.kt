@@ -185,11 +185,19 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun stopVpn() {
+        AppLogger.log("UI", "Stopping VPN...")
         core.Core.stopVPN()
         val intent = Intent(this, HastaVaquetVpnService::class.java).apply {
+            action = "STOP"
             putExtra("stop", true)
         }
-        startService(intent)
+        // На Android 12+ startForegroundService обязателен, если сервис уже запущен
+        try {
+            startForegroundService(intent)
+        } catch (e: Exception) {
+            AppLogger.log("UI", "stopVpn error: ${e.message}")
+            startService(intent)
+        }
     }
 
     // ─── Файлы и сканер ────────────────────────────────────────────────────

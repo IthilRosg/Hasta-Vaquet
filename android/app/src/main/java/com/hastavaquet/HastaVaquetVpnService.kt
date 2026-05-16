@@ -6,15 +6,21 @@ import android.app.NotificationManager
 import android.net.VpnService
 import android.os.ParcelFileDescriptor
 import core.Core
+import core.Protector
 import java.io.FileDescriptor
 
 /**
  * Android VpnService — создаёт TUN-интерфейс и передаёт fd в Go-ядро.
  */
-class HastaVaquetVpnService : VpnService() {
+class HastaVaquetVpnService : VpnService(), Protector {
 
     private var tunFd: ParcelFileDescriptor? = null
     private var configJson: String = ""
+    private var isRunning: Boolean = false
+
+    override fun protect(fd: Long): Boolean {
+        return super.protect(fd.toInt())
+    }
 
     companion object {
         const val NOTIFICATION_CHANNEL = "hasta-vaquet-vpn"
@@ -28,84 +34,115 @@ class HastaVaquetVpnService : VpnService() {
     }
 
     override fun onStartCommand(intent: android.content.Intent?, flags: Int, startId: Int): Int {
-        android.widget.Toast.makeText(this, "VPN v7 REFLECTION", android.widget.Toast.LENGTH_LONG).show()
-        AppLogger.log("VPN", "onStartCommand v7 called")
+        val action = intent?.action
+        val isStop = intent?.getBooleanExtra("stop", false) == true
 
-        // Если сервис запущен для остановки
-        if (intent?.getBooleanExtra("stop", false) == true) {
-            AppLogger.log("VPN", "stop intent received")
+        if (isStop || action == "STOP") {
+            AppLogger.log("VPN", "Stop requested")
             doStop()
             return START_NOT_STICKY
         }
 
-        if (intent?.hasExtra("config") == true) {
-            configJson = intent.getStringExtra("config") ?: ""
-            AppLogger.log("VPN", "config received, length=${configJson.length}")
-        } else {
-            AppLogger.log("VPN", "WARNING: no config in intent!")
+        // Если это перезапуск после нехватки памяти, а мы уже работали - игнорируем пустой интент
+        if (intent == null && isRunning) {
+            AppLogger.log("VPN", "Sticky restart with null intent - ignoring")
+            return START_STICKY
         }
 
-        val root = org.json.JSONObject(configJson)
-        val srvIp = root.optString("server_ip", "31.42.120.154")
-        val srvPort = root.optInt("port", 9999)
-
-        val builder = Builder()
-        builder.setSession("Hasta-Vaquet")
-        builder.setMtu(1300)
-
-        val cfg = parseConfig(configJson)
-        builder.addAddress(cfg.internalIp, 24)
-        builder.addRoute("0.0.0.0", 0)
-
-        for (pkg in cfg.bypassPackages) {
-            builder.addDisallowedApplication(pkg)
-        }
-
-        AppLogger.log("VPN", "establishing TUN...")
-        tunFd = builder.establish()
-        if (tunFd == null) {
-            AppLogger.log("VPN", "ERROR: TUN establish returned null!")
-            stopSelf()
+        val newConfig = intent?.getStringExtra("config") ?: ""
+        if (newConfig.isEmpty()) {
+            if (!isRunning) {
+                AppLogger.log("VPN", "Empty config, stopping")
+                stopSelf()
+            }
             return START_NOT_STICKY
         }
 
-        val fd: Int = tunFd!!.detachFd()
-        AppLogger.log("VPN", "TUN fd=$fd, creating UDP in background...")
+        if (isRunning && newConfig == configJson) {
+            AppLogger.log("VPN", "Already running with same config - ignoring")
+            return START_STICKY
+        }
 
-        // Сеть на фоне (NetworkOnMainThreadException запрещает connect на main thread)
-        Thread {
-            var udpFd = -1
-            try {
-                val udpSocket = java.net.DatagramSocket()
-                udpSocket.connect(java.net.InetAddress.getByName(srvIp), srvPort)
-                protect(udpSocket)
-                val implField = java.net.DatagramSocket::class.java.getDeclaredField("impl")
-                implField.isAccessible = true
-                val impl = implField.get(udpSocket)
-                val fdField = impl.javaClass.getDeclaredField("fd")
-                fdField.isAccessible = true
-                val fileDesc = fdField.get(impl) as java.io.FileDescriptor
-                val pfd = android.os.ParcelFileDescriptor.dup(fileDesc)
-                udpFd = pfd.detachFd()
-                udpSocket.close()
-                AppLogger.log("VPN", "UDP fd=$udpFd protected, target=$srvIp:$srvPort")
-                val result = Core.startVPN(configJson, fd.toLong(), udpFd.toLong())
-                AppLogger.log("VPN", "Core.startVPN result: $result")
-                if (result != "ok") doStop()
-            } catch (e: Exception) {
-                AppLogger.log("VPN", "ERROR: ${e.javaClass.simpleName}: ${e.message}")
-                doStop()
-            }
-        }.start()
-
+        configJson = newConfig
+        startVpnInternal()
         return START_STICKY
     }
 
+    private fun startVpnInternal() {
+        AppLogger.log("VPN", "Starting VPN internal")
+        if (isRunning) doStop() // Перезапуск если уже был активен
+
+        try {
+            val root = org.json.JSONObject(configJson)
+            val srvIp = root.optString("server_ip", "31.42.120.154")
+            val srvPort = root.optInt("port", 9999)
+
+            val builder = Builder()
+            builder.setSession("Hasta-Vaquet")
+            builder.setMtu(1300)
+
+            val cfg = parseConfig(configJson)
+            builder.addAddress(cfg.internalIp, 24)
+            builder.addRoute("0.0.0.0", 0)
+            builder.addRoute("::", 0)  // IPv6 blackhole (правило 01_CORE_ARCHITECTURE)
+
+            // Блокируем IPv6 утечку (направляем в туннель, который его игнорирует)
+            builder.addRoute("::", 0)
+
+            // Используем только один DNS для стабильности
+            builder.addDnsServer(root.optString("dns", "1.1.1.1"))
+
+            for (pkg in cfg.bypassPackages) {
+                try { builder.addDisallowedApplication(pkg) } catch (_: Exception) {}
+            }
+
+            tunFd = builder.establish()
+            if (tunFd == null) {
+                AppLogger.log("VPN", "TUN establish failed")
+                stopSelf()
+                return
+            }
+
+            isRunning = true
+            val fd = tunFd!!.detachFd()
+            AppLogger.log("VPN", "TUN established, fd=$fd")
+
+            Thread {
+                try {
+                    AppLogger.log("VPN", "Go Core starting with fd=$fd and self-protector")
+                    val result = Core.startVPN(configJson, fd.toLong(), this)
+                    AppLogger.log("VPN", "Go Core result: $result")
+
+                    if (result != "ok") {
+                        android.os.Handler(android.os.Looper.getMainLooper()).post { doStop() }
+                    }
+                } catch (e: Exception) {
+                    AppLogger.log("VPN", "Thread error: ${e.message}")
+                    android.os.Handler(android.os.Looper.getMainLooper()).post { doStop() }
+                }
+            }.start()
+
+        } catch (e: Exception) {
+            AppLogger.log("VPN", "startVpnInternal error: ${e.message}")
+            doStop()
+        }
+    }
+
     private fun doStop() {
-        AppLogger.log("VPN", "doStop called")
+        AppLogger.log("VPN", "doStop: cleaning up resources")
+        isRunning = false
         Core.stopVPN()
-        tunFd?.close()
+
+        try {
+            // Если мы использовали detachFd(), объект tunFd уже не владеет нативным дескриптором,
+            // но вызов close() всё равно полезен для очистки Java-объекта.
+            tunFd?.close()
+            AppLogger.log("VPN", "tunFd closed")
+        } catch (e: Exception) {
+            AppLogger.log("VPN", "tunFd close error: ${e.message}")
+        }
         tunFd = null
+
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }

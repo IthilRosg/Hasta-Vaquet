@@ -3,36 +3,47 @@
 package core
 
 import (
+	"fmt"
 	"log"
 	"net"
 	"os"
+	"syscall"
 	"time"
 )
 
 // vpnPlatform — Android-специфичная реализация туннеля.
-// TUN-интерфейс приходит из Java VpnService как FileDescriptor.
-// fd — неблокирующий → используем os.File (runtime poller) вместо syscall.
 type vpnPlatform struct {
-	tunFile       *os.File // TUN-интерфейс
-	protectedConn *os.File // UDP-сокет, защищённый VpnService.protect()
+	tunFile *os.File // TUN-интерфейс
 }
 
 func (p *vpnPlatform) openTunnel(v *VPN) error {
-	if p.tunFile == nil || p.protectedConn == nil {
-		log.Printf("[ANDROID] openTunnel: tunFile=%v protectedConn=%v", p.tunFile != nil, p.protectedConn != nil)
-		return nil
+	if p.tunFile == nil {
+		return fmt.Errorf("tunFile is nil")
 	}
 
-	// Создаём net.UDPConn из защищённого fd (уже protect'нут VpnService)
-	// Этот сокет идёт в обход TUN → нет петли маршрутизации
-	f := p.protectedConn
-	pc, err := net.FileConn(f)
-	if err != nil {
-		log.Printf("[ANDROID] openTunnel: FileConn FAILED: %v", err)
-		return err
+	if globalProtector == nil {
+		return fmt.Errorf("protector is nil")
 	}
-	v.conn = pc.(*net.UDPConn)
-	log.Printf("[ANDROID] openTunnel: UDP connected OK (protected), local=%v", v.conn.LocalAddr())
+
+	// Go сам создает сокет и просит Android его защитить через интерфейс Protector
+	dialer := &net.Dialer{
+		Control: func(network, address string, c syscall.RawConn) error {
+			return c.Control(func(fd uintptr) {
+				if !globalProtector.Protect(int(fd)) {
+					log.Printf("[ANDROID] openTunnel: protect failed for fd %d", fd)
+				}
+			})
+		},
+	}
+
+	serverAddr := fmt.Sprintf("%s:%d", v.config.ServerIP, v.config.Port)
+	conn, err := dialer.Dial("udp", serverAddr)
+	if err != nil {
+		return fmt.Errorf("UDP dial failed: %v", err)
+	}
+
+	v.conn = conn.(*net.UDPConn)
+	log.Printf("[ANDROID] openTunnel: UDP connected and PROTECTED, target=%s", serverAddr)
 	return nil
 }
 
@@ -45,10 +56,6 @@ func (p *vpnPlatform) closeTunnel(v *VPN) {
 	if p.tunFile != nil {
 		p.tunFile.Close()
 		p.tunFile = nil
-	}
-	if p.protectedConn != nil {
-		p.protectedConn.Close()
-		p.protectedConn = nil
 	}
 }
 

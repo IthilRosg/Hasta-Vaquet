@@ -18,14 +18,16 @@ import (
 	"os"
 )
 
+// Protector — интерфейс, который будет реализован в Kotlin (VpnService).
+type Protector interface {
+	Protect(fd int) bool
+}
+
 var globalVPN *VPN
+var globalProtector Protector
 
 // StartVPN запускает VPN-соединение.
-// configJSON — JSON с настройками (server_ip, port, short_id, secret_key, ...).
-// tunFd — файловый дескриптор TUN-интерфейса от VpnService.establish().
-// protectFd — файловый дескриптор защищённого UDP-сокета (уже protect'нут VpnService).
-// Возвращает "ok" или сообщение об ошибке.
-func StartVPN(configJSON string, tunFd int, protectFd int) string {
+func StartVPN(configJSON string, tunFd int, p Protector) string {
 	if globalVPN != nil && globalVPN.IsRunning() {
 		return "already running"
 	}
@@ -52,11 +54,9 @@ func StartVPN(configJSON string, tunFd int, protectFd int) string {
 		cfg.DNS = "1.1.1.1"
 	}
 
-	// Создаём os.File из TUN fd (runtime poller корректно ждёт на неблокирующем fd)
+	// Сохраняем протектор и дескриптор туннеля
+	globalProtector = p
 	plat.tunFile = os.NewFile(uintptr(tunFd), "tun")
-
-	// Защищённый UDP-сокет (уже protect'нут VpnService, не идёт через TUN)
-	plat.protectedConn = os.NewFile(uintptr(protectFd), "udp")
 
 	vpn := New(cfg, &androidListener{})
 	if err := vpn.Start(); err != nil {

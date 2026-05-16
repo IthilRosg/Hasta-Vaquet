@@ -8,13 +8,15 @@
 **Сервер:** ✅ 31.42.120.154:9999  
 **QR-сканер:** ✅ камера работает (PreviewView + ImageAnalysis + ML Kit)  
 **Профили:** ✅ CRUD SharedPreferences, дропдаун  
-**Disconnect:** ✅ останавливает Core + сервис  
-**UDP-сокет:** ✅ background thread (NetworkOnMainThreadException fix)  
-**protect():** ✅ reflection impl→fd→dup→detach  
-**TUN:** ✅ os.File.Read/Write (EAGAIN fix)  
+**Disconnect:** ✅ останавливает Core + сервис, значок VPN исчезает (fix: `tunFd.close()`)  
+**UDP-сокет:** ✅ Go-managed + Protector (fix: Android 15 reflection block)  
+**protect():** ✅ работает через callback из Go в Kotlin  
+**TUN:** ✅ устанавливается, IPv6 Blackhole добавлен (fix: routing leak)  
+**Трафик:** ✅ подтверждён логами (writerLoop/readerLoop active)
 
-**Не работает:**
-- [ ] **VPN-соединение** — Go стартует, но трафика нет. Причина выясняется.
+**В планах:**
+- [ ] Phase 8.1: Интеграция реальной статистики в UI (Poll GetStats)
+- [ ] Phase 8.2: Реализация "Kill Switch" на уровне Android
 
 ## Найденные и исправленные баги
 
