@@ -1082,13 +1082,13 @@
                         <div class="stat-card yellow">
                             <div class="stat-label">Отдано</div>
                             <div class="stat-value" id="stat-out">—</div>
-                            <div class="stat-sub">Исходящий трафик</div>
+                            <div class="stat-sub" id="stat-out-sub">скорость</div>
                             <div class="stat-icon">⬆</div>
                         </div>
                         <div class="stat-card purple">
                             <div class="stat-label">Получено</div>
                             <div class="stat-value" id="stat-in">—</div>
-                            <div class="stat-sub">Входящий трафик</div>
+                            <div class="stat-sub" id="stat-in-sub">скорость</div>
                             <div class="stat-icon">⬇</div>
                         </div>
                     </div>
@@ -1431,6 +1431,11 @@
             }
 
             function fmtUptime(sec) {
+            function fmtSpeed(bps) {
+                if (bps == null || isNaN(bps)) return "—";
+                if (bps >= 1000000) return (bps / 1000000).toFixed(1) + " MB/s";
+                if (bps >= 1000) return (bps / 1000).toFixed(0) + " KB/s";
+            }
                 if (sec == null || isNaN(sec)) return "—";
                 const s = Math.floor(sec);
                 const days = Math.floor(s / 86400);
@@ -1643,6 +1648,8 @@
                 document.getElementById("stat-in").textContent = fmtBytes(
                     stats.total_in,
                 );
+                document.getElementById("stat-out-sub").textContent = fmtSpeed(stats.tx_speed) + " u00b7 " + fmtBytes(stats.total_out);
+                document.getElementById("stat-in-sub").textContent = fmtSpeed(stats.rx_speed) + " u00b7 " + fmtBytes(stats.total_in);
                 document.getElementById("stat-cpu").textContent =
                     (stats.cpu_pct ?? "—") + "%";
                 document.getElementById("stat-ram").textContent =
