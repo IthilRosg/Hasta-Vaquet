@@ -21,6 +21,11 @@ var indexHTML []byte
 // adminPath хранит URL-префикс панели (например "/hasta-vaquet").
 // Используется хендлерами для корректной маршрутизации.
 var adminPath string
+var (
+	prevBytesIn  int64
+	prevBytesOut int64
+	lastSpeedAt  time.Time
+)
 
 // startWebPanel запускает HTTP-сервер панели управления.
 // Вызывается только если admin_token задан в конфиге.
@@ -96,6 +101,19 @@ func handleStats(w http.ResponseWriter, r *http.Request) {
 	total := len(peers)
 	peersMu.RUnlock()
 	cpuPct, memPct, diskPct := getSystemHealth()
+	now := time.Now()
+	txSpeed := int64(0)
+	rxSpeed := int64(0)
+	if !lastSpeedAt.IsZero() {
+		elapsed := int64(now.Sub(lastSpeedAt).Seconds())
+		if elapsed > 0 {
+			txSpeed = (totalOut - prevBytesOut) / elapsed
+			rxSpeed = (totalIn - prevBytesIn) / elapsed
+		}
+	}
+	prevBytesOut = totalOut
+	prevBytesIn = totalIn
+	lastSpeedAt = now
 
 	json.NewEncoder(w).Encode(map[string]any{
 		"uptime_sec":   int64(time.Since(serverStartTime).Seconds()),
@@ -106,6 +124,8 @@ func handleStats(w http.ResponseWriter, r *http.Request) {
 		"mem_pct":      memPct,
 		"disk_pct":     diskPct,
 		"total_out":    totalOut,
+		"tx_speed":     txSpeed,
+		"rx_speed":     rxSpeed,
 	})
 }
 
