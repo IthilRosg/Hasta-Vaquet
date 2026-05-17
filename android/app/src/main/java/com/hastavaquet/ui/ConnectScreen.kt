@@ -261,7 +261,7 @@ fun MainScreen(
 
         // ── Карточки статистики ──────────────────────────
         if (connected) {
-            StatsGrid(connected)
+            StatsGrid(connected, uptime)
             Spacer(Modifier.height(16.dp))
         }
 
@@ -293,7 +293,7 @@ fun MainScreen(
 }
 
 @Composable
-private fun StatsGrid(connected: Boolean) {
+private fun StatsGrid(connected: Boolean, uptime: String) {
     val stats = remember { mutableStateOf(StatsData()) }
 
     LaunchedEffect(connected) {
