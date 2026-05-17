@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hastavaquet.MainActivity
 import core.Core
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import org.json.JSONObject
 
@@ -45,7 +46,7 @@ fun MainScreen(
 
     val currentConfig = profiles.find { it.name == selectedProfile }?.configJson ?: ""
     val hasProfile = currentConfig.isNotEmpty()
-n    LaunchedEffect(connected) {
+    LaunchedEffect(connected) {
         if (connected) {
             startTime = System.currentTimeMillis()
             delay(2000)
@@ -56,7 +57,7 @@ n    LaunchedEffect(connected) {
                     uptime = "%02d:%02d".format(sec / 60, sec % 60)
                     delay(1000)
                 }
-            } catch (_: CancellationException) { }
+            } catch (_: kotlinx.coroutines.CancellationException) { }
         } else {
             uptime = "00:00"
             startTime = 0L
