@@ -1124,6 +1124,25 @@
                     </div>
                 </div>
 
+                    <!-- Total Traffic -->
+                    <div class="section-header" style="margin-top:24px;">
+                        <div class="section-title">ud83dudce6 Общий трафик</div>
+                        <button class="btn btn-sm" id="reset-traffic-btn" onclick="resetTraffic()">u21ba Сбросить</button>
+                    </div>
+                    <div class="stats-grid stats-2">
+                        <div class="stat-card yellow">
+                            <div class="stat-label">Отдано всего</div>
+                            <div class="stat-value" id="stat-total-out">—</div>
+                            <div class="stat-sub">За всё время</div>
+                            <div class="stat-icon">u2b06</div>
+                        </div>
+                        <div class="stat-card purple">
+                            <div class="stat-label">Получено всего</div>
+                            <div class="stat-value" id="stat-total-in">—</div>
+                            <div class="stat-sub">За всё время</div>
+                            <div class="stat-icon">u2b07</div>
+                        </div>
+                    </div>
                 <!-- ═══════════════ USERS ═══════════════ -->
                 <div class="page" id="page-users">
                     <div class="section-header">
@@ -1432,6 +1451,12 @@
 
             function fmtUptime(sec) {
             function fmtSpeed(bps) {
+            function resetTraffic() {
+                apiFetch("/api/reset", { method: "POST" }).then(function(r) {
+                    if (r.status === "reset") showToast("u0421u0447u0435u0442u0447u0438u043au0438 u0441u0431u0440u043eu0448u0435u043du044b", "success");
+                    refreshAll(true);
+                }).catch(function() { showToast("u041eu0448u0438u0431u043au0430 u0441u0431u0440u043eu0441u0430", "error"); });
+            }
                 if (bps == null || isNaN(bps)) return "—";
                 if (bps >= 1000000) return (bps / 1000000).toFixed(1) + " MB/s";
                 if (bps >= 1000) return (bps / 1000).toFixed(0) + " KB/s";
@@ -1648,8 +1673,10 @@
                 document.getElementById("stat-in").textContent = fmtBytes(
                     stats.total_in,
                 );
-                document.getElementById("stat-out-sub").textContent = fmtSpeed(stats.tx_speed) + " u00b7 " + fmtBytes(stats.total_out);
-                document.getElementById("stat-in-sub").textContent = fmtSpeed(stats.rx_speed) + " u00b7 " + fmtBytes(stats.total_in);
+                document.getElementById("stat-out-sub").textContent = fmtSpeed(stats.tx_speed) + " · " + fmtBytes(stats.total_out);
+                document.getElementById("stat-in-sub").textContent = fmtSpeed(stats.rx_speed) + " · " + fmtBytes(stats.total_in);
+                document.getElementById("stat-total-out").textContent = fmtBytes(stats.total_out);
+                document.getElementById("stat-total-in").textContent = fmtBytes(stats.total_in);
                 document.getElementById("stat-cpu").textContent =
                     (stats.cpu_pct ?? "—") + "%";
                 document.getElementById("stat-ram").textContent =

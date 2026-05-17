@@ -51,6 +51,7 @@ func startWebPanel() {
 	mux.HandleFunc(p+"/api/health/detail", withAuth(handleHealthDetail))
 	mux.HandleFunc(p+"/api/users", withAuth(handleUsersRoute))
 	mux.HandleFunc(p+"/api/users/", withAuth(handleUserRoute))
+	mux.HandleFunc(p+"/api/reset", withAuth(handleReset))
 
 	addr := fmt.Sprintf(":%d", serverCfg.AdminPort)
 	logger.Printf("[WEB] Панель запущена: http://localhost%s%s/\n", addr, p)
@@ -401,4 +402,22 @@ func handleHealthDetail(w http.ResponseWriter, r *http.Request) {
 		"disk_total_gb": diskTotal,
 		"disk_used_gb":  diskUsed,
 	})
+}
+
+// ─── POST /api/reset ─────────────────────────────────────────────────────────
+
+func handleReset(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	peersMu.Lock()
+	for _, p := range peers {
+		p.ByteIn.Store(0)
+		p.ByteOut.Store(0)
+	}
+	peersMu.Unlock()
+	prevBytesIn = 0
+	prevBytesOut = 0
+	json.NewEncoder(w).Encode(map[string]string{"status": "reset"})
 }
