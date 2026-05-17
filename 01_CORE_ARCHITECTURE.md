@@ -23,6 +23,7 @@
 - **UI (Phase 7b):** Wails + Svelte. Асинхронный мост Go↔JS через runtime.EventsEmit. HideWindow для всех exec.Command. Профили через выпадающий список с last_profile.txt.
 - **Разделение сред:**
     - Клиент (Windows): использовать `golang.org/x/sys/windows` и `wintun`. Сборка только под Windows.
+    - Клиент (Android): `//go:build android`, VpnService через gomobile, TUN через `os.File`, UDP через `Protector` интерфейс.
     - **Сервер (Linux):** использовать стандартный `os.OpenFile("/dev/net/tun", ...)`. Сборка только под Linux.
     - **Логирование сервера:** путь к файлу лога задаётся через поле `log_file` в `server_config.json` (дефолт: `"server.log"` рядом с бинарником). Файл открывается в режиме `O_APPEND` — логи не обнуляются при рестарте.
 - **Запреты:**
