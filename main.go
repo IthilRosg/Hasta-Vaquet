@@ -122,7 +122,12 @@ func decrypt(packet []byte) ([]byte, error) {
 }
 
 func getInterfaceIndex(name string) string {
-	out, _ := exec.Command("powershell", "-Command", fmt.Sprintf("Get-NetAdapter -Name '%s' | Select-Object -ExpandProperty InterfaceIndex", name)).Output()
+	cmd := exec.Command("powershell", "-Command", fmt.Sprintf("Get-NetAdapter -Name '%s' | Select-Object -ExpandProperty InterfaceIndex", name))
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	out, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
 	return strings.TrimSpace(string(out))
 }
 
@@ -133,6 +138,8 @@ type Config struct {
 	SecretKey   string `json:"secret_key"`
 	RoutingSalt string `json:"routing_salt"`
 	InternalIP  string `json:"internal_ip"`
+	GatewayIP   string `json:"gateway_ip"`
+	DNS         string `json:"dns"`
 }
 
 func loadConfig() Config {
@@ -168,6 +175,8 @@ func loadConfig() Config {
 	if cfg.ShortID == 0 { log.Fatal("[ОШИБКА] ShortID не задан") }
 	if cfg.SecretKey == "" { log.Fatal("[ОШИБКА] SecretKey не задан") }
 	if cfg.RoutingSalt == "" { cfg.RoutingSalt = "HastaVaquetGlobal" }
+	if cfg.GatewayIP == "" { cfg.GatewayIP = "192.168.100.1" }
+	if cfg.DNS == "" { cfg.DNS = "1.1.1.1" }
 
 	return cfg
 }
@@ -193,46 +202,92 @@ func main() {
 	log.Printf("[АДАПТЕР] Wintun создан")
 
 	index := getInterfaceIndex("HastaVaquet")
+	if index == "" {
+		log.Printf("[ПРЕДУПРЕЖДЕНИЕ] Не удалось получить InterfaceIndex для HastaVaquet")
+	}
 	log.Printf("[МАРШРУТ] InterfaceIndex = %s", index)
 	run := func(cmd string, args ...string) {
-		out, err := exec.Command(cmd, args...).CombinedOutput()
+		c := exec.Command(cmd, args...)
+		c.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+		out, err := c.CombinedOutput()
 		if err != nil {
 			log.Printf("[ОШИБКА] %s %v: %s", cmd, args, strings.TrimSpace(string(out)))
 		}
 	}
 
 	run("netsh", "interface", "ip", "set", "address", "name=HastaVaquet", "static", cfg.InternalIP, "255.255.255.0")
+	run("netsh", "interface", "ipv4", "set", "subinterface", "name=HastaVaquet", "mtu=1300")
+	run("netsh", "interface", "ip", "set", "dns", "name=HastaVaquet", "static", cfg.DNS)
 	run("route", "delete", cfg.ServerIP)
-	run("route", "add", cfg.ServerIP, "mask", "255.255.255.255", "192.168.100.1")
-	run("route", "delete", "0.0.0.0", "10.0.0.1")
-	run("route", "add", "0.0.0.0", "mask", "0.0.0.0", "10.0.0.1", "metric", "1", "if", index)
+	run("route", "add", cfg.ServerIP, "mask", "255.255.255.255", cfg.GatewayIP)
+	run("route", "delete", "0.0.0.0", cfg.InternalIP)
+	run("route", "add", "0.0.0.0", "mask", "0.0.0.0", cfg.InternalIP, "metric", "1", "if", index)
+	run("netsh", "interface", "ipv6", "add", "route", "::/0", "name=HastaVaquet", cfg.InternalIP, "metric=1")
 	log.Printf("[МАРШРУТ] Правила добавлены")
 
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
-	go func() { <-c; log.Printf("[ОСТАНОВ] Завершение, чистка маршрутов..."); exec.Command("route", "delete", "0.0.0.0", "10.0.0.1").Run(); log.Printf("[ОСТАНОВ] Маршруты очищены"); os.Exit(0) }()
+stopCh := make(chan struct{})
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt)
+	go func() {
+		<-sigCh
+		log.Printf("[ОСТАНОВ] Завершение, чистка маршрутов...")
+		close(stopCh)
+		c := exec.Command("route", "delete", "0.0.0.0", "10.0.0.1")
+		c.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+		c.Run()
+		log.Printf("[ОСТАНОВ] Маршруты очищены")
+		os.Exit(0)
+	}()
 
-	conn, _ := net.Dial("udp", net.JoinHostPort(cfg.ServerIP, fmt.Sprintf("%d", cfg.Port)))
+	conn, err := net.Dial("udp", net.JoinHostPort(cfg.ServerIP, fmt.Sprintf("%d", cfg.Port)))
+	if err != nil {
+		log.Fatalf("[ОШИБКА] Не удалось подключиться к серверу: %v", err)
+	}
 	defer conn.Close()
 	log.Printf("[СОЕДИНЕНИЕ] Установлено с %s:%d", cfg.ServerIP, cfg.Port)
-	session, _ := adapter.StartSession(0x800000)
+	session, err := adapter.StartSession(0x800000)
+	if err != nil {
+		log.Fatalf("[ОШИБКА] Не удалось запустить сессию Wintun: %v", err)
+	}
 	defer session.End()
 	log.Printf("[СЕССИЯ] Wintun сессия запущена")
 
 	go func() {
 		for {
-			time.Sleep(time.Duration(10+mathrand.Intn(21)) * time.Second)
-			keepAlive, _ := encrypt([]byte{})
-			conn.Write(keepAlive)
-			log.Printf("[KEEP-ALIVE] Отправлен")
+			select {
+			case <-stopCh:
+				return
+			case <-time.After(time.Duration(10+mathrand.Intn(21)) * time.Second):
+				keepAlive, err := encrypt([]byte{})
+				if err != nil {
+					log.Printf("[ОШИБКА KEEP-ALIVE] %v", err)
+					continue
+				}
+				conn.Write(keepAlive)
+				log.Printf("[KEEP-ALIVE] Отправлен")
+			}
 		}
 	}()
 
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("[RECOVER] readerLoop: %v", r)
+			}
+		}()
 		buf := make([]byte, 65535)
 		for {
+			select {
+			case <-stopCh:
+				return
+			default:
+			}
+			conn.SetReadDeadline(time.Now().Add(60 * time.Second))
 			n, err := conn.Read(buf)
 			if err != nil {
+				if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+					continue
+				}
 				log.Printf("[ОШИБКА ЧТЕНИЯ] %v", err)
 				continue
 			}
@@ -242,8 +297,17 @@ func main() {
 				log.Printf("[ОШИБКА ДЕШИФРАЦИИ] %v", err)
 				continue
 			}
-			if len(decrypted) == 0 { continue }
-			packet, _ := session.AllocateSendPacket(len(decrypted))
+			if len(decrypted) == 0 {
+				continue
+			}
+			if len(decrypted) == 1 && decrypted[0] == 0x01 {
+				continue
+			}
+			packet, err := session.AllocateSendPacket(len(decrypted))
+			if err != nil {
+				log.Printf("[ОШИБКА ALLOC] %v", err)
+				continue
+			}
 			copy(packet, decrypted)
 			session.SendPacket(packet)
 		}

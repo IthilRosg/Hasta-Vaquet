@@ -29,15 +29,11 @@ type vpnListener struct {
 }
 
 func (l *vpnListener) OnStatus(status string, txSpeed, rxSpeed int64, totalTx, totalRx uint64, pingMs, lossPct int) {
-	if status == "connected" || status == "disconnected" {
-		runtime.EventsEmit(l.ctx, "status", status)
-	}
-	if txSpeed > 0 || rxSpeed > 0 || pingMs > 0 {
-		runtime.EventsEmit(l.ctx, "traffic", map[string]interface{}{
-			"tx_speed": txSpeed, "rx_speed": rxSpeed,
-			"total_tx": totalTx, "total_rx": totalRx,
-		})
-	}
+	runtime.EventsEmit(l.ctx, "status", status)
+	runtime.EventsEmit(l.ctx, "traffic", map[string]interface{}{
+		"tx_speed": txSpeed, "rx_speed": rxSpeed,
+		"total_tx": totalTx, "total_rx": totalRx,
+	})
 	runtime.EventsEmit(l.ctx, "ping", map[string]int{"rtt": pingMs, "loss": lossPct})
 }
 

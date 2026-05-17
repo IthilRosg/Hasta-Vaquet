@@ -44,6 +44,7 @@ var (
 	peersMu         sync.RWMutex
 	logger          *log.Logger
 	bloom           [8192]uint64
+	bloomMu         sync.RWMutex
 	bloomCount      atomic.Int64 // кол-во уникальных записей в bloom
 	configFilePath  string
 	serverStartTime time.Time
@@ -72,6 +73,8 @@ func bloomKey(shortID uint16, nonce []byte) []byte {
 }
 
 func bloomCheck(key []byte) bool {
+	bloomMu.RLock()
+	defer bloomMu.RUnlock()
 	totalBits := uint64(len(bloom) * 64)
 	idx := [3]uint64{
 		fnv1a(key, 0x1234567890ABCDEF) % totalBits,
@@ -85,6 +88,8 @@ func bloomCheck(key []byte) bool {
 }
 
 func bloomSet(key []byte) {
+	bloomMu.Lock()
+	defer bloomMu.Unlock()
 	totalBits := uint64(len(bloom) * 64)
 	for _, seed := range []uint64{0x1234567890ABCDEF, 0xFEDCBA0987654321, 0xA1B2C3D4E5F60708} {
 		h := fnv1a(key, seed) % totalBits
@@ -300,9 +305,13 @@ func main() {
 		logger.Printf("[WEB] admin_token не задан — панель отключена\n")
 	}
 
-	ifce, _ := water.New(water.Config{DeviceType: water.TUN})
+	ifce, err := water.New(water.Config{DeviceType: water.TUN})
+	if err != nil {
+		logger.Fatalf("[ОШИБКА] Не удалось создать TUN: %v", err)
+	}
 	exec.Command("ip", "addr", "add", "10.0.0.2/24", "dev", ifce.Name()).Run()
 	exec.Command("ip", "link", "set", "dev", ifce.Name(), "up").Run()
+	exec.Command("ip", "link", "set", "dev", ifce.Name(), "mtu", "1300").Run()
 
 	conn, _ := net.ListenUDP("udp", &net.UDPAddr{Port: cfg.Port})
 	logger.Printf("[СЕТЬ] Слушаем порт %d\n", cfg.Port)
@@ -344,9 +353,11 @@ func main() {
 			}
 			if reset {
 				count := bloomCount.Load()
+				bloomMu.Lock()
 				for i := range bloom {
 					bloom[i] = 0
 				}
+				bloomMu.Unlock()
 				bloomCount.Store(0)
 				logger.Printf("[BLOOM] Фильтр сброшен, было записей: %d\n", count)
 			}
@@ -354,13 +365,25 @@ func main() {
 	}()
 
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				logger.Printf("[RECOVER] TUN reader: %v", r)
+			}
+		}()
 		packet := make([]byte, 65535)
 		for {
-			n, _ := ifce.Read(packet)
-			if n < 20 {
+			n, err := ifce.Read(packet)
+			if err != nil {
+				logger.Printf("[ОШИБКА TUN] Read: %v", err)
+				continue
+			}
+			if n < 20 || (packet[0]>>4) != 4 {
 				continue
 			}
 			dstIP := net.IP(packet[16:20]).String()
+			if dstIP == "10.0.0.2" {
+				continue
+			}
 			peersMu.RLock()
 			peer := ipToPeer[dstIP]
 			peersMu.RUnlock()
@@ -373,8 +396,14 @@ func main() {
 			if addr == nil {
 				continue
 			}
-			enc, _ := encrypt(packet[:n], peer.Key[:], peer.ShortID)
-			conn.WriteToUDP(enc, addr)
+			enc, err := encrypt(packet[:n], peer.Key[:], peer.ShortID)
+			if err != nil {
+				logger.Printf("[ОШИБКА] encrypt: %v", err)
+				continue
+			}
+			if _, err := conn.WriteToUDP(enc, addr); err != nil {
+				logger.Printf("[ОШИБКА] WriteToUDP: %v", err)
+			}
 			peer.ByteOut.Add(int64(n))
 		}
 	}()
@@ -422,7 +451,10 @@ func main() {
 			peer.udpMu.Lock()
 			peer.UDPAddr = addr
 			peer.udpMu.Unlock()
-			ifce.Write(decrypted)
+			if _, err := ifce.Write(decrypted); err != nil {
+				logger.Printf("[ОШИБКА] TUN Write: %v", err)
+				continue
+			}
 			peer.ByteIn.Add(int64(len(decrypted)))
 		}
 	}
