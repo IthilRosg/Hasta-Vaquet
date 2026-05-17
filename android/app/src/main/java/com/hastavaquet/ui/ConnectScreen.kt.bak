@@ -45,18 +45,20 @@ fun MainScreen(
 
     val currentConfig = profiles.find { it.name == selectedProfile }?.configJson ?: ""
     val hasProfile = currentConfig.isNotEmpty()
-n    LaunchedEffect(connected) {
+
+    // Таймер uptime + смена статуса после хэндшейка
+    LaunchedEffect(connected) {
         if (connected) {
             startTime = System.currentTimeMillis()
             delay(2000)
             statusText = "Подключение установлено"
-            try {
-                while (true) {
-                    val sec = (System.currentTimeMillis() - startTime) / 1000
-                    uptime = "%02d:%02d".format(sec / 60, sec % 60)
-                    delay(1000)
+            while (connected) {
+                val sec = (System.currentTimeMillis() - startTime) / 1000
+                uptime = "%02d:%02d".format(sec / 60, sec % 60)
+                delay(1000)
                 }
-            } catch (_: CancellationException) { }
+            } catch (_: kotlinx.coroutines.CancellationException) { }
+            }
         } else {
             uptime = "00:00"
             startTime = 0L
@@ -260,7 +262,7 @@ n    LaunchedEffect(connected) {
 
         // ── Карточки статистики ──────────────────────────
         if (connected) {
-            StatsGrid(connected)
+            StatsGrid(connected, uptime)
             Spacer(Modifier.height(16.dp))
         }
 
@@ -292,11 +294,11 @@ n    LaunchedEffect(connected) {
 }
 
 @Composable
-private fun StatsGrid(connected: Boolean) {
+private fun StatsGrid(connected: Boolean, uptime: String) {
     val stats = remember { mutableStateOf(StatsData()) }
 
     LaunchedEffect(connected) {
-        while (connected) {
+        try { while (true) {
             try {
                 val json = core.Core.getStats()
                 val obj = org.json.JSONObject(json)
