@@ -92,12 +92,16 @@ func handleStats(w http.ResponseWriter, r *http.Request) {
 	}
 	total := len(peers)
 	peersMu.RUnlock()
+	cpuPct, memPct, diskPct := getSystemHealth()
 
 	json.NewEncoder(w).Encode(map[string]any{
 		"uptime_sec":   int64(time.Since(serverStartTime).Seconds()),
 		"peers_total":  total,
 		"peers_online": online,
 		"total_in":     totalIn,
+		"cpu_pct":      cpuPct,
+		"mem_pct":      memPct,
+		"disk_pct":     diskPct,
 		"total_out":    totalOut,
 	})
 }
