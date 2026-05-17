@@ -43,6 +43,7 @@ func startWebPanel() {
 		http.Redirect(w, r, p+"/", http.StatusMovedPermanently)
 	})
 	mux.HandleFunc(p+"/api/stats", withAuth(handleStats))
+	mux.HandleFunc(p+"/api/health/detail", withAuth(handleHealthDetail))
 	mux.HandleFunc(p+"/api/users", withAuth(handleUsersRoute))
 	mux.HandleFunc(p+"/api/users/", withAuth(handleUserRoute))
 
@@ -61,7 +62,7 @@ func withAuth(next http.HandlerFunc) http.HandlerFunc {
 			token = r.URL.Query().Get("token")
 		}
 		if token != serverCfg.AdminToken {
-		logger.Printf("[WEB] 401 %s %s from %s", r.Method, r.URL.Path, r.RemoteAddr)
+			logger.Printf("[WEB] 401 %s %s from %s", r.Method, r.URL.Path, r.RemoteAddr)
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusUnauthorized)
 			w.Write([]byte(`{"error":"unauthorized"}`))
@@ -359,4 +360,25 @@ func saveConfig() error {
 		return fmt.Errorf("write: %w", err)
 	}
 	return nil
+}
+
+// ─── GET /api/health/detail ──────────────────────────────────────────────────
+
+func handleHealthDetail(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	cpuPct, memPct, diskPct := getSystemHealth()
+	cpuCores, memTotal, memUsed, diskTotal, diskUsed := getSystemHealthDetail()
+	json.NewEncoder(w).Encode(map[string]any{
+		"cpu_pct":       cpuPct,
+		"mem_pct":       memPct,
+		"disk_pct":      diskPct,
+		"cpu_cores":     cpuCores,
+		"mem_total_gb":  memTotal,
+		"mem_used_gb":   memUsed,
+		"disk_total_gb": diskTotal,
+		"disk_used_gb":  diskUsed,
+	})
 }

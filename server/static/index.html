@@ -18,9 +18,8 @@
                 --text: #e6edf3;
                 --text-dim: #8b949e;
                 --radius: 10px;
-                --font: "Segoe UI", system-ui, -apple-system, sans-serif;
-                --font-mono:
-                    "Cascadia Code", "Fira Code", "Consolas", monospace;
+                --font: system-ui;
+                --font-mono: "Consolas", monospace;
             }
 
             /* ─── Reset & Base ──────────────────────────────────────────── */
@@ -51,23 +50,21 @@
                 text-decoration: underline;
             }
 
-            /* ─── Scrollbar ─────────────────────────────────────────────── */
             ::-webkit-scrollbar {
-                width: 6px;
-                height: 6px;
+                width: 5px;
+                height: 5px;
             }
             ::-webkit-scrollbar-track {
                 background: transparent;
             }
             ::-webkit-scrollbar-thumb {
-                background: rgba(255, 255, 255, 0.15);
+                background: rgba(255, 255, 255, 0.12);
                 border-radius: 3px;
             }
             ::-webkit-scrollbar-thumb:hover {
-                background: rgba(255, 255, 255, 0.25);
+                background: rgba(255, 255, 255, 0.22);
             }
 
-            /* ─── Utility ───────────────────────────────────────────────── */
             .hidden {
                 display: none !important;
             }
@@ -92,11 +89,11 @@
                 font-size: 13px;
                 font-family: var(--font);
                 cursor: pointer;
+                user-select: none;
                 transition:
                     background 0.15s,
                     border-color 0.15s,
                     opacity 0.15s;
-                user-select: none;
             }
             .btn:hover {
                 background: #2d333b;
@@ -149,7 +146,7 @@
                 pointer-events: none;
             }
 
-            /* ─── Input / Select ────────────────────────────────────────── */
+            /* ─── Input ─────────────────────────────────────────────────── */
             .input {
                 width: 100%;
                 padding: 8px 12px;
@@ -188,7 +185,6 @@
             /* ─── ════════════════════════════════════════ ─── */
             /*              LOGIN SCREEN                        */
             /* ─── ════════════════════════════════════════ ─── */
-
             #login-screen {
                 min-height: 100vh;
                 display: flex;
@@ -202,7 +198,6 @@
                     ),
                     var(--bg);
             }
-
             .login-card {
                 width: 360px;
                 background: var(--surface);
@@ -211,12 +206,10 @@
                 padding: 40px 36px;
                 box-shadow: 0 8px 40px rgba(0, 0, 0, 0.5);
             }
-
             .login-logo {
                 text-align: center;
                 margin-bottom: 28px;
             }
-
             .login-logo .logo-icon {
                 display: inline-block;
                 width: 56px;
@@ -231,27 +224,23 @@
                 position: relative;
                 box-shadow: 0 4px 20px rgba(88, 166, 255, 0.3);
             }
-
             .login-logo .logo-icon svg {
                 position: absolute;
                 top: 50%;
                 left: 50%;
                 transform: translate(-50%, -50%);
             }
-
             .login-logo h1 {
                 font-size: 20px;
                 font-weight: 700;
                 color: var(--text);
                 letter-spacing: -0.3px;
             }
-
             .login-logo p {
                 font-size: 12px;
                 color: var(--text-dim);
                 margin-top: 2px;
             }
-
             .login-card label {
                 display: block;
                 font-size: 12px;
@@ -261,7 +250,6 @@
                 letter-spacing: 0.5px;
                 margin-bottom: 6px;
             }
-
             #login-error {
                 margin-top: 10px;
                 padding: 8px 12px;
@@ -272,7 +260,6 @@
                 font-size: 12px;
                 text-align: center;
             }
-
             #login-btn {
                 width: 100%;
                 margin-top: 18px;
@@ -284,121 +271,166 @@
             /* ─── ════════════════════════════════════════ ─── */
             /*              MAIN APP LAYOUT                     */
             /* ─── ════════════════════════════════════════ ─── */
-
             #app {
                 display: flex;
-                flex-direction: column;
-                min-height: 100vh;
+                height: 100vh;
+                overflow: hidden;
             }
 
-            /* ── Header ────────────────────────────────────── */
-            .header {
-                position: sticky;
-                top: 0;
-                z-index: 100;
-                height: 56px;
+            /* ── Sidebar ──────────────────────────────────── */
+            .sidebar {
+                width: 180px;
+                flex-shrink: 0;
                 background: var(--surface);
+                border-right: 1px solid var(--border);
+                display: flex;
+                flex-direction: column;
+                overflow-y: auto;
+            }
+            .sidebar-logo {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                height: 56px;
+                flex-shrink: 0;
                 border-bottom: 1px solid var(--border);
-                display: flex;
-                align-items: center;
-                padding: 0 24px;
-                gap: 12px;
-                backdrop-filter: blur(8px);
             }
-
-            .header-brand {
-                display: flex;
-                align-items: center;
-                gap: 10px;
-                flex: 1;
-            }
-
-            .header-brand .brand-icon {
-                width: 30px;
-                height: 30px;
+            .sidebar-logo .hv {
+                width: 36px;
+                height: 36px;
                 background: linear-gradient(
                     135deg,
                     var(--accent) 0%,
                     #1f6feb 100%
                 );
-                border-radius: 7px;
+                border-radius: 9px;
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                flex-shrink: 0;
-                box-shadow: 0 2px 10px rgba(88, 166, 255, 0.25);
+                font-size: 16px;
+                font-weight: 800;
+                color: #fff;
+                box-shadow: 0 2px 12px rgba(88, 166, 255, 0.3);
+                letter-spacing: -0.5px;
             }
-
-            .header-brand h1 {
-                font-size: 15px;
-                font-weight: 700;
+            .sidebar-nav {
+                flex: 1;
+                padding: 12px 8px;
+                display: flex;
+                flex-direction: column;
+                gap: 2px;
+            }
+            .sidebar-nav .nav-item {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                padding: 9px 12px;
+                border-radius: 7px;
+                color: var(--text-dim);
+                font-size: 13px;
+                font-weight: 500;
+                cursor: pointer;
+                user-select: none;
+                transition:
+                    background 0.12s,
+                    color 0.12s;
+                border: none;
+                background: transparent;
+                font-family: var(--font);
+                text-align: left;
+                width: 100%;
+            }
+            .sidebar-nav .nav-item:hover {
+                background: var(--surface-hover);
                 color: var(--text);
-                letter-spacing: -0.2px;
             }
-
-            .header-brand .version-badge {
-                font-size: 10px;
-                padding: 1px 7px;
-                background: rgba(88, 166, 255, 0.12);
-                border: 1px solid rgba(88, 166, 255, 0.25);
-                color: var(--accent);
-                border-radius: 20px;
+            .sidebar-nav .nav-item.active {
+                background: var(--accent);
+                color: #fff;
                 font-weight: 600;
-                letter-spacing: 0.3px;
+            }
+            .sidebar-nav .nav-item .nav-icon {
+                font-size: 16px;
+                width: 20px;
+                text-align: center;
+                flex-shrink: 0;
             }
 
-            .header-status {
+            .sidebar-footer {
+                padding: 12px;
+                border-top: 1px solid var(--border);
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+            }
+            .sidebar-footer .status-row {
                 display: flex;
                 align-items: center;
                 gap: 6px;
-                font-size: 12px;
+                font-size: 11px;
                 color: var(--text-dim);
             }
-
             .status-dot {
-                width: 7px;
-                height: 7px;
+                width: 6px;
+                height: 6px;
                 border-radius: 50%;
                 background: var(--green);
-                box-shadow: 0 0 6px var(--green);
-                animation: pulse 2s infinite;
+                box-shadow: 0 0 5px var(--green);
+                flex-shrink: 0;
+            }
+            .sidebar-footer .refresh-row {
+                display: flex;
+                align-items: center;
+                gap: 5px;
+                font-size: 10px;
+                color: var(--text-dim);
+            }
+            .refresh-spinner {
+                width: 10px;
+                height: 10px;
+                border: 2px solid rgba(255, 255, 255, 0.1);
+                border-top-color: var(--accent);
+                border-radius: 50%;
+                flex-shrink: 0;
+            }
+            .refresh-spinner.spinning {
+                animation: spin 0.7s linear infinite;
+            }
+            @keyframes spin {
+                to {
+                    transform: rotate(360deg);
+                }
             }
 
-            @keyframes pulse {
-                0%,
-                100% {
-                    opacity: 1;
-                }
-                50% {
-                    opacity: 0.5;
-                }
-            }
-
-            /* ── Main Content ───────────────────────────────── */
-            .main {
+            /* ── Content ──────────────────────────────────── */
+            .content {
                 flex: 1;
-                padding: 24px;
-                max-width: 1200px;
-                width: 100%;
-                margin: 0 auto;
+                overflow-y: auto;
+                overflow-x: hidden;
+                padding: 28px 32px;
+            }
+            .page {
+                display: none;
+            }
+            .page.active {
+                display: block;
             }
 
             /* ─── Stats Grid ────────────────────────────────── */
             .stats-grid {
                 display: grid;
-                grid-template-columns: repeat(4, 1fr);
-                gap: 16px;
+                grid-template-columns: repeat(2, 1fr);
+                gap: 14px;
                 margin-bottom: 28px;
             }
-
-            @media (max-width: 900px) {
-                .stats-grid {
-                    grid-template-columns: repeat(2, 1fr);
+            @media (min-width: 900px) {
+                .stats-grid.stats-4 {
+                    grid-template-columns: repeat(4, 1fr);
                 }
             }
-            @media (max-width: 500px) {
-                .stats-grid {
-                    grid-template-columns: 1fr;
+            @media (min-width: 700px) {
+                .stats-grid.stats-3 {
+                    grid-template-columns: repeat(3, 1fr);
                 }
             }
 
@@ -406,7 +438,7 @@
                 background: var(--surface);
                 border: 1px solid var(--border);
                 border-radius: var(--radius);
-                padding: 20px 22px;
+                padding: 18px 20px;
                 position: relative;
                 overflow: hidden;
                 transition:
@@ -417,7 +449,6 @@
                 border-color: rgba(255, 255, 255, 0.15);
                 transform: translateY(-1px);
             }
-
             .stat-card::before {
                 content: "";
                 position: absolute;
@@ -439,6 +470,15 @@
             .stat-card.purple::before {
                 background: #bc8cff;
             }
+            .stat-card.cpu::before {
+                background: #f0883e;
+            }
+            .stat-card.ram::before {
+                background: var(--accent);
+            }
+            .stat-card.disk::before {
+                background: #bc8cff;
+            }
 
             .stat-label {
                 font-size: 11px;
@@ -446,29 +486,26 @@
                 color: var(--text-dim);
                 text-transform: uppercase;
                 letter-spacing: 0.6px;
-                margin-bottom: 10px;
+                margin-bottom: 8px;
             }
-
             .stat-value {
-                font-size: 28px;
+                font-size: 26px;
                 font-weight: 700;
                 color: var(--text);
                 line-height: 1;
                 letter-spacing: -0.5px;
             }
-
             .stat-sub {
                 font-size: 12px;
                 color: var(--text-dim);
                 margin-top: 6px;
             }
-
             .stat-icon {
                 position: absolute;
-                top: 18px;
-                right: 18px;
-                font-size: 22px;
-                opacity: 0.18;
+                top: 16px;
+                right: 16px;
+                font-size: 20px;
+                opacity: 0.15;
                 user-select: none;
             }
 
@@ -481,7 +518,6 @@
                 flex-wrap: wrap;
                 gap: 10px;
             }
-
             .section-title {
                 font-size: 16px;
                 font-weight: 700;
@@ -490,7 +526,6 @@
                 align-items: center;
                 gap: 8px;
             }
-
             .count-badge {
                 display: inline-flex;
                 align-items: center;
@@ -505,6 +540,14 @@
                 color: var(--text-dim);
             }
 
+            /* ─── Search ────────────────────────────────────── */
+            .search-wrap {
+                margin-bottom: 14px;
+            }
+            .search-wrap .input {
+                max-width: 360px;
+            }
+
             /* ─── Table ─────────────────────────────────────── */
             .table-wrap {
                 background: var(--surface);
@@ -512,22 +555,14 @@
                 border-radius: var(--radius);
                 overflow: hidden;
             }
-
-            .table-wrap.loading {
-                opacity: 0.6;
-                pointer-events: none;
-            }
-
             table {
                 width: 100%;
                 border-collapse: collapse;
             }
-
             thead tr {
                 background: rgba(255, 255, 255, 0.03);
                 border-bottom: 1px solid var(--border);
             }
-
             th {
                 padding: 10px 16px;
                 text-align: left;
@@ -538,7 +573,6 @@
                 letter-spacing: 0.5px;
                 white-space: nowrap;
             }
-
             tbody tr {
                 border-bottom: 1px solid var(--border);
                 transition: background 0.12s;
@@ -549,7 +583,6 @@
             tbody tr:hover {
                 background: var(--surface-hover);
             }
-
             td {
                 padding: 12px 16px;
                 font-size: 13px;
@@ -557,7 +590,6 @@
                 vertical-align: middle;
             }
 
-            /* Badge for ID */
             .id-badge {
                 display: inline-block;
                 padding: 2px 8px;
@@ -569,8 +601,6 @@
                 color: var(--accent);
                 font-weight: 500;
             }
-
-            /* Code for IP */
             code {
                 font-family: var(--font-mono);
                 font-size: 12px;
@@ -580,8 +610,6 @@
                 border-radius: 4px;
                 color: #a5d6ff;
             }
-
-            /* Online/Offline status */
             .peer-status {
                 display: flex;
                 align-items: center;
@@ -601,7 +629,6 @@
             .peer-dot.offline {
                 background: var(--text-dim);
             }
-
             .peer-status .status-text {
                 font-size: 12px;
                 color: var(--text-dim);
@@ -609,22 +636,16 @@
             .peer-status.online .status-text {
                 color: var(--green);
             }
-
-            /* Traffic cells */
             .traffic-val {
                 font-family: var(--font-mono);
                 font-size: 12px;
                 color: var(--text-dim);
             }
-
-            /* Action buttons cell */
             .actions-cell {
                 display: flex;
                 gap: 4px;
                 align-items: center;
             }
-
-            /* Empty state */
             .empty-state {
                 padding: 56px 24px;
                 text-align: center;
@@ -640,9 +661,57 @@
             }
 
             /* ─── ════════════════════════════════════════ ─── */
+            /*              SETTINGS PAGE                       */
+            /* ─── ════════════════════════════════════════ ─── */
+            .settings-card {
+                background: var(--surface);
+                border: 1px solid var(--border);
+                border-radius: var(--radius);
+                padding: 24px;
+                max-width: 560px;
+            }
+            .settings-field {
+                margin-bottom: 18px;
+            }
+            .settings-field:last-child {
+                margin-bottom: 0;
+            }
+            .settings-field label {
+                display: block;
+                font-size: 11px;
+                font-weight: 600;
+                color: var(--text-dim);
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+                margin-bottom: 6px;
+            }
+            .settings-field .field-row {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+            }
+            .settings-field .field-row .input {
+                flex: 1;
+            }
+            .settings-field .field-value {
+                padding: 8px 12px;
+                background: var(--bg);
+                border: 1px solid var(--border);
+                border-radius: 6px;
+                font-family: var(--font-mono);
+                font-size: 12px;
+                color: var(--text-dim);
+                word-break: break-all;
+            }
+            .settings-field .field-hint {
+                font-size: 11px;
+                color: var(--text-dim);
+                margin-top: 5px;
+            }
+
+            /* ─── ════════════════════════════════════════ ─── */
             /*              MODALS                              */
             /* ─── ════════════════════════════════════════ ─── */
-
             .modal-overlay {
                 position: fixed;
                 inset: 0;
@@ -655,7 +724,6 @@
                 backdrop-filter: blur(3px);
                 animation: fadeIn 0.15s ease;
             }
-
             @keyframes fadeIn {
                 from {
                     opacity: 0;
@@ -685,20 +753,17 @@
                 animation: slideUp 0.18s ease;
                 overflow: hidden;
             }
-
             .modal-header {
                 padding: 20px 24px 0;
                 display: flex;
                 align-items: center;
                 justify-content: space-between;
             }
-
             .modal-title {
                 font-size: 16px;
                 font-weight: 700;
                 color: var(--text);
             }
-
             .modal-close {
                 background: transparent;
                 border: none;
@@ -716,11 +781,9 @@
                 color: var(--text);
                 background: var(--surface-hover);
             }
-
             .modal-body {
                 padding: 20px 24px;
             }
-
             .modal-footer {
                 padding: 16px 24px;
                 display: flex;
@@ -729,15 +792,12 @@
                 border-top: 1px solid var(--border);
                 background: rgba(0, 0, 0, 0.1);
             }
-
-            /* Form fields */
             .form-field {
                 margin-bottom: 16px;
             }
             .form-field:last-child {
                 margin-bottom: 0;
             }
-
             .form-field label {
                 display: block;
                 font-size: 12px;
@@ -747,29 +807,23 @@
                 text-transform: uppercase;
                 letter-spacing: 0.4px;
             }
-
             .field-hint {
                 font-size: 11px;
                 color: var(--text-dim);
                 margin-top: 5px;
             }
-
             .field-error {
                 font-size: 11px;
                 color: var(--red);
                 margin-top: 5px;
             }
-
-            /* QR Modal */
             .qr-modal {
                 max-width: 380px;
             }
-
             .qr-container {
                 text-align: center;
                 padding: 10px 0;
             }
-
             .qr-container img {
                 width: 220px;
                 height: 220px;
@@ -779,39 +833,10 @@
                 display: block;
                 margin: 0 auto 14px;
             }
-
             .qr-hint {
                 font-size: 13px;
                 color: var(--text-dim);
                 margin-top: 4px;
-            }
-
-            /* ─── Refresh indicator ─────────────────────────── */
-            .refresh-info {
-                display: flex;
-                align-items: center;
-                gap: 6px;
-                font-size: 11px;
-                color: var(--text-dim);
-                margin-bottom: 28px;
-                margin-top: -16px;
-            }
-
-            .refresh-spinner {
-                width: 12px;
-                height: 12px;
-                border: 2px solid rgba(255, 255, 255, 0.1);
-                border-top-color: var(--accent);
-                border-radius: 50%;
-                flex-shrink: 0;
-            }
-            .refresh-spinner.spinning {
-                animation: spin 0.7s linear infinite;
-            }
-            @keyframes spin {
-                to {
-                    transform: rotate(360deg);
-                }
             }
 
             /* ─── Toasts ────────────────────────────────────── */
@@ -825,7 +850,6 @@
                 gap: 8px;
                 pointer-events: none;
             }
-
             .toast {
                 padding: 10px 16px;
                 border-radius: 8px;
@@ -852,7 +876,6 @@
                 border-color: rgba(88, 166, 255, 0.3);
                 color: var(--accent);
             }
-
             @keyframes toastIn {
                 from {
                     opacity: 0;
@@ -861,6 +884,69 @@
                 to {
                     opacity: 1;
                     transform: none;
+                }
+            }
+
+            /* ─── Responsive ────────────────────────────────── */
+            @media (max-width: 768px) {
+                .sidebar {
+                    width: 140px;
+                }
+                .sidebar-nav .nav-item {
+                    font-size: 12px;
+                    padding: 8px 10px;
+                    gap: 6px;
+                }
+                .content {
+                    padding: 20px 16px;
+                }
+                .stats-grid.stats-4 {
+                    grid-template-columns: repeat(2, 1fr);
+                }
+            }
+            @media (max-width: 500px) {
+                #app {
+                    flex-direction: column;
+                }
+                .sidebar {
+                    width: 100%;
+                    flex-shrink: 0;
+                    flex-direction: row;
+                    align-items: center;
+                    overflow-x: auto;
+                    padding: 0 8px;
+                    height: 50px;
+                    min-height: 50px;
+                    border-right: none;
+                    border-bottom: 1px solid var(--border);
+                }
+                .sidebar-logo {
+                    height: 50px;
+                    border-bottom: none;
+                    padding: 0 4px;
+                }
+                .sidebar-logo .hv {
+                    width: 30px;
+                    height: 30px;
+                    font-size: 13px;
+                    border-radius: 7px;
+                }
+                .sidebar-nav {
+                    flex-direction: row;
+                    padding: 0;
+                    gap: 0;
+                }
+                .sidebar-nav .nav-item {
+                    font-size: 11px;
+                    padding: 6px 8px;
+                    gap: 4px;
+                    white-space: nowrap;
+                }
+                .sidebar-footer {
+                    display: none;
+                }
+                .content {
+                    padding: 16px 12px;
                 }
             }
         </style>
@@ -895,7 +981,6 @@
                     <h1>Hasta-Vaquet Admin</h1>
                     <p>Панель управления VPN-сервером</p>
                 </div>
-
                 <div class="form-field">
                     <label for="token-input">Admin Token</label>
                     <input
@@ -906,9 +991,7 @@
                         autocomplete="current-password"
                     />
                 </div>
-
                 <div id="login-error" class="hidden"></div>
-
                 <button id="login-btn" class="btn btn-primary">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
                         <path
@@ -928,157 +1011,233 @@
         <!--                      MAIN APP                             -->
         <!-- ────────────────────────────────────────────────────────── -->
         <div id="app" class="hidden">
-            <!-- Header -->
-            <header class="header">
-                <div class="header-brand">
-                    <div class="brand-icon">
+            <!-- Sidebar -->
+            <aside class="sidebar">
+                <div class="sidebar-logo">
+                    <div class="hv">HV</div>
+                </div>
+                <nav class="sidebar-nav">
+                    <button class="nav-item active" data-page="dashboard">
+                        <span class="nav-icon">📊</span> Dashboard
+                    </button>
+                    <button class="nav-item" data-page="users">
+                        <span class="nav-icon">👥</span> Users
+                    </button>
+                    <button class="nav-item" data-page="settings">
+                        <span class="nav-icon">⚙️</span> Settings
+                    </button>
+                </nav>
+                <div class="sidebar-footer">
+                    <div class="status-row">
+                        <div class="status-dot" id="sidebar-status-dot"></div>
+                        <span id="sidebar-status-text">Соединение…</span>
+                    </div>
+                    <div class="refresh-row">
+                        <div class="refresh-spinner" id="refresh-spinner"></div>
+                        <span id="refresh-text">Обновление…</span>
+                    </div>
+                    <button
+                        class="btn btn-sm"
+                        id="logout-btn"
+                        style="width: 100%; justify-content: center"
+                    >
                         <svg
-                            width="16"
-                            height="16"
+                            width="12"
+                            height="12"
                             viewBox="0 0 24 24"
                             fill="none"
                         >
                             <path
-                                d="M12 2L4 6v6c0 5.25 3.5 10.15 8 11.35C16.5 22.15 20 17.25 20 12V6L12 2z"
-                                fill="rgba(255,255,255,0.9)"
-                            />
-                        </svg>
-                    </div>
-                    <h1>Hasta-Vaquet</h1>
-                    <span class="version-badge">Admin</span>
-                </div>
-
-                <div class="header-status">
-                    <div class="status-dot" id="header-status-dot"></div>
-                    <span id="header-status-text">Соединение…</span>
-                </div>
-
-                <button
-                    class="btn btn-sm"
-                    id="logout-btn"
-                    style="margin-left: 12px"
-                >
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
-                        <path
-                            d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"
-                            stroke="currentColor"
-                            stroke-width="2"
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                        />
-                    </svg>
-                    Выйти
-                </button>
-            </header>
-
-            <!-- Main Content -->
-            <main class="main">
-                <!-- Refresh indicator -->
-                <div class="refresh-info">
-                    <div class="refresh-spinner" id="refresh-spinner"></div>
-                    <span id="refresh-text">Обновление…</span>
-                </div>
-
-                <!-- Stats -->
-                <div class="stats-grid">
-                    <div class="stat-card accent">
-                        <div class="stat-label">Пиров Online</div>
-                        <div class="stat-value" id="stat-peers">—</div>
-                        <div class="stat-sub" id="stat-peers-sub">
-                            из — всего
-                        </div>
-                        <div class="stat-icon">🖧</div>
-                    </div>
-                    <div class="stat-card green">
-                        <div class="stat-label">Uptime</div>
-                        <div class="stat-value" id="stat-uptime">—</div>
-                        <div class="stat-sub" id="stat-uptime-sub">
-                            Сервер работает
-                        </div>
-                        <div class="stat-icon">⏱</div>
-                    </div>
-                    <div class="stat-card yellow">
-                        <div class="stat-label">Отдано</div>
-                        <div class="stat-value" id="stat-out">—</div>
-                        <div class="stat-sub">Исходящий трафик</div>
-                        <div class="stat-icon">⬆</div>
-                    </div>
-                    <div class="stat-card purple">
-                        <div class="stat-label">Получено</div>
-                        <div class="stat-value" id="stat-in">—</div>
-                        <div class="stat-sub">Входящий трафик</div>
-                        <div class="stat-icon">⬇</div>
-                    </div>
-                </div>
-                <!-- Server Load -->
-                <div class="stats-grid">
-                    <div class="stat-card" style="border-left: 3px solid #f0883e;">
-                        <div class="stat-label">CPU</div>
-                        <div class="stat-value" id="stat-cpu">—</div>
-                        <div class="stat-icon">🖥</div>
-                    </div>
-                    <div class="stat-card" style="border-left: 3px solid #58a6ff;">
-                        <div class="stat-label">RAM</div>
-                        <div class="stat-value" id="stat-ram">—</div>
-                        <div class="stat-icon">🧮</div>
-                    </div>
-                    <div class="stat-card" style="border-left: 3px solid #bc8cff;">
-                        <div class="stat-label">Disk</div>
-                        <div class="stat-value" id="stat-disk">—</div>
-                        <div class="stat-icon">💾</div>
-                    </div>
-                </div>
-                </div>
-
-                <!-- Users Section -->
-                <div class="section-header">
-                    <div class="section-title">
-                        Пользователи
-                        <span class="count-badge" id="users-count">0</span>
-                    </div>
-                    <button class="btn btn-primary" id="add-user-btn">
-                        <svg
-                            width="13"
-                            height="13"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                        >
-                            <path
-                                d="M12 5v14M5 12h14"
+                                d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"
                                 stroke="currentColor"
-                                stroke-width="2.5"
+                                stroke-width="2"
                                 stroke-linecap="round"
+                                stroke-linejoin="round"
                             />
                         </svg>
-                        Добавить пользователя
+                        Выйти
                     </button>
                 </div>
+            </aside>
 
-                <!-- Users Table -->
-                <div class="table-wrap" id="table-wrap">
-                    <table id="users-table">
-                        <thead>
-                            <tr>
-                                <th>ID</th>
-                                <th>Имя</th>
-                                <th>IP-адрес</th>
-                                <th>Статус</th>
-                                <th>Получено</th>
-                                <th>Отдано</th>
-                                <th style="text-align: right">Действия</th>
-                            </tr>
-                        </thead>
-                        <tbody id="users-tbody">
-                            <tr>
-                                <td colspan="7">
-                                    <div class="empty-state">
-                                        <div class="empty-icon">◌</div>
-                                        <p>Загрузка пользователей…</p>
-                                    </div>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
+            <!-- Content -->
+            <main class="content">
+                <!-- ═══════════════ DASHBOARD ═══════════════ -->
+                <div class="page active" id="page-dashboard">
+                    <div class="stats-grid stats-4">
+                        <div class="stat-card accent">
+                            <div class="stat-label">Пиров Online</div>
+                            <div class="stat-value" id="stat-peers">—</div>
+                            <div class="stat-sub" id="stat-peers-sub">
+                                из — всего
+                            </div>
+                            <div class="stat-icon">🖧</div>
+                        </div>
+                        <div class="stat-card green">
+                            <div class="stat-label">Uptime</div>
+                            <div class="stat-value" id="stat-uptime">—</div>
+                            <div class="stat-sub">Сервер работает</div>
+                            <div class="stat-icon">⏱</div>
+                        </div>
+                        <div class="stat-card yellow">
+                            <div class="stat-label">Отдано</div>
+                            <div class="stat-value" id="stat-out">—</div>
+                            <div class="stat-sub">Исходящий трафик</div>
+                            <div class="stat-icon">⬆</div>
+                        </div>
+                        <div class="stat-card purple">
+                            <div class="stat-label">Получено</div>
+                            <div class="stat-value" id="stat-in">—</div>
+                            <div class="stat-sub">Входящий трафик</div>
+                            <div class="stat-icon">⬇</div>
+                        </div>
+                    </div>
+
+                    <div class="section-header">
+                        <div class="section-title">🖥 Server Load</div>
+                    </div>
+                    <div class="stats-grid stats-3">
+                        <div class="stat-card cpu">
+                            <div class="stat-label">CPU</div>
+                            <div class="stat-value" id="stat-cpu">—</div>
+                            <div class="stat-sub" id="stat-cpu-sub">
+                                Загрузка…
+                            </div>
+                            <div class="stat-icon">🖥</div>
+                        </div>
+                        <div class="stat-card ram">
+                            <div class="stat-label">RAM</div>
+                            <div class="stat-value" id="stat-ram">—</div>
+                            <div class="stat-sub" id="stat-ram-sub">
+                                Загрузка…
+                            </div>
+                            <div class="stat-icon">🧮</div>
+                        </div>
+                        <div class="stat-card disk">
+                            <div class="stat-label">Disk</div>
+                            <div class="stat-value" id="stat-disk">—</div>
+                            <div class="stat-sub" id="stat-disk-sub">
+                                Загрузка…
+                            </div>
+                            <div class="stat-icon">💾</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ═══════════════ USERS ═══════════════ -->
+                <div class="page" id="page-users">
+                    <div class="section-header">
+                        <div class="section-title">
+                            Пользователи
+                            <span class="count-badge" id="users-count">0</span>
+                        </div>
+                        <button class="btn btn-primary" id="add-user-btn">
+                            <svg
+                                width="13"
+                                height="13"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                            >
+                                <path
+                                    d="M12 5v14M5 12h14"
+                                    stroke="currentColor"
+                                    stroke-width="2.5"
+                                    stroke-linecap="round"
+                                />
+                            </svg>
+                            Добавить
+                        </button>
+                    </div>
+                    <div class="search-wrap">
+                        <input
+                            class="input"
+                            id="users-search"
+                            type="text"
+                            placeholder="🔍  Поиск по имени или IP…"
+                        />
+                    </div>
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Имя</th>
+                                    <th>IP-адрес</th>
+                                    <th>Статус</th>
+                                    <th>RX</th>
+                                    <th>TX</th>
+                                    <th style="text-align: right">Действия</th>
+                                </tr>
+                            </thead>
+                            <tbody id="users-tbody">
+                                <tr>
+                                    <td colspan="7">
+                                        <div class="empty-state">
+                                            <div class="empty-icon">◌</div>
+                                            <p>Загрузка пользователей…</p>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- ═══════════════ SETTINGS ═══════════════ -->
+                <div class="page" id="page-settings">
+                    <div class="section-header">
+                        <div class="section-title">⚙️ Настройки</div>
+                    </div>
+                    <div class="settings-card">
+                        <div class="settings-field">
+                            <label for="setting-token">Admin Token</label>
+                            <div class="field-row">
+                                <input
+                                    id="setting-token"
+                                    class="input"
+                                    type="password"
+                                    value=""
+                                    readonly
+                                />
+                                <button
+                                    class="btn btn-sm"
+                                    id="toggle-token-btn"
+                                    title="Показать/скрыть"
+                                >
+                                    👁
+                                </button>
+                            </div>
+                            <div class="field-hint">
+                                Токен администратора (только чтение)
+                            </div>
+                        </div>
+                        <div class="settings-field">
+                            <label for="setting-path">Panel Path</label>
+                            <input
+                                id="setting-path"
+                                class="input"
+                                type="text"
+                                value=""
+                                readonly
+                            />
+                            <div class="field-hint">
+                                Путь панели управления (только чтение)
+                            </div>
+                        </div>
+                        <div class="settings-field">
+                            <label for="setting-server">Server IP:Port</label>
+                            <input
+                                id="setting-server"
+                                class="input"
+                                type="text"
+                                value=""
+                                readonly
+                            />
+                            <div class="field-hint">
+                                Адрес сервера (только чтение)
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </main>
         </div>
@@ -1116,7 +1275,6 @@
                         />
                         <div class="field-error hidden" id="err-name"></div>
                     </div>
-
                     <div class="form-field">
                         <label for="field-short-id">Short ID</label>
                         <input
@@ -1130,7 +1288,6 @@
                         </div>
                         <div class="field-error hidden" id="err-short-id"></div>
                     </div>
-
                     <div class="form-field">
                         <label for="field-ip">Internal IP</label>
                         <input
@@ -1144,7 +1301,6 @@
                         </div>
                         <div class="field-error hidden" id="err-ip"></div>
                     </div>
-
                     <div class="form-field">
                         <label for="field-secret">Secret Key</label>
                         <div class="input-group">
@@ -1168,7 +1324,6 @@
                         </div>
                         <div class="field-error hidden" id="err-secret"></div>
                     </div>
-
                     <div
                         class="field-error hidden"
                         id="err-general"
@@ -1250,8 +1405,8 @@
         <!-- ────────────────────────────────────────────────────────── -->
         <script>
             /* ════════════════════════════════════════════════════════════
-   STATE
-   ════════════════════════════════════════════════════════════ */
+           STATE
+           ════════════════════════════════════════════════════════════ */
             const STATE = {
                 token: "",
                 users: [],
@@ -1259,16 +1414,13 @@
                 refreshInterval: 30_000,
                 uptimeSec: 0,
                 uptimeTimer: null,
+                currentPage: "dashboard",
             };
 
             /* ════════════════════════════════════════════════════════════
-   UTILITY HELPERS
-   ════════════════════════════════════════════════════════════ */
+           UTILITY HELPERS
+           ════════════════════════════════════════════════════════════ */
 
-            /**
-             * Format bytes into human-readable string.
-             * @param {number} b - bytes
-             */
             function fmtBytes(b) {
                 if (b == null || isNaN(b)) return "—";
                 if (b >= 1_073_741_824)
@@ -1278,10 +1430,6 @@
                 return b + " B";
             }
 
-            /**
-             * Format uptime seconds into "2ч 34м" or "45м 12с".
-             * @param {number} sec
-             */
             function fmtUptime(sec) {
                 if (sec == null || isNaN(sec)) return "—";
                 const s = Math.floor(sec);
@@ -1289,17 +1437,12 @@
                 const hrs = Math.floor((s % 86400) / 3600);
                 const min = Math.floor((s % 3600) / 60);
                 const rem = s % 60;
-
                 if (days > 0) return `${days}д ${hrs}ч ${min}м`;
                 if (hrs > 0) return `${hrs}ч ${min}м`;
                 if (min > 0) return `${min}м ${rem}с`;
                 return `${rem}с`;
             }
 
-            /**
-             * Format a unix timestamp as "X минут назад" / "только что".
-             * @param {number} unixTs
-             */
             function timeAgo(unixTs) {
                 if (!unixTs) return "никогда";
                 const diff = Math.floor(Date.now() / 1000) - unixTs;
@@ -1309,61 +1452,77 @@
                 return `${Math.floor(diff / 86400)}д назад`;
             }
 
-            /** Generate a cryptographically random hex string of given byte-length. */
-            function randomHex(bytes = 24) {
+            function randomHex(bytes) {
+                bytes = bytes || 24;
                 const arr = new Uint8Array(bytes);
                 crypto.getRandomValues(arr);
-                return Array.from(arr, (b) =>
-                    b.toString(16).padStart(2, "0"),
-                ).join("");
+                return Array.from(arr, function (b) {
+                    return b.toString(16).padStart(2, "0");
+                }).join("");
             }
 
-            /** Suggest next Short ID based on existing users. */
             function nextShortId(users) {
                 const nums = users
-                    .map((u) => parseInt(u.short_id, 10))
-                    .filter((n) => !isNaN(n));
-                const max = nums.length ? Math.max(...nums) : 0;
+                    .map(function (u) {
+                        return parseInt(u.short_id, 10);
+                    })
+                    .filter(function (n) {
+                        return !isNaN(n);
+                    });
+                const max = nums.length ? Math.max.apply(null, nums) : 0;
                 return String(max + 1).padStart(3, "0");
             }
 
-            /** Suggest next internal IP based on existing users. */
             function nextIP(users) {
                 const octets = users
-                    .map((u) => {
+                    .map(function (u) {
                         const parts = (u.ip || "").split(".");
                         return parseInt(parts[3], 10);
                     })
-                    .filter((n) => !isNaN(n) && n > 0);
-                const max = octets.length ? Math.max(...octets) : 1;
-                return `10.0.0.${max + 1}`;
+                    .filter(function (n) {
+                        return !isNaN(n) && n > 0;
+                    });
+                const max = octets.length ? Math.max.apply(null, octets) : 1;
+                return "10.0.0." + (max + 1);
+            }
+
+            function escHtml(str) {
+                return String(str)
+                    .replace(/&/g, "&amp;")
+                    .replace(/</g, "&lt;")
+                    .replace(/>/g, "&gt;")
+                    .replace(/"/g, "&quot;");
             }
 
             /* ════════════════════════════════════════════════════════════
-   API
-   ════════════════════════════════════════════════════════════ */
+           API
+           ════════════════════════════════════════════════════════════ */
 
-            // Базовый путь панели — прошивается сервером при загрузке HTML
             const API_BASE = "{{API_BASE}}";
 
-            async function apiFetch(path, options = {}) {
+            async function apiFetch(path, options) {
+                options = options || {};
                 const headers = {
                     "Content-Type": "application/json",
                     "X-Admin-Token": STATE.token,
-                    ...(options.headers || {}),
                 };
-                const res = await fetch(API_BASE + path, {
-                    ...options,
-                    headers,
-                });
+                if (options.headers) {
+                    Object.keys(options.headers).forEach(function (k) {
+                        headers[k] = options.headers[k];
+                    });
+                }
+                const res = await fetch(
+                    API_BASE + path,
+                    Object.assign({}, options, { headers: headers }),
+                );
                 if (res.status === 401)
                     throw new Error("Неверный токен. Войдите снова.");
                 if (!res.ok) {
-                    let msg = `HTTP ${res.status}`;
+                    let msg = "HTTP " + res.status;
                     try {
                         const d = await res.json();
                         msg = d.error || d.message || msg;
-                    } catch {}
+                    } catch (e) {}
                     throw new Error(msg);
                 }
                 const ct = res.headers.get("content-type") || "";
@@ -1373,6 +1532,10 @@
 
             async function fetchStats() {
                 return apiFetch("/api/stats");
+            }
+
+            async function fetchHealthDetail() {
+                return apiFetch("/api/health/detail");
             }
 
             async function fetchUsers() {
@@ -1388,50 +1551,89 @@
             }
 
             async function deleteUser(id) {
-                return apiFetch(`/api/users/${encodeURIComponent(id)}`, {
+                return apiFetch("/api/users/" + encodeURIComponent(id), {
                     method: "DELETE",
                 });
             }
 
             function configDownloadUrl(id) {
-                return `${API_BASE}/api/users/${encodeURIComponent(id)}/config?token=${encodeURIComponent(STATE.token)}`;
+                return (
+                    API_BASE +
+                    "/api/users/" +
+                    encodeURIComponent(id) +
+                    "/config?token=" +
+                    encodeURIComponent(STATE.token)
+                );
             }
 
             function qrUrl(id) {
-                return `${API_BASE}/api/users/${encodeURIComponent(id)}/qr?token=${encodeURIComponent(STATE.token)}`;
+                return (
+                    API_BASE +
+                    "/api/users/" +
+                    encodeURIComponent(id) +
+                    "/qr?token=" +
+                    encodeURIComponent(STATE.token)
+                );
             }
 
             /* ════════════════════════════════════════════════════════════
-   TOAST NOTIFICATIONS
-   ════════════════════════════════════════════════════════════ */
+           TOAST NOTIFICATIONS
+           ════════════════════════════════════════════════════════════ */
 
-            function showToast(message, type = "info", duration = 3500) {
+            function showToast(message, type, duration) {
+                type = type || "info";
+                duration = duration || 3500;
                 const container = document.getElementById("toast-container");
                 const toast = document.createElement("div");
-                toast.className = `toast ${type}`;
-
+                toast.className = "toast " + type;
                 const icons = { success: "✓", error: "✕", info: "ℹ" };
-                toast.innerHTML = `<span style="font-size:15px;">${icons[type] || "·"}</span><span>${message}</span>`;
-
+                toast.innerHTML =
+                    '<span style="font-size:15px;">' +
+                    (icons[type] || "·") +
+                    "</span><span>" +
+                    message +
+                    "</span>";
                 container.appendChild(toast);
-                setTimeout(() => {
+                setTimeout(function () {
                     toast.style.transition = "opacity 0.3s, transform 0.3s";
                     toast.style.opacity = "0";
                     toast.style.transform = "translateY(8px)";
-                    setTimeout(() => toast.remove(), 350);
+                    setTimeout(function () {
+                        toast.remove();
+                    }, 350);
                 }, duration);
             }
 
             /* ════════════════════════════════════════════════════════════
-   RENDER
-   ════════════════════════════════════════════════════════════ */
+           PAGE SWITCHING
+           ════════════════════════════════════════════════════════════ */
+
+            function switchPage(name) {
+                STATE.currentPage = name;
+                // Update nav items
+                document
+                    .querySelectorAll(".sidebar-nav .nav-item")
+                    .forEach(function (el) {
+                        el.classList.toggle("active", el.dataset.page === name);
+                    });
+                // Update pages
+                document
+                    .querySelectorAll(".content .page")
+                    .forEach(function (el) {
+                        el.classList.toggle("active", el.id === "page-" + name);
+                    });
+            }
+
+            /* ════════════════════════════════════════════════════════════
+           RENDER
+           ════════════════════════════════════════════════════════════ */
 
             function renderStats(stats) {
                 STATE.uptimeSec = stats.uptime_sec || 0;
                 document.getElementById("stat-peers").textContent =
                     stats.peers_online ?? "—";
                 document.getElementById("stat-peers-sub").textContent =
-                    `из ${stats.peers_total ?? "—"} всего`;
+                    "из " + (stats.peers_total ?? "—") + " всего";
                 document.getElementById("stat-uptime").textContent = fmtUptime(
                     STATE.uptimeSec,
                 );
@@ -1441,30 +1643,99 @@
                 document.getElementById("stat-in").textContent = fmtBytes(
                     stats.total_in,
                 );
-                document.getElementById("stat-cpu").textContent = (stats.cpu_pct ?? "—") + "%";
-                document.getElementById("stat-ram").textContent = (stats.mem_pct ?? "—") + "%";
-                document.getElementById("stat-disk").textContent = (stats.disk_pct ?? "—") + "%";
+                document.getElementById("stat-cpu").textContent =
+                    (stats.cpu_pct ?? "—") + "%";
+                document.getElementById("stat-ram").textContent =
+                    (stats.mem_pct ?? "—") + "%";
+                document.getElementById("stat-disk").textContent =
+                    (stats.disk_pct ?? "—") + "%";
+                // Reset subs to default
+                document.getElementById("stat-cpu-sub").textContent =
+                    "Загрузка…";
+                document.getElementById("stat-ram-sub").textContent =
+                    "Загрузка…";
+                document.getElementById("stat-disk-sub").textContent =
+                    "Загрузка…";
+            }
+
+            function renderHealthDetail(detail) {
+                if (!detail) return;
+                if (detail.cpu_cores != null) {
+                    document.getElementById("stat-cpu-sub").textContent =
+                        detail.cpu_cores +
+                        " " +
+                        plural(detail.cpu_cores, "ядро", "ядра", "ядер");
+                }
+                if (detail.mem_used_gb != null && detail.mem_total_gb != null) {
+                    document.getElementById("stat-ram-sub").textContent =
+                        detail.mem_used_gb.toFixed(1) +
+                        " / " +
+                        detail.mem_total_gb.toFixed(1) +
+                        " GB";
+                }
+                if (
+                    detail.disk_used_gb != null &&
+                    detail.disk_total_gb != null
+                ) {
+                    document.getElementById("stat-disk-sub").textContent =
+                        detail.disk_used_gb.toFixed(0) +
+                        " / " +
+                        detail.disk_total_gb.toFixed(0) +
+                        " GB";
+                }
+            }
+
+            function plural(n, one, few, many) {
+                const m = Math.abs(n) % 100;
+                const m10 = m % 10;
+                if (m > 10 && m < 20) return many;
+                if (m10 > 1 && m10 < 5) return few;
+                if (m10 === 1) return one;
+                return many;
             }
 
             function renderUsers(users) {
                 STATE.users = users;
                 document.getElementById("users-count").textContent =
                     users.length;
+                applyUserFilter();
+            }
 
+            function applyUserFilter() {
+                const query = (
+                    document.getElementById("users-search").value || ""
+                )
+                    .toLowerCase()
+                    .trim();
+                const users = STATE.users;
                 const tbody = document.getElementById("users-tbody");
-                if (!users.length) {
-                    tbody.innerHTML = `
-      <tr><td colspan="7">
-        <div class="empty-state">
-          <div class="empty-icon">👥</div>
-          <p>Нет пользователей. Добавьте первого!</p>
-        </div>
-      </td></tr>`;
+
+                const filtered = query
+                    ? users.filter(function (u) {
+                          return (
+                              (u.name || "").toLowerCase().includes(query) ||
+                              (u.ip || "").toLowerCase().includes(query) ||
+                              String(u.short_id).includes(query)
+                          );
+                      })
+                    : users;
+
+                if (!filtered.length) {
+                    tbody.innerHTML =
+                        '<tr><td colspan="7"><div class="empty-state"><div class="empty-icon">' +
+                        (query ? "🔍" : "👥") +
+                        "</div><p>" +
+                        (query
+                            ? "Ничего не найдено по запросу «" +
+                              escHtml(query) +
+                              "»"
+                            : "Нет пользователей. Добавьте первого!") +
+                        "</p></div></td></tr>";
                     return;
                 }
 
-                tbody.innerHTML = users
-                    .map((u) => {
+                tbody.innerHTML = filtered
+                    .map(function (u) {
                         const online = !!u.online;
                         const statusClass = online ? "online" : "";
                         const statusLabel = online
@@ -1472,65 +1743,66 @@
                             : u.last_seen
                               ? timeAgo(u.last_seen)
                               : "Offline";
-
-                        return `
-      <tr data-id="${escHtml(String(u.short_id))}">
-        <td><span class="id-badge">${escHtml(String(u.short_id))}</span></td>
-        <td style="font-weight:500;">${escHtml(u.name || "—")}</td>
-        <td><code>${escHtml(u.ip || "—")}</code></td>
-        <td>
-          <div class="peer-status ${statusClass}">
-            <span class="peer-dot ${statusClass}"></span>
-            <span class="status-text">${statusLabel}</span>
-          </div>
-        </td>
-        <td class="traffic-val">${fmtBytes(u.byte_in)}</td>
-        <td class="traffic-val">${fmtBytes(u.byte_out)}</td>
-        <td>
-          <div class="actions-cell">
-            <button class="btn btn-ghost btn-sm"
-                    title="Скачать config.json"
-                    data-action="download"
-                    data-id="${escHtml(String(u.short_id))}">⬇</button>
-            <button class="btn btn-ghost btn-sm"
-                    title="Показать QR-код"
-                    data-action="qr"
-                    data-id="${escHtml(String(u.short_id))}"
-                    data-name="${escHtml(u.name || "")}">📱</button>
-            <button class="btn btn-ghost btn-sm btn-danger"
-                    title="Удалить пользователя"
-                    data-action="delete"
-                    data-id="${escHtml(String(u.short_id))}"
-                    data-name="${escHtml(u.name || "")}">🗑</button>
-          </div>
-        </td>
-      </tr>`;
+                        return (
+                            '<tr data-id="' +
+                            escHtml(String(u.short_id)) +
+                            '">' +
+                            '<td><span class="id-badge">' +
+                            escHtml(String(u.short_id)) +
+                            "</span></td>" +
+                            '<td style="font-weight:500;">' +
+                            escHtml(u.name || "—") +
+                            "</td>" +
+                            "<td><code>" +
+                            escHtml(u.ip || "—") +
+                            "</code></td>" +
+                            '<td><div class="peer-status ' +
+                            statusClass +
+                            '"><span class="peer-dot ' +
+                            statusClass +
+                            '"></span><span class="status-text">' +
+                            statusLabel +
+                            "</span></div></td>" +
+                            '<td class="traffic-val">' +
+                            fmtBytes(u.byte_in) +
+                            "</td>" +
+                            '<td class="traffic-val">' +
+                            fmtBytes(u.byte_out) +
+                            "</td>" +
+                            '<td><div class="actions-cell">' +
+                            '<button class="btn btn-ghost btn-sm" title="Скачать config.json" data-action="download" data-id="' +
+                            escHtml(String(u.short_id)) +
+                            '">⬇</button>' +
+                            '<button class="btn btn-ghost btn-sm" title="Показать QR-код" data-action="qr" data-id="' +
+                            escHtml(String(u.short_id)) +
+                            '" data-name="' +
+                            escHtml(u.name || "") +
+                            '">📱</button>' +
+                            '<button class="btn btn-ghost btn-sm btn-danger" title="Удалить пользователя" data-action="delete" data-id="' +
+                            escHtml(String(u.short_id)) +
+                            '" data-name="' +
+                            escHtml(u.name || "") +
+                            '">🗑</button>' +
+                            "</div></td></tr>"
+                        );
                     })
                     .join("");
             }
 
-            function escHtml(str) {
-                return String(str)
-                    .replace(/&/g, "&amp;")
-                    .replace(/</g, "&lt;")
-                    .replace(/>/g, "&gt;")
-                    .replace(/"/g, "&quot;");
-            }
-
             /* ════════════════════════════════════════════════════════════
-   DATA REFRESH
-   ════════════════════════════════════════════════════════════ */
+           DATA REFRESH
+           ════════════════════════════════════════════════════════════ */
 
             let _refreshing = false;
 
-            async function refreshAll(silent = false) {
+            async function refreshAll(silent) {
                 if (_refreshing) return;
                 _refreshing = true;
 
                 const spinner = document.getElementById("refresh-spinner");
                 const txt = document.getElementById("refresh-text");
-                const dot = document.getElementById("header-status-dot");
-                const hdrTxt = document.getElementById("header-status-text");
+                const dot = document.getElementById("sidebar-status-dot");
+                const hdrTxt = document.getElementById("sidebar-status-text");
 
                 spinner.classList.add("spinning");
                 if (!silent) txt.textContent = "Обновление…";
@@ -1543,25 +1815,39 @@
                     renderStats(stats);
                     renderUsers(users);
 
+                    // Try to fetch health detail for richer server load display
+                    fetchHealthDetail()
+                        .then(function (detail) {
+                            renderHealthDetail(detail);
+                        })
+                        .catch(function () {
+                            // Fallback: keep default "Загрузка…" labels from renderStats
+                        });
+
                     dot.style.background = "var(--green)";
-                    dot.style.boxShadow = "0 0 6px var(--green)";
+                    dot.style.boxShadow = "0 0 5px var(--green)";
                     hdrTxt.textContent = "Сервер онлайн";
 
                     const now = new Date();
-                    txt.textContent = `Обновлено в ${now.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit", second: "2-digit" })} · авто через 30с`;
+                    txt.textContent =
+                        "Обновлено в " +
+                        now.toLocaleTimeString("ru-RU", {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                            second: "2-digit",
+                        }) +
+                        " · авто через 30с";
                 } catch (err) {
                     dot.style.background = "var(--red)";
-                    dot.style.boxShadow = "0 0 6px var(--red)";
+                    dot.style.boxShadow = "0 0 5px var(--red)";
                     hdrTxt.textContent = "Ошибка соединения";
                     txt.textContent = "Не удалось обновить данные";
                     if (!silent) showToast(err.message, "error");
-
                     if (
                         err.message.includes("токен") ||
                         err.message.includes("401")
-                    ) {
+                    )
                         logout();
-                    }
                 } finally {
                     spinner.classList.remove("spinning");
                     _refreshing = false;
@@ -1570,15 +1856,14 @@
 
             function scheduleRefresh() {
                 clearInterval(STATE.refreshTimer);
-                STATE.refreshTimer = setInterval(
-                    () => refreshAll(true),
-                    STATE.refreshInterval,
-                );
+                STATE.refreshTimer = setInterval(function () {
+                    refreshAll(true);
+                }, STATE.refreshInterval);
             }
 
             /* ════════════════════════════════════════════════════════════
-   AUTH
-   ════════════════════════════════════════════════════════════ */
+           AUTH
+           ════════════════════════════════════════════════════════════ */
 
             function login(token) {
                 STATE.token = token.trim();
@@ -1587,12 +1872,19 @@
                 document.getElementById("login-screen").classList.add("hidden");
                 document.getElementById("app").classList.remove("hidden");
 
+                // Populate settings fields
+                document.getElementById("setting-token").value = STATE.token;
+                document.getElementById("setting-path").value = API_BASE;
+                document.getElementById("setting-server").value =
+                    window.location.hostname +
+                    (window.location.port ? ":" + window.location.port : "");
+
+                switchPage("dashboard");
                 refreshAll();
                 scheduleRefresh();
 
-                // Тикер аптайма — обновление каждую секунду
                 clearInterval(STATE.uptimeTimer);
-                STATE.uptimeTimer = setInterval(() => {
+                STATE.uptimeTimer = setInterval(function () {
                     STATE.uptimeSec++;
                     document.getElementById("stat-uptime").textContent =
                         fmtUptime(STATE.uptimeSec);
@@ -1640,7 +1932,7 @@
 
                 try {
                     STATE.token = token;
-                    await fetchStats(); // validation request
+                    await fetchStats();
                     login(token);
                     setLoginError("");
                 } catch (err) {
@@ -1649,47 +1941,39 @@
                     tokenInput.classList.add("error");
                 } finally {
                     btn.disabled = false;
-                    btn.innerHTML = `
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-        <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3"
-              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>
-      Войти`;
+                    btn.innerHTML =
+                        '<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Войти';
                 }
             }
 
             /* ════════════════════════════════════════════════════════════
-   USER ACTIONS
-   ════════════════════════════════════════════════════════════ */
+           USER ACTIONS
+           ════════════════════════════════════════════════════════════ */
 
             function downloadConfig(id) {
                 const url = configDownloadUrl(id);
                 const a = document.createElement("a");
                 a.href = url;
-                a.download = `config-${id}.json`;
+                a.download = "config-" + id + ".json";
                 document.body.appendChild(a);
                 a.click();
                 a.remove();
-                showToast(`Скачиваю конфиг для ${id}…`, "info");
+                showToast("Скачиваю конфиг для " + id + "…", "info");
             }
 
             function openQr(id, name) {
                 document.getElementById("qr-modal-title").textContent =
-                    `QR-код — ${name || id}`;
+                    "QR-код — " + (name || id);
                 document.getElementById("qr-user-name").textContent =
                     name || id;
-
                 const img = document.getElementById("qr-img");
                 img.src = "";
                 img.alt = "Загрузка QR…";
-
                 document.getElementById("modal-qr").classList.remove("hidden");
-
-                // set src after modal shown so browser starts loading
-                setTimeout(() => {
+                setTimeout(function () {
                     img.src = qrUrl(id);
                 }, 50);
-                img.onerror = () => {
+                img.onerror = function () {
                     img.alt = "Не удалось загрузить QR-код";
                 };
             }
@@ -1700,44 +1984,42 @@
             }
 
             async function confirmDelete(id, name) {
-                const label = name ? `"${name}" (${id})` : id;
+                const label = name ? '"' + name + '" (' + id + ")" : id;
                 if (
                     !confirm(
-                        `Удалить пользователя ${label}?\nДействие необратимо.`,
+                        "Удалить пользователя " +
+                            label +
+                            "?\nДействие необратимо.",
                     )
                 )
                     return;
-
                 try {
                     await deleteUser(id);
-                    showToast(`Пользователь ${label} удалён.`, "success");
+                    showToast("Пользователь " + label + " удалён.", "success");
                     await refreshAll(true);
                 } catch (err) {
-                    showToast(`Ошибка удаления: ${err.message}`, "error");
+                    showToast("Ошибка удаления: " + err.message, "error");
                 }
             }
 
             /* ════════════════════════════════════════════════════════════
-   ADD USER MODAL
-   ════════════════════════════════════════════════════════════ */
+           ADD USER MODAL
+           ════════════════════════════════════════════════════════════ */
 
             function openAddModal() {
-                // Autofill suggestions
                 document.getElementById("field-name").value = "";
                 document.getElementById("field-short-id").value = nextShortId(
                     STATE.users,
                 );
                 document.getElementById("field-ip").value = nextIP(STATE.users);
                 document.getElementById("field-secret").value = randomHex(24);
-
-                // Clear errors
                 [
                     "err-name",
                     "err-short-id",
                     "err-ip",
                     "err-secret",
                     "err-general",
-                ].forEach((id) => {
+                ].forEach(function (id) {
                     const el = document.getElementById(id);
                     el.textContent = "";
                     el.classList.add("hidden");
@@ -1747,15 +2029,13 @@
                     "field-short-id",
                     "field-ip",
                     "field-secret",
-                ].forEach((id) => {
+                ].forEach(function (id) {
                     document.getElementById(id).classList.remove("error");
                 });
-
                 document.getElementById("modal-add").classList.remove("hidden");
-                setTimeout(
-                    () => document.getElementById("field-name").focus(),
-                    100,
-                );
+                setTimeout(function () {
+                    document.getElementById("field-name").focus();
+                }, 100);
             }
 
             function closeAddModal() {
@@ -1763,15 +2043,13 @@
             }
 
             function showFieldError(fieldId, errId, msg) {
-                const field = document.getElementById(fieldId);
+                document.getElementById(fieldId).classList.add("error");
                 const err = document.getElementById(errId);
-                field.classList.add("error");
                 err.textContent = msg;
                 err.classList.remove("hidden");
             }
 
             async function submitAddUser() {
-                // Collect
                 const name = document.getElementById("field-name").value.trim();
                 const shortId = document
                     .getElementById("field-short-id")
@@ -1781,14 +2059,13 @@
                     .getElementById("field-secret")
                     .value.trim();
 
-                // Clear previous errors
                 [
                     "err-name",
                     "err-short-id",
                     "err-ip",
                     "err-secret",
                     "err-general",
-                ].forEach((id) => {
+                ].forEach(function (id) {
                     const el = document.getElementById(id);
                     el.textContent = "";
                     el.classList.add("hidden");
@@ -1798,12 +2075,11 @@
                     "field-short-id",
                     "field-ip",
                     "field-secret",
-                ].forEach((id) => {
+                ].forEach(function (id) {
                     document.getElementById(id).classList.remove("error");
                 });
 
                 let hasError = false;
-
                 if (!name) {
                     showFieldError(
                         "field-name",
@@ -1820,7 +2096,9 @@
                     );
                     hasError = true;
                 } else if (
-                    STATE.users.some((u) => String(u.short_id) === shortId)
+                    STATE.users.some(function (u) {
+                        return String(u.short_id) === shortId;
+                    })
                 ) {
                     showFieldError(
                         "field-short-id",
@@ -1839,7 +2117,11 @@
                         "Некорректный IP-адрес.",
                     );
                     hasError = true;
-                } else if (STATE.users.some((u) => u.ip === ip)) {
+                } else if (
+                    STATE.users.some(function (u) {
+                        return u.ip === ip;
+                    })
+                ) {
                     showFieldError(
                         "field-ip",
                         "err-ip",
@@ -1855,7 +2137,6 @@
                     );
                     hasError = true;
                 }
-
                 if (hasError) return;
 
                 const submitBtn = document.getElementById("add-submit-btn");
@@ -1865,47 +2146,38 @@
                 try {
                     await createUser({
                         short_id: parseInt(shortId, 10),
-                        name,
+                        name: name,
                         secret_key: secret,
-                        ip,
+                        ip: ip,
                     });
                     closeAddModal();
-                    showToast(`Пользователь "${name}" создан!`, "success");
+                    showToast('Пользователь "' + name + '" создан!', "success");
                     await refreshAll(true);
                 } catch (err) {
                     const errEl = document.getElementById("err-general");
-                    errEl.textContent = `Ошибка: ${err.message}`;
+                    errEl.textContent = "Ошибка: " + err.message;
                     errEl.classList.remove("hidden");
                 } finally {
                     submitBtn.disabled = false;
-                    submitBtn.innerHTML = `
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
-        <path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
-      </svg>
-      Создать`;
+                    submitBtn.innerHTML =
+                        '<svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg> Создать';
                 }
             }
 
             /* ════════════════════════════════════════════════════════════
-   CLOSE ON OVERLAY CLICK
-   ════════════════════════════════════════════════════════════ */
+           EVENT WIRING
+           ════════════════════════════════════════════════════════════ */
 
+            // Sidebar navigation
             document
-                .getElementById("modal-add")
-                .addEventListener("click", (e) => {
-                    if (e.target === e.currentTarget) closeAddModal();
-                });
-            document
-                .getElementById("modal-qr")
-                .addEventListener("click", (e) => {
-                    if (e.target === e.currentTarget) closeQr();
+                .querySelectorAll(".sidebar-nav .nav-item")
+                .forEach(function (el) {
+                    el.addEventListener("click", function () {
+                        switchPage(el.dataset.page);
+                    });
                 });
 
-            /* ════════════════════════════════════════════════════════════
-   EVENT WIRING
-   ════════════════════════════════════════════════════════════ */
-
-            // Делегирование кликов по кнопкам таблицы пользователей
+            // User table event delegation
             document
                 .getElementById("users-tbody")
                 .addEventListener("click", function (e) {
@@ -1919,13 +2191,34 @@
                     if (action === "delete") confirmDelete(id, name);
                 });
 
+            // Users search filter
+            document
+                .getElementById("users-search")
+                .addEventListener("input", function () {
+                    applyUserFilter();
+                });
+
+            // Settings: toggle token visibility
+            document
+                .getElementById("toggle-token-btn")
+                .addEventListener("click", function () {
+                    const inp = document.getElementById("setting-token");
+                    if (inp.type === "password") {
+                        inp.type = "text";
+                        this.textContent = "🙈";
+                    } else {
+                        inp.type = "password";
+                        this.textContent = "👁";
+                    }
+                });
+
             // Login
             document
                 .getElementById("login-btn")
                 .addEventListener("click", attemptLogin);
             document
                 .getElementById("token-input")
-                .addEventListener("keydown", (e) => {
+                .addEventListener("keydown", function (e) {
                     if (e.key === "Enter") attemptLogin();
                     document
                         .getElementById("token-input")
@@ -1955,7 +2248,7 @@
             // Generate secret
             document
                 .getElementById("gen-secret-btn")
-                .addEventListener("click", () => {
+                .addEventListener("click", function () {
                     document.getElementById("field-secret").value =
                         randomHex(24);
                     document
@@ -1974,20 +2267,34 @@
                 .getElementById("qr-close-btn")
                 .addEventListener("click", closeQr);
 
-            // Enter in add-user form fields
+            // Enter in add-user form fields submits
             [
                 "field-name",
                 "field-short-id",
                 "field-ip",
                 "field-secret",
-            ].forEach((id) => {
-                document.getElementById(id).addEventListener("keydown", (e) => {
-                    if (e.key === "Enter") submitAddUser();
-                });
+            ].forEach(function (id) {
+                document
+                    .getElementById(id)
+                    .addEventListener("keydown", function (e) {
+                        if (e.key === "Enter") submitAddUser();
+                    });
             });
 
+            // Close modals on overlay click
+            document
+                .getElementById("modal-add")
+                .addEventListener("click", function (e) {
+                    if (e.target === e.currentTarget) closeAddModal();
+                });
+            document
+                .getElementById("modal-qr")
+                .addEventListener("click", function (e) {
+                    if (e.target === e.currentTarget) closeQr();
+                });
+
             // Escape closes modals
-            document.addEventListener("keydown", (e) => {
+            document.addEventListener("keydown", function (e) {
                 if (e.key === "Escape") {
                     closeAddModal();
                     closeQr();
@@ -1995,18 +2302,19 @@
             });
 
             /* ════════════════════════════════════════════════════════════
-   INIT — AUTO-LOGIN FROM localStorage
-   ════════════════════════════════════════════════════════════ */
+           INIT — AUTO-LOGIN FROM localStorage
+           ════════════════════════════════════════════════════════════ */
 
             (function init() {
                 const saved = localStorage.getItem("hv_admin_token");
                 if (saved) {
                     document.getElementById("token-input").value = saved;
                     STATE.token = saved;
-                    // Try silent auto-login
                     fetchStats()
-                        .then(() => login(saved))
-                        .catch(() => {
+                        .then(function () {
+                            login(saved);
+                        })
+                        .catch(function () {
                             STATE.token = "";
                             localStorage.removeItem("hv_admin_token");
                             document.getElementById("token-input").value = "";

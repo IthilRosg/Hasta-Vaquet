@@ -7,6 +7,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"runtime"
 	"syscall"
 	"time"
 )
@@ -85,5 +86,38 @@ func getSystemHealth() (cpuPct int, memPct int, diskPct int) {
 		}
 	}
 
+	return
+}
+
+func getSystemHealthDetail() (cpuCores int, memTotalGB float64, memUsedGB float64, diskTotalGB float64, diskUsedGB float64) {
+	cpuCores = runtime.NumCPU()
+
+	// RAM detail
+	f, err := os.Open("/proc/meminfo")
+	if err == nil {
+		defer f.Close()
+		var total, available uint64
+		sc := bufio.NewScanner(f)
+		for sc.Scan() {
+			fields := strings.Fields(sc.Text())
+			if len(fields) < 2 { continue }
+			v, _ := strconv.ParseUint(fields[1], 10, 64)
+			switch fields[0] {
+			case "MemTotal:": total = v
+			case "MemAvailable:": available = v
+			}
+		}
+		memTotalGB = float64(total) / 1024 / 1024
+		memUsedGB = float64(total-available) / 1024 / 1024
+	}
+
+	// Disk detail
+	var stat syscall.Statfs_t
+	if err := syscall.Statfs(serverCfg.LogFile, &stat); err == nil {
+		totalBytes := stat.Blocks * uint64(stat.Bsize)
+		freeBytes := stat.Bfree * uint64(stat.Bsize)
+		diskTotalGB = float64(totalBytes) / 1024 / 1024 / 1024
+		diskUsedGB = float64(totalBytes-freeBytes) / 1024 / 1024 / 1024
+	}
 	return
 }
