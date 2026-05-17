@@ -6,5 +6,10 @@
 - **Linux:**
     - Включить IP Forwarding: `sysctl -w net.ipv4.ip_forward=1`.
     - NAT: `iptables -t nat -A POSTROUTING -s 10.0.0.0/24 -o ens3 -j MASQUERADE`.
-- **Android (Coming Soon):**
-    - Подготовка к использованию `VpnService` через gomobile.
+- **Android (Phase 8 — ✅ РАБОТАЕТ):
+    - VpnService через gomobile bind.
+    - TUN fd → os.NewFile(uintptr(fd), "tun") → os.File.Read/Write.
+    - UDP: net.Dialer.Control → Protector.protect(fd) → VpnService.protect().
+    - IPv6 Blackhole: builder.addRoute("::", 0).
+    - Smart Bypass: builder.addDisallowedApplication(pkg).
+    - Правило рекурсии: protect() UDP до сервера ОБЯЗАТЕЛЬНО.

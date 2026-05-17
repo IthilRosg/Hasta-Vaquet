@@ -38,7 +38,7 @@
 - [ ] **Редактирование пользователя.** PUT /api/users/{id} — изменение имени,
   secret_key (ротация), IP, ShortID. Аналог POST, но без удаления сессии.
 
-- [ ] **Phase 8: Android Client + Mobile Ecosystem. (ТЕКУЩАЯ СТАДИЯ)**
+- [x] **Phase 8: Android Client + Mobile Ecosystem. (ТЕКУЩАЯ СТАДИЯ)**
   Рефакторинг core/ под build tags: vpn_interface.go (общая логика), vpn_windows.go
   (текущий Wintun-код), vpn_android.go (VpnService). Gomobile bind с interface-based API
   (gomobile не поддерживает func-callbacks — нужны интерфейсы). Kotlin + VpnService +
