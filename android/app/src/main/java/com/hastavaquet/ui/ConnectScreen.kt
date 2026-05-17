@@ -323,7 +323,7 @@ private fun StatsGrid(connected: Boolean) {
         Spacer(Modifier.height(12.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             StatCard("NETWORK", "Ping: ${stats.value.ping}ms\nLoss: ${stats.value.loss}%", Modifier.weight(1f))
-            StatCard("UPTIME", "00:00", Modifier.weight(1f))
+            StatCard("UPTIME", uptime, Modifier.weight(1f))
         }
     }
 }
