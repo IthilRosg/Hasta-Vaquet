@@ -61,6 +61,7 @@ func withAuth(next http.HandlerFunc) http.HandlerFunc {
 			token = r.URL.Query().Get("token")
 		}
 		if token != serverCfg.AdminToken {
+		logger.Printf("[WEB] 401 %s %s from %s", r.Method, r.URL.Path, r.RemoteAddr)
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusUnauthorized)
 			w.Write([]byte(`{"error":"unauthorized"}`))
@@ -68,6 +69,7 @@ func withAuth(next http.HandlerFunc) http.HandlerFunc {
 		}
 		// Content-Type по умолчанию JSON, кроме /qr и /config — они перезапишут сами
 		w.Header().Set("Content-Type", "application/json")
+		logger.Printf("[WEB] %s %s from %s", r.Method, r.URL.Path, r.RemoteAddr)
 		next(w, r)
 	}
 }
