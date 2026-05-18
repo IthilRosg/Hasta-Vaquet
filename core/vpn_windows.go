@@ -87,10 +87,21 @@ func (p *vpnPlatform) readerLoop(v *VPN) {
 			return
 		default:
 		}
+		v.conn.SetReadDeadline(time.Now().Add(60 * time.Second))
 		n, err := v.conn.Read(buf)
 		if err != nil {
+			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+				fails := v.readFails.Add(1)
+				if fails >= 3 {
+					v.onConnectionLost()
+					return
+				}
+			} else {
+				v.readFails.Add(1)
+			}
 			continue
 		}
+		v.readFails.Store(0)
 		if n < 4+2+12 {
 			continue
 		}
@@ -125,6 +136,20 @@ func (p *vpnPlatform) readerLoop(v *VPN) {
 	}
 }
 
+func (p *vpnPlatform) activateKillSwitch(v *VPN) {
+	c := exec.Command("route", "delete", "0.0.0.0", "mask", "0.0.0.0")
+	c.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	c.Run()
+}
+
+func (p *vpnPlatform) deactivateKillSwitch(v *VPN) {
+	index := getInterfaceIndex("HastaVaquet")
+	c := exec.Command("route", "add", "0.0.0.0", "mask", "0.0.0.0",
+		v.config.InternalIP, "metric", "1", "if", index)
+	c.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	c.Run()
+}
+
 func (p *vpnPlatform) writerLoop(v *VPN) {
 	for {
 		select {
@@ -153,10 +178,12 @@ func (p *vpnPlatform) writerLoop(v *VPN) {
 
 var plat vpnPlatform
 
-func platformOpenTunnel(v *VPN) error { return plat.openTunnel(v) }
-func platformCloseTunnel(v *VPN)      { plat.closeTunnel(v) }
-func platformReaderLoop(v *VPN)       { plat.readerLoop(v) }
-func platformWriterLoop(v *VPN)       { plat.writerLoop(v) }
+func platformOpenTunnel(v *VPN) error         { return plat.openTunnel(v) }
+func platformCloseTunnel(v *VPN)              { plat.closeTunnel(v) }
+func platformReaderLoop(v *VPN)               { plat.readerLoop(v) }
+func platformWriterLoop(v *VPN)               { plat.writerLoop(v) }
+func platformActivateKillSwitch(v *VPN)       { plat.activateKillSwitch(v) }
+func platformDeactivateKillSwitch(v *VPN)     { plat.deactivateKillSwitch(v) }
 
 func getInterfaceIndex(name string) string {
 	cmd := exec.Command("powershell", "-Command",

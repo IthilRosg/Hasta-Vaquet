@@ -31,11 +31,13 @@ type VPN struct {
 	sessionTotalRx atomic.Uint64
 	listener       StatusListener
 	mu             sync.Mutex
-	lastAliveMs    atomic.Int64 // unix milli of last keep-alive sent
-	echoReceived   atomic.Bool  // true if at least one echo came back
-	echoRtt        atomic.Int64 // latest RTT in ms
-	echoSent       atomic.Int64 // keep-alives sent
-	echoAcked      atomic.Int64 // echos received
+	lastAliveMs    atomic.Int64  // unix milli of last keep-alive sent
+	echoReceived   atomic.Bool   // true if at least one echo came back
+	echoRtt        atomic.Int64  // latest RTT in ms
+	echoSent       atomic.Int64  // keep-alives sent
+	echoAcked      atomic.Int64  // echos received
+	reconnecting   atomic.Bool   // true during reconnect loop
+	readFails      atomic.Int64  // consecutive UDP read failures
 }
 
 func New(cfg Config, listener StatusListener) *VPN {
@@ -77,6 +79,7 @@ func (v *VPN) Stop() {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 
+	v.reconnecting.Store(false)
 	if !v.running.Load() {
 		return
 	}
@@ -84,6 +87,7 @@ func (v *VPN) Stop() {
 	close(v.stopCh)
 
 	v.platformCloseTunnel()
+	v.platformDeactivateKillSwitch()
 
 	if v.conn != nil {
 		v.conn.Close()
@@ -105,10 +109,72 @@ func (v *VPN) callback(status string, txSpeed, rxSpeed int64, totalTx, totalRx u
 
 // ─── Платформозависимые хуки ─────────────────────────────────────
 
-func (v *VPN) platformOpenTunnel() error { return platformOpenTunnel(v) }
-func (v *VPN) platformCloseTunnel()      { platformCloseTunnel(v) }
-func (v *VPN) platformReaderLoop()       { platformReaderLoop(v) }
-func (v *VPN) platformWriterLoop()       { platformWriterLoop(v) }
+func (v *VPN) platformOpenTunnel() error         { return platformOpenTunnel(v) }
+func (v *VPN) platformCloseTunnel()              { platformCloseTunnel(v) }
+func (v *VPN) platformReaderLoop()               { platformReaderLoop(v) }
+func (v *VPN) platformWriterLoop()               { platformWriterLoop(v) }
+func (v *VPN) platformActivateKillSwitch()       { platformActivateKillSwitch(v) }
+func (v *VPN) platformDeactivateKillSwitch()     { platformDeactivateKillSwitch(v) }
+
+// ─── Reconnect ────────────────────────────────────────────────────
+
+func (v *VPN) onConnectionLost() {
+	if !v.running.Load() || v.reconnecting.Swap(true) {
+		return
+	}
+	v.running.Store(false)
+	close(v.stopCh)
+	v.platformCloseTunnel()
+	v.platformActivateKillSwitch()
+
+	if v.conn != nil {
+		v.conn.Close()
+		v.conn = nil
+	}
+
+	v.callback("disconnected", 0, 0, 0, 0, 0, 0)
+	go v.reconnectLoop()
+}
+
+func (v *VPN) reconnectLoop() {
+	backoff := 1 * time.Second
+	maxBackoff := 60 * time.Second
+
+	for {
+		select {
+		case <-time.After(backoff):
+		}
+
+		// Stop() was called during reconnect
+		if !v.reconnecting.Load() {
+			return
+		}
+
+		v.callback("reconnecting", 0, 0, 0, 0, 0, 0)
+
+		v.stopCh = make(chan struct{})
+		if err := v.platformOpenTunnel(); err != nil {
+			backoff *= 2
+			if backoff > maxBackoff {
+				backoff = maxBackoff
+			}
+			continue
+		}
+
+		v.platformDeactivateKillSwitch()
+		v.readFails.Store(0)
+		v.running.Store(true)
+		v.reconnecting.Store(false)
+
+		v.callback("connected", 0, 0, 0, 0, 0, 0)
+
+		go v.keepAliveLoop()
+		go v.platformReaderLoop()
+		go v.platformWriterLoop()
+		go v.statsLoop()
+		return
+	}
+}
 
 // ─── Общие циклы ─────────────────────────────────────────────────
 

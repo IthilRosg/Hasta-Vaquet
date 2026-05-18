@@ -75,8 +75,14 @@ func (p *vpnPlatform) readerLoop(v *VPN) {
 		n, err := v.conn.Read(buf)
 		if err != nil {
 			log.Printf("[ANDROID] readerLoop: UDP read error: %v", err)
+			fails := v.readFails.Add(1)
+			if fails >= 5 {
+				v.onConnectionLost()
+				return
+			}
 			continue
 		}
+		v.readFails.Store(0)
 		if n < 4+2+12 {
 			continue
 		}
@@ -166,7 +172,12 @@ func (p *vpnPlatform) writerLoop(v *VPN) {
 
 var plat vpnPlatform
 
-func platformOpenTunnel(v *VPN) error { return plat.openTunnel(v) }
-func platformCloseTunnel(v *VPN)      { plat.closeTunnel(v) }
-func platformReaderLoop(v *VPN)       { plat.readerLoop(v) }
-func platformWriterLoop(v *VPN)       { plat.writerLoop(v) }
+func platformOpenTunnel(v *VPN) error         { return plat.openTunnel(v) }
+func platformCloseTunnel(v *VPN)              { plat.closeTunnel(v) }
+func platformReaderLoop(v *VPN)               { plat.readerLoop(v) }
+func platformWriterLoop(v *VPN)               { plat.writerLoop(v) }
+func platformActivateKillSwitch(v *VPN)       {}
+func platformDeactivateKillSwitch(v *VPN)     {}
+
+func (p *vpnPlatform) activateKillSwitch(v *VPN)   {}
+func (p *vpnPlatform) deactivateKillSwitch(v *VPN) {}
