@@ -42,6 +42,7 @@ fun MainScreen(
     var showDropdown by remember { mutableStateOf(false) }
     var startTime by remember { mutableStateOf(0L) }
     var uptime by remember { mutableStateOf("00:00") }
+    var connecting by remember { mutableStateOf(false) }
     val scrollState = rememberScrollState()
 
     val currentConfig = profiles.find { it.name == selectedProfile }?.configJson ?: ""
@@ -49,7 +50,6 @@ fun MainScreen(
     LaunchedEffect(connected) {
         if (connected) {
             startTime = System.currentTimeMillis()
-            delay(2000)
             statusText = "Подключение установлено"
             try {
                 while (true) {
@@ -57,7 +57,7 @@ fun MainScreen(
                     uptime = "%02d:%02d".format(sec / 60, sec % 60)
                     delay(1000)
                 }
-            } catch (_: kotlinx.coroutines.CancellationException) { }
+            } catch (_: CancellationException) { }
         } else {
             uptime = "00:00"
             startTime = 0L
@@ -223,10 +223,11 @@ fun MainScreen(
                     if (connected) {
                         onDisconnect()
                         connected = false
+                        connecting = false
                         statusText = "Отключено"
-                    } else if (hasProfile) {
+                    } else if (hasProfile && !connecting) {
                         onConnect(currentConfig)
-                        connected = true
+                        connecting = true
                         statusText = "Подключаюсь..."
                     }
                 },
@@ -260,8 +261,15 @@ fun MainScreen(
         Spacer(Modifier.height(28.dp))
 
         // ── Карточки статистики ──────────────────────────
-        if (connected) {
-            StatsGrid(connected, uptime)
+        if (connected || connecting) {
+            StatsGrid(connected, uptime, onConnected = {
+                connected = true
+                connecting = false
+            }, onDisconnected = {
+                connected = false
+                connecting = false
+                statusText = "Соединение потеряно"
+            })
             Spacer(Modifier.height(16.dp))
         }
 
@@ -293,15 +301,24 @@ fun MainScreen(
 }
 
 @Composable
-private fun StatsGrid(connected: Boolean, uptime: String) {
+private fun StatsGrid(
+    connected: Boolean,
+    uptime: String,
+    onConnected: () -> Unit,
+    onDisconnected: () -> Unit
+) {
     val stats = remember { mutableStateOf(StatsData()) }
+    var offlineCount by remember { mutableStateOf(0) }
 
-    LaunchedEffect(connected) {
-        while (connected) {
+    LaunchedEffect(Unit) {
+        while (true) {
             try {
                 val json = core.Core.getStats()
                 val obj = org.json.JSONObject(json)
-                if (obj.optBoolean("online", false)) {
+                val online = obj.optBoolean("online", false)
+                if (online) {
+                    offlineCount = 0
+                    if (!connected) onConnected()
                     stats.value = StatsData(
                         txSpeed = fmtBytes(obj.optLong("tx_speed", 0)),
                         rxSpeed = fmtBytes(obj.optLong("rx_speed", 0)),
@@ -310,6 +327,12 @@ private fun StatsGrid(connected: Boolean, uptime: String) {
                         ping = obj.optInt("ping_ms", 0),
                         loss = obj.optInt("loss_pct", 0)
                     )
+                } else {
+                    offlineCount++
+                    if (offlineCount >= 3 && connected) {
+                        onDisconnected()
+                        return@LaunchedEffect
+                    }
                 }
             } catch (_: Exception) {}
             kotlinx.coroutines.delay(1000)

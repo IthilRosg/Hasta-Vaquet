@@ -25,6 +25,25 @@ class HastaVaquetVpnService : VpnService(), Protector {
     companion object {
         const val NOTIFICATION_CHANNEL = "hasta-vaquet-vpn"
         const val NOTIFICATION_ID = 1
+
+        val SMART_BYPASS_PACKAGES = listOf(
+            "ru.sberbankmobile", "ru.sberbank.spasibo",
+            "ru.vtb24.mobilebanking.android", "ru.vtb.mobilebank",
+            "ru.alfabank.mobile", "ru.alfabank.oavdo",
+            "com.tinkoff.core", "com.idamob.tinkoff.android", "ru.tinkoff.mvno",
+            "ru.raiffeisen.retail",
+            "ru.psbank.mobibank",
+            "ru.gazprombank.android",
+            "ru.mkb.mobile",
+            "ru.openbank.android",
+            "ru.rosbank.android",
+            "ru.sovcombank.secure",
+            "ru.otpbank.android",
+            "ru.gosuslugi.android",
+            "ru.mos.gosuslugi",
+            "ru.nalog.android",
+            "ru.mos.mosapp",
+        )
     }
 
     override fun onCreate() {
@@ -80,20 +99,22 @@ class HastaVaquetVpnService : VpnService(), Protector {
             val builder = Builder()
             builder.setSession("Hasta-Vaquet")
             builder.setMtu(1300)
+            builder.setBlocking(true)
 
             val cfg = parseConfig(configJson)
             builder.addAddress(cfg.internalIp, 24)
             builder.addRoute("0.0.0.0", 0)
-            builder.addRoute("::", 0)  // IPv6 blackhole (правило 01_CORE_ARCHITECTURE)
+            builder.addRoute("::", 0)  // IPv6 blackhole
 
-            // Блокируем IPv6 утечку (направляем в туннель, который его игнорирует)
-            builder.addRoute("::", 0)
-
-            // Используем только один DNS для стабильности
             builder.addDnsServer(root.optString("dns", "1.1.1.1"))
 
-            for (pkg in cfg.bypassPackages) {
+            val allBypass = (cfg.bypassPackages + SMART_BYPASS_PACKAGES).distinct()
+            for (pkg in allBypass) {
                 try { builder.addDisallowedApplication(pkg) } catch (_: Exception) {}
+            }
+
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+                builder.setAlwaysOn(true)
             }
 
             tunFd = builder.establish()
