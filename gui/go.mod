@@ -1,6 +1,6 @@
 module gui
 
-go 1.25.0
+go 1.26.2
 
 require github.com/wailsapp/wails/v2 v2.12.0
 
@@ -36,6 +36,6 @@ require (
 	golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2 // indirect
 )
 
-replace hasta-vaquet/core => ../core
+replace hasta-vaquet => ../
 
-require hasta-vaquet/core v0.0.0
+require hasta-vaquet v0.0.0

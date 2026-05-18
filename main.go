@@ -1,12 +1,6 @@
 package main
 
 import (
-	"crypto/aes"
-	"crypto/cipher"
-	"crypto/hmac"
-	"crypto/rand"
-	"crypto/sha256"
-	"encoding/binary"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -21,105 +15,12 @@ import (
 	"syscall"
 	"time"
 
+	vpncore "hasta-vaquet/core"
+
 	"golang.org/x/sys/windows"
 	"golang.zx2c4.com/wintun"
 )
 
-var (
-	secretKey   [32]byte
-	shortID     uint16
-	routingSalt string
-)
-
-func fnv1a16(data []byte) uint16 {
-	h := uint64(14695981039346656037)
-	for _, b := range data {
-		h ^= uint64(b)
-		h *= 1099511628211
-	}
-	return uint16(h & 0xFFFF)
-}
-
-func encrypt(plaintext []byte) ([]byte, error) {
-	nonce := make([]byte, 12)
-	io.ReadFull(rand.Reader, nonce)
-
-	routeMask := fnv1a16(append([]byte(routingSalt), nonce...))
-	dynamicID := shortID ^ routeMask
-
-	padLen := mathrand.Intn(41)
-	inner := make([]byte, 2+len(plaintext)+padLen)
-	binary.BigEndian.PutUint16(inner[:2], uint16(len(plaintext)))
-	copy(inner[2:], plaintext)
-	if padLen > 0 {
-		io.ReadFull(rand.Reader, inner[2+len(plaintext):])
-	}
-
-	authData := make([]byte, 14)
-	binary.BigEndian.PutUint16(authData[:2], dynamicID)
-	copy(authData[2:], nonce)
-
-	mac := hmac.New(sha256.New, secretKey[:])
-	mac.Write(authData)
-	marker := mac.Sum(nil)[:4]
-	marker[0] |= 0x40
-
-	block, err := aes.NewCipher(secretKey[:])
-	if err != nil { return nil, err }
-	gcm, err := cipher.NewGCM(block)
-	if err != nil { return nil, err }
-	ciphertext := gcm.Seal(nil, nonce, inner, nil)
-
-	buf := make([]byte, 4+2+12+len(ciphertext))
-	copy(buf[:4], marker)
-	binary.BigEndian.PutUint16(buf[4:6], dynamicID)
-	copy(buf[6:18], nonce)
-	copy(buf[18:], ciphertext)
-	return buf, nil
-}
-
-func decrypt(packet []byte) ([]byte, error) {
-	if len(packet) < 4+2+12 {
-		return nil, fmt.Errorf("packet too short")
-	}
-
-	marker := make([]byte, 4)
-	copy(marker, packet[:4])
-	marker[0] &^= 0x40
-	dynamicID := binary.BigEndian.Uint16(packet[4:6])
-	nonce := packet[6:18]
-	ciphertext := packet[18:]
-
-	authData := make([]byte, 14)
-	binary.BigEndian.PutUint16(authData[:2], dynamicID)
-	copy(authData[2:], nonce)
-
-	mac := hmac.New(sha256.New, secretKey[:])
-	mac.Write(authData)
-	expected := mac.Sum(nil)[:4]
-	expected[0] &^= 0x40
-	if !hmac.Equal(marker, expected) {
-		return nil, fmt.Errorf("HMAC mismatch")
-	}
-
-	block, err := aes.NewCipher(secretKey[:])
-	if err != nil { return nil, err }
-	gcm, err := cipher.NewGCM(block)
-	if err != nil { return nil, err }
-	plaintext, err := gcm.Open(nil, nonce, ciphertext, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(plaintext) < 2 {
-		return nil, fmt.Errorf("payload too short")
-	}
-	realLen := binary.BigEndian.Uint16(plaintext[:2])
-	if int(realLen)+2 > len(plaintext) {
-		return nil, fmt.Errorf("invalid length")
-	}
-	return plaintext[2 : 2+realLen], nil
-}
 
 func getInterfaceIndex(name string) string {
 	cmd := exec.Command("powershell", "-Command", fmt.Sprintf("Get-NetAdapter -Name '%s' | Select-Object -ExpandProperty InterfaceIndex", name))
@@ -183,9 +84,7 @@ func loadConfig() Config {
 
 func main() {
 	cfg := loadConfig()
-	secretKey = sha256.Sum256([]byte(cfg.SecretKey))
-	shortID = cfg.ShortID
-	routingSalt = cfg.RoutingSalt
+	derivedKey := vpncore.DeriveKey(cfg.SecretKey)
 
 	lf, err := os.OpenFile("client.log", os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0666)
 	if err != nil { log.Fatal(err) }
@@ -232,7 +131,7 @@ stopCh := make(chan struct{})
 		<-sigCh
 		log.Printf("[ОСТАНОВ] Завершение, чистка маршрутов...")
 		close(stopCh)
-		c := exec.Command("route", "delete", "0.0.0.0", "10.0.0.1")
+		c := exec.Command("route", "delete", "0.0.0.0", cfg.InternalIP)
 		c.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 		c.Run()
 		log.Printf("[ОСТАНОВ] Маршруты очищены")
@@ -258,7 +157,7 @@ stopCh := make(chan struct{})
 			case <-stopCh:
 				return
 			case <-time.After(time.Duration(10+mathrand.Intn(21)) * time.Second):
-				keepAlive, err := encrypt([]byte{})
+				keepAlive, err := vpncore.Encrypt([]byte{}, derivedKey[:], cfg.ShortID, cfg.RoutingSalt)
 				if err != nil {
 					log.Printf("[ОШИБКА KEEP-ALIVE] %v", err)
 					continue
@@ -292,7 +191,7 @@ stopCh := make(chan struct{})
 				continue
 			}
 			if n < 4+2+12 { continue }
-			decrypted, err := decrypt(buf[:n])
+			decrypted, err := vpncore.Decrypt(buf[:n], derivedKey[:])
 			if err != nil {
 				log.Printf("[ОШИБКА ДЕШИФРАЦИИ] %v", err)
 				continue
@@ -317,7 +216,7 @@ stopCh := make(chan struct{})
 		packet, err := session.ReceivePacket()
 		if err == nil {
 			if len(packet) >= 20 && (packet[0]>>4) == 4 {
-				encrypted, err := encrypt(packet)
+				encrypted, err := vpncore.Encrypt(packet, derivedKey[:], cfg.ShortID, cfg.RoutingSalt)
 				if err == nil {
 					conn.Write(encrypted)
 				} else {

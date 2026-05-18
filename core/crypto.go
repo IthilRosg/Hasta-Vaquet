@@ -9,10 +9,9 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
-	mathrand "math/rand"
 )
 
-func fnv1a16(data []byte) uint16 {
+func Fnv1a16(data []byte) uint16 {
 	h := uint64(14695981039346656037)
 	for _, b := range data {
 		h ^= uint64(b)
@@ -21,14 +20,27 @@ func fnv1a16(data []byte) uint16 {
 	return uint16(h & 0xFFFF)
 }
 
+func Fnv1a64(data []byte, seed uint64) uint64 {
+	hash := seed ^ 14695981039346656037
+	for _, b := range data {
+		hash ^= uint64(b)
+		hash *= 1099511628211
+	}
+	return hash
+}
+
 func Encrypt(plaintext []byte, secretKey []byte, shortID uint16, routingSalt string) ([]byte, error) {
 	nonce := make([]byte, 12)
 	io.ReadFull(rand.Reader, nonce)
 
-	routeMask := fnv1a16(append([]byte(routingSalt), nonce...))
+	routeMask := Fnv1a16(append([]byte(routingSalt), nonce...))
 	dynamicID := shortID ^ routeMask
 
-	padLen := mathrand.Intn(41)
+	var padByte [1]byte
+	if _, err := io.ReadFull(rand.Reader, padByte[:]); err != nil {
+		return nil, fmt.Errorf("encrypt: pad rand: %w", err)
+	}
+	padLen := int(padByte[0]) % 41
 	inner := make([]byte, 2+len(plaintext)+padLen)
 	binary.BigEndian.PutUint16(inner[:2], uint16(len(plaintext)))
 	copy(inner[2:], plaintext)
