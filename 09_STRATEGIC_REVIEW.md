@@ -291,3 +291,81 @@
 
 ---
 *Сводный аудит: DeepSeek (базовый) + доработки из Mistral и Qwen. Консенсус трёх LLM.*
+
+---
+
+## 13. POST-MORTEM: состояние после Phases A-C (19 мая 2026)
+
+### Сборка: ✅ ВСЁ ЗЕЛЁНОЕ
+
+| Модуль | Статус |
+|--------|--------|
+| `go build .` (root) | ✅ |
+| `go build ./core` | ✅ |
+| `go build ./server` | ✅ |
+| `go build ./gui` (wails) | ✅ |
+| `go test ./core` (9 тестов) | ✅ 9/9 PASS |
+| `go vet ./...` | ✅ |
+
+### Что поменялось (код)
+
+| Файл | Изменение |
+|------|-----------|
+| `core/go.mod`, `core/go.sum` | Удалены — `core/` теперь пакет внутри корневого модуля |
+| `core/vpn_other.go` | Новый — заглушка для Linux/неклиентских платформ (чтобы сервер собирал core) |
+| `core/crypto.go` | `math/rand`→`crypto/rand`, экспорт `Fnv1a16`/`Fnv1a64` |
+| `core/crypto_test.go` | Новый — 9 юнит-тестов криптографии |
+| `core/vpn.go` | `reconnectLoop`, `onConnectionLost`, killswitch-хуки, `readFails` |
+| `core/vpn_windows.go` | KillSwitch (route delete/add), disconnect detection (3 таймаута) |
+| `core/vpn_android.go` | Disconnect detection, killswitch-заглушки |
+| `core/gomobile.go` | Обновлён другим агентом (callback improvements) |
+| `main.go` | Своя крипто удалена (−100 строк), импорт `core.Encrypt/Decrypt` |
+| `server/server.go` | Своя крипто удалена (−106 строк), импорт `core.Encrypt/Decrypt`, drop-счётчики, `CumTx/CumRx` |
+| `server/webpanel.go` | `handleReset`: `Lock`→`RLock` |
+| `gui/app.go` | `OnStatus` эмитит всегда (не только при >0) |
+| `gui/go.mod` | `replace hasta-vaquet/core`→`replace hasta-vaquet` |
+| `go.mod` (root) | Убран самоссылающийся `require hasta-vaquet/core` |
+
+### Что поменялось (Android/Kotlin)
+
+| Файл | Изменение |
+|------|-----------|
+| `HastaVaquetVpnService.kt` | `setBlocking(true)` — Kill Switch |
+| | `setAlwaysOn(true)` — Always-On VPN |
+| | `SMART_BYPASS_PACKAGES` — 18 РФ-приложений |
+| | Слияние hardcoded + config bypass |
+| | Убран дубль `addRoute("::", 0)` |
+| `ConnectScreen.kt` | `connected` — poll-based (не оптимистично) |
+| | `StatsGrid` с `onConnected`/`onDisconnected` колбеками |
+| | Детект офлайна: 3 consecutive `online:false` |
+
+### Что всё ещё НЕ сделано (не вошло в Phases A-C)
+
+| Пробел | Приоритет | Почему не сделано |
+|--------|-----------|-------------------|
+| `core/vpn_windows.go` — нет MTU=1300 | MEDIUM | В GUI-клиенте MTU не выставляется через netsh (в standalone main.go есть) |
+| `deactivateKillSwitch` не проверяет пустой index | LOW | `getInterfaceIndex` может вернуть "", route add провалится молча |
+| `main.go` (standalone) не использует `core.VPN` | MEDIUM | Ручное управление Wintun, нет reconnect/killswitch из core |
+| Нет rate limiting на сервере | HIGH | Не вошёл в scope A-C |
+| Нет forward secrecy | MEDIUM | Ключи статические |
+| `stub.html` — мёртвый файл | LOW | Не используется |
+| `admin_token: ""` молча отключает панель | LOW | Предупреждение есть, но неочевидно |
+
+### Итоговые цифры
+
+```
+Было (до A):               Стало (после A+B+C):
+─────────────────────────────────────────────────
+3 копии крипто       →     1 (core/crypto.go)
+0 тестов             →     9 юнит-тестов
+0 kill switch        →     Windows + Android
+0 reconnect          →     backoff 1s→60s
+math/rand паддинг    →     crypto/rand
+0 bypass РФ          →     18 пакетов
+3 модуля              →     2 модуля (root + gui)
+core с Windows-only   →     core кросс-платформа (vpn_other.go)
+```
+
+### Что дальше
+
+Фазы D+E из плана: тестеры в РФ, квоты, installer. Либо Phase 9 (production hardening) из оригинального Master Plan.
