@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -19,17 +20,30 @@ import (
 )
 
 type Peer struct {
-	ShortID  uint16
-	Name     string
-	KeyRaw   string // оригинальный ключ для генерации клиентских конфигов
-	Key      [32]byte
-	Internal string
-	UDPAddr  *net.UDPAddr
-	udpMu    sync.Mutex
-	ByteOut  atomic.Int64
-	ByteIn   atomic.Int64
-	LastSeen atomic.Int64 // unix timestamp последнего пакета
+	ShortID   uint16
+	Name      string
+	KeyRaw    string // оригинальный ключ для генерации клиентских конфигов
+	Key       [32]byte
+	Internal  string
+	UDPAddr   *net.UDPAddr
+	udpMu     sync.Mutex
+	ByteOut   atomic.Int64 // сбрасываемые каждые 30с (для лога)
+	ByteIn    atomic.Int64 // сбрасываемые каждые 30с (для лога)
+	CumTx     atomic.Int64 // кумулятивный TX — никогда не сбрасывается
+	CumRx     atomic.Int64 // кумулятивный RX — никогда не сбрасывается
+	LastSeen  atomic.Int64 // unix timestamp последнего пакета
 }
+
+// aggregateStats — счётчики ошибок для агрегированного логирования.
+// Чтобы не спамить лог на каждый пакет, логируем раз в 60 сек.
+var (
+	dropNoPeer      atomic.Int64 // пакеты с неизвестным ShortID
+	dropReplay      atomic.Int64 // bloom-фильтр отклонил (replay)
+	dropHMAC        atomic.Int64 // HMAC mismatch
+	dropDecrypt     atomic.Int64 // ошибка расшифровки
+	lastDropLogAt   time.Time
+	dropLogMu       sync.Mutex
+)
 
 var (
 	routingSalt     string
@@ -75,6 +89,25 @@ func bloomSet(key []byte) {
 	for _, seed := range []uint64{0x1234567890ABCDEF, 0xFEDCBA0987654321, 0xA1B2C3D4E5F60708} {
 		h := vpncore.Fnv1a64(key, seed) % totalBits
 		bloom[h/64] |= 1 << (h % 64)
+	}
+}
+
+// logDrops — агрегированное логирование отброшенных пакетов (раз в 60 сек).
+func logDrops() {
+	dropLogMu.Lock()
+	defer dropLogMu.Unlock()
+	if time.Since(lastDropLogAt) < 60*time.Second {
+		return
+	}
+	lastDropLogAt = time.Now()
+	noPeer := dropNoPeer.Swap(0)
+	replay := dropReplay.Swap(0)
+	hmac := dropHMAC.Swap(0)
+	decrypt := dropDecrypt.Swap(0)
+	total := noPeer + replay + hmac + decrypt
+	if total > 0 {
+		logger.Printf("[DROP] Пакеты отброшены: всего=%d (shortID=%d replay=%d HMAC=%d decrypt=%d)\n",
+			total, noPeer, replay, hmac, decrypt)
 	}
 }
 
@@ -147,9 +180,14 @@ func main() {
 	serverStartTime = time.Now()
 	routingSalt = cfg.RoutingSalt
 
-	f, _ := os.OpenFile(cfg.LogFile, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
-	defer f.Close()
-	logger = log.New(f, "", log.LstdFlags)
+	f, err := os.OpenFile(cfg.LogFile, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	if err != nil {
+		log.Printf("[ОШИБКА] Не удалось открыть лог-файл %s: %v — используем stdout", cfg.LogFile, err)
+		logger = log.New(os.Stdout, "", log.LstdFlags)
+	} else {
+		defer f.Close()
+		logger = log.New(f, "", log.LstdFlags)
+	}
 
 	peers = make(map[uint16]*Peer)
 	ipToPeer = make(map[string]*Peer)
@@ -188,22 +226,31 @@ func main() {
 	exec.Command("ip", "link", "set", "dev", ifce.Name(), "up").Run()
 	exec.Command("ip", "link", "set", "dev", ifce.Name(), "mtu", "1300").Run()
 
-	conn, _ := net.ListenUDP("udp", &net.UDPAddr{Port: cfg.Port})
+	conn, err := net.ListenUDP("udp", &net.UDPAddr{Port: cfg.Port})
+	if err != nil {
+		logger.Fatalf("[ОШИБКА] Не удалось открыть UDP порт %d: %v", cfg.Port, err)
+	}
 	logger.Printf("[СЕТЬ] Слушаем порт %d\n", cfg.Port)
 
 	go func() {
+		var prevOut, prevIn int64
 		for {
 			time.Sleep(30 * time.Second)
-			var bo, bi int64
+			var totalOut, totalIn int64
 			peersMu.RLock()
 			for _, p := range peers {
-				bo += p.ByteOut.Swap(0)
-				bi += p.ByteIn.Swap(0)
+				totalOut += p.CumTx.Load()
+				totalIn += p.CumRx.Load()
 			}
 			peersMu.RUnlock()
-			if bo > 0 || bi > 0 {
-				logger.Printf("[СТАТИСТИКА] Отправлено сервером: %d байт | Получено от клиентов: %d байт\n", bo, bi)
+			deltaOut := totalOut - prevOut
+			deltaIn := totalIn - prevIn
+			if deltaOut > 0 || deltaIn > 0 {
+				logger.Printf("[СТАТИСТИКА] Интервал: отпр %d байт | пол %d байт | Всего TX %d RX %d\n",
+					deltaOut, deltaIn, totalOut, totalIn)
 			}
+			prevOut = totalOut
+			prevIn = totalIn
 		}
 	}()
 
@@ -280,6 +327,7 @@ func main() {
 				logger.Printf("[ОШИБКА] WriteToUDP: %v", err)
 			}
 			peer.ByteOut.Add(int64(n))
+			peer.CumTx.Add(int64(n))
 		}
 	}()
 
@@ -293,48 +341,60 @@ func main() {
 
 		dynamicID := binary.BigEndian.Uint16(buffer[4:6])
 		nonce := buffer[6:18]
-routeMask := vpncore.Fnv1a16(append([]byte(routingSalt), nonce...))
+		routeMask := vpncore.Fnv1a16(append([]byte(routingSalt), nonce...))
 		shortID := dynamicID ^ routeMask
 
 		peersMu.RLock()
 		peer := peers[shortID]
 		peersMu.RUnlock()
 		if peer == nil {
+			dropNoPeer.Add(1)
+			logDrops()
 			continue
 		}
 
 		bkey := bloomKey(shortID, nonce)
 		if !bloomCheck(bkey) {
+			dropReplay.Add(1)
+			logDrops()
 			continue
 		}
 
 		decrypted, err := vpncore.Decrypt(buffer[:n], peer.Key[:])
-		if err == nil {
-			bloomSet(bkey)
-			bloomCount.Add(1)
-			peer.LastSeen.Store(time.Now().Unix())
-			if len(decrypted) == 0 {
-				logger.Printf("[KEEP-ALIVE] ShortID=%d\n", shortID)
-				peer.udpMu.Lock()
-				peer.UDPAddr = addr
-				peer.udpMu.Unlock()
-				// Echo back for tunnel latency measurement
-				enc, err := vpncore.Encrypt([]byte{0x01}, peer.Key[:], peer.ShortID, routingSalt)
-				if err != nil {
-					logger.Printf("[ОШИБКА] echo encrypt: %v", err)
-					continue
-				}
-				conn.WriteToUDP(enc, addr)
-				continue
+		if err != nil {
+			if strings.Contains(err.Error(), "HMAC") {
+				dropHMAC.Add(1)
+			} else {
+				dropDecrypt.Add(1)
 			}
+			logDrops()
+			continue
+		}
+		bloomSet(bkey)
+		bloomCount.Add(1)
+		peer.LastSeen.Store(time.Now().Unix())
+		if len(decrypted) == 0 {
+			logger.Printf("[KEEP-ALIVE] ShortID=%d\n", shortID)
 			peer.udpMu.Lock()
 			peer.UDPAddr = addr
 			peer.udpMu.Unlock()
-			if _, err := ifce.Write(decrypted); err != nil {
-				logger.Printf("[ОШИБКА] TUN Write: %v", err)
+			// Echo back for tunnel latency measurement
+			enc, err := vpncore.Encrypt([]byte{0x01}, peer.Key[:], peer.ShortID, routingSalt)
+			if err != nil {
+				logger.Printf("[ОШИБКА] echo encrypt: %v", err)
 				continue
 			}
-			peer.ByteIn.Add(int64(len(decrypted)))
+			conn.WriteToUDP(enc, addr)
+			continue
 		}
+		peer.udpMu.Lock()
+		peer.UDPAddr = addr
+		peer.udpMu.Unlock()
+		if _, err := ifce.Write(decrypted); err != nil {
+			logger.Printf("[ОШИБКА] TUN Write: %v", err)
+			continue
+		}
+		peer.ByteIn.Add(int64(len(decrypted)))
+		peer.CumRx.Add(int64(len(decrypted)))
 	}
 }

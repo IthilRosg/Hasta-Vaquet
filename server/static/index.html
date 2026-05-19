@@ -1449,18 +1449,14 @@
                 return b + " B";
             }
 
-            function fmtUptime(sec) {
             function fmtSpeed(bps) {
-            function resetTraffic() {
-                apiFetch("/api/reset", { method: "POST" }).then(function(r) {
-                    if (r.status === "reset") showToast("u0421u0447u0435u0442u0447u0438u043au0438 u0441u0431u0440u043eu0448u0435u043du044b", "success");
-                    refreshAll(true);
-                }).catch(function() { showToast("u041eu0448u0438u0431u043au0430 u0441u0431u0440u043eu0441u0430", "error"); });
-            }
                 if (bps == null || isNaN(bps)) return "—";
                 if (bps >= 1000000) return (bps / 1000000).toFixed(1) + " MB/s";
                 if (bps >= 1000) return (bps / 1000).toFixed(0) + " KB/s";
+                return bps + " B/s";
             }
+
+            function fmtUptime(sec) {
                 if (sec == null || isNaN(sec)) return "—";
                 const s = Math.floor(sec);
                 const days = Math.floor(s / 86400);
@@ -1471,6 +1467,13 @@
                 if (hrs > 0) return `${hrs}ч ${min}м`;
                 if (min > 0) return `${min}м ${rem}с`;
                 return `${rem}с`;
+            }
+
+            function resetTraffic() {
+                apiFetch("/api/reset", { method: "POST" }).then(function(r) {
+                    if (r.status === "reset") showToast("Счётчики сброшены", "success");
+                    refreshAll(true);
+                }).catch(function() { showToast("Ошибка сброса", "error"); });
             }
 
             function timeAgo(unixTs) {

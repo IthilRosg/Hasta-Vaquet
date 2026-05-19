@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	qrcode "github.com/skip2/go-qrcode"
@@ -25,6 +26,7 @@ var (
 	prevBytesIn  int64
 	prevBytesOut int64
 	lastSpeedAt  time.Time
+	speedMu      sync.Mutex
 )
 
 // startWebPanel запускает HTTP-сервер панели управления.
@@ -93,8 +95,8 @@ func handleStats(w http.ResponseWriter, r *http.Request) {
 	online := 0
 	var totalIn, totalOut int64
 	for _, p := range peers {
-		totalIn += p.ByteIn.Load()
-		totalOut += p.ByteOut.Load()
+		totalIn += p.CumRx.Load()
+		totalOut += p.CumTx.Load()
 		if p.LastSeen.Load() > cutoff {
 			online++
 		}
@@ -103,6 +105,7 @@ func handleStats(w http.ResponseWriter, r *http.Request) {
 	peersMu.RUnlock()
 	cpuPct, memPct, diskPct := getSystemHealth()
 	now := time.Now()
+	speedMu.Lock()
 	txSpeed := int64(0)
 	rxSpeed := int64(0)
 	if !lastSpeedAt.IsZero() {
@@ -115,6 +118,7 @@ func handleStats(w http.ResponseWriter, r *http.Request) {
 	prevBytesOut = totalOut
 	prevBytesIn = totalIn
 	lastSpeedAt = now
+	speedMu.Unlock()
 
 	json.NewEncoder(w).Encode(map[string]any{
 		"uptime_sec":   int64(time.Since(serverStartTime).Seconds()),
@@ -164,8 +168,8 @@ func listUsers(w http.ResponseWriter, _ *http.Request) {
 			IP:       p.Internal,
 			Online:   p.LastSeen.Load() > cutoff,
 			LastSeen: p.LastSeen.Load(),
-			ByteIn:   p.ByteIn.Load(),
-			ByteOut:  p.ByteOut.Load(),
+			ByteIn:   p.CumRx.Load(),
+			ByteOut:  p.CumTx.Load(),
 		})
 	}
 	peersMu.RUnlock()
@@ -194,12 +198,14 @@ func createUser(w http.ResponseWriter, r *http.Request) {
 	peersMu.Lock()
 	if _, exists := peers[req.ShortID]; exists {
 		peersMu.Unlock()
+		logger.Printf("[WEB] Ошибка создания: short_id=%d уже существует\n", req.ShortID)
 		w.WriteHeader(http.StatusConflict)
 		w.Write([]byte(`{"error":"short_id already exists"}`))
 		return
 	}
 	if _, exists := ipToPeer[req.IP]; exists {
 		peersMu.Unlock()
+		logger.Printf("[WEB] Ошибка создания: ip=%s уже используется\n", req.IP)
 		w.WriteHeader(http.StatusConflict)
 		w.Write([]byte(`{"error":"ip already exists"}`))
 		return
@@ -266,6 +272,7 @@ func deleteUser(w http.ResponseWriter, shortID uint16) {
 	p, exists := peers[shortID]
 	if !exists {
 		peersMu.Unlock()
+		logger.Printf("[WEB] Ошибка удаления: short_id=%d не найден\n", shortID)
 		w.WriteHeader(http.StatusNotFound)
 		w.Write([]byte(`{"error":"user not found"}`))
 		return
@@ -415,6 +422,8 @@ func handleReset(w http.ResponseWriter, r *http.Request) {
 	for _, p := range peers {
 		p.ByteIn.Store(0)
 		p.ByteOut.Store(0)
+		p.CumRx.Store(0)
+		p.CumTx.Store(0)
 	}
 	peersMu.RUnlock()
 	prevBytesIn = 0

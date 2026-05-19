@@ -1,7 +1,7 @@
 {
   "port": 9999,
   "admin_port": 9998,
-  "admin_token": "",
+  "admin_token": "CHANGE_ME_TO_RANDOM_STRING",
   "server_ip": "YOUR_SERVER_IP",
   "gateway_ip": "192.168.100.1",
   "dns": "1.1.1.1",
@@ -11,13 +11,13 @@
     {
       "short_id": 1,
       "name": "Alice",
-      "secret_key": "AliceSecret2026",
+      "secret_key": "CHANGE_ME_ALICE_KEY",
       "ip": "10.0.0.10"
     },
     {
       "short_id": 2,
       "name": "Bob",
-      "secret_key": "BobSecret2026",
+      "secret_key": "CHANGE_ME_BOB_KEY",
       "ip": "10.0.0.11"
     }
   ]

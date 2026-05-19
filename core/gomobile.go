@@ -16,6 +16,7 @@ package core
 import (
 	"encoding/json"
 	"os"
+	"sync"
 )
 
 // Protector — интерфейс, который будет реализован в Kotlin (VpnService).
@@ -101,16 +102,45 @@ func GetStats() string {
 }
 
 // androidListener реализует StatusListener для Android.
-// Заглушка — на Android события логики будут передаваться через callback в Kotlin.
-type androidListener struct{}
+// Статус сохраняется для опроса из Kotlin через GetStatus().
+type androidListener struct {
+	mu       sync.RWMutex
+	status   string
+	txSpeed  int64
+	rxSpeed  int64
+	totalTx  uint64
+	totalRx  uint64
+	pingMs   int
+	lossPct  int
+}
+
+var androidState androidListener
 
 func (l *androidListener) OnStatus(status string, txSpeed, rxSpeed int64, totalTx, totalRx uint64, pingMs, lossPct int) {
-	// TODO: Phase 8 — передавать события в Kotlin через gomobile callback
-	_ = status
-	_ = txSpeed
-	_ = rxSpeed
-	_ = totalTx
-	_ = totalRx
-	_ = pingMs
-	_ = lossPct
+	l.mu.Lock()
+	l.status = status
+	l.txSpeed = txSpeed
+	l.rxSpeed = rxSpeed
+	l.totalTx = totalTx
+	l.totalRx = totalRx
+	l.pingMs = pingMs
+	l.lossPct = lossPct
+	l.mu.Unlock()
+}
+
+// GetStatus возвращает JSON с текущим статусом VPN.
+// Статусы: "connecting", "connected", "reconnecting", "traffic", "disconnected"
+func GetStatus() string {
+	androidState.mu.RLock()
+	defer androidState.mu.RUnlock()
+	data, _ := json.Marshal(map[string]interface{}{
+		"status":   androidState.status,
+		"tx_speed": androidState.txSpeed,
+		"rx_speed": androidState.rxSpeed,
+		"total_tx": androidState.totalTx,
+		"total_rx": androidState.totalRx,
+		"ping_ms":  androidState.pingMs,
+		"loss_pct": androidState.lossPct,
+	})
+	return string(data)
 }
