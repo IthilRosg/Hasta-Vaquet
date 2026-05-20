@@ -280,7 +280,7 @@
 </div>
 {/if}
 
-<div class="version">v0.2.2</div>
+<div class="version">v0.2.3</div>
 
 <style>
   .app-root {

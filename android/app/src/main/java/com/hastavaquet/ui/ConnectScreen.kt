@@ -285,7 +285,7 @@ fun MainScreen(
 
         Spacer(Modifier.height(16.dp))
         Text(
-            "v0.2.2",
+            "v0.2.3",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -308,7 +308,7 @@ private fun StatsGrid(connected: Boolean, uptime: String) {
                         totalTx = fmtBytes(obj.optLong("total_tx", 0)),
                         totalRx = fmtBytes(obj.optLong("total_rx", 0)),
                         ping = obj.optInt("ping_ms", 0),
-                        loss = obj.optDouble("loss_pct", 0.0)
+                        loss = obj.optInt("loss_pct", 0)
                     )
                 }
             } catch (_: Exception) {}
@@ -322,7 +322,7 @@ private fun StatsGrid(connected: Boolean, uptime: String) {
         }
         Spacer(Modifier.height(12.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            StatCard("NETWORK", "Ping: ${stats.value.ping}ms\nLoss: ${"%.1f".format(stats.value.loss)}%", Modifier.weight(1f))
+            StatCard("NETWORK", "Ping: ${stats.value.ping}ms\nLoss: ${stats.value.loss}%", Modifier.weight(1f))
             StatCard("UPTIME", uptime, Modifier.weight(1f))
         }
     }
@@ -348,7 +348,7 @@ private fun StatCard(title: String, body: String, modifier: Modifier = Modifier)
 data class StatsData(
     val txSpeed: String = "0 B/s", val rxSpeed: String = "0 B/s",
     val totalTx: String = "0 B", val totalRx: String = "0 B",
-    val ping: Int = 0, val loss: Double = 0.0, val uptime: String = "00:00"
+    val ping: Int = 0, val loss: Int = 0, val uptime: String = "00:00"
 )
 
 private fun fmtBytes(b: Long): String = when {
