@@ -38,11 +38,43 @@
 - [ ] **Редактирование пользователя.** PUT /api/users/{id} — изменение имени,
   secret_key (ротация), IP, ShortID. Аналог POST, но без удаления сессии.
 
-- [x] **Phase 8: Android Client + Mobile Ecosystem. (ТЕКУЩАЯ СТАДИЯ)**
+- [x] **Phase 8: Android Client + Mobile Ecosystem (БАЗОВАЯ ГОТОВНОСТЬ).**
   Рефакторинг core/ под build tags: vpn_interface.go (общая логика), vpn_windows.go
-  (текущий Wintun-код), vpn_android.go (VpnService). Gomobile bind с interface-based API
-  (gomobile не поддерживает func-callbacks — нужны интерфейсы). Kotlin + VpnService +
-  нативный UI. QR-онбординг через Web-панель из Phase 7c.
+  (текущий Wintun-код), vpn_android.go (VpnService). Gomobile bind с interface-based API.
+  Kotlin + VpnService + нативный UI. QR-онбординг через Web-панель.
+  Достигнуто: базовое подключение, статистика, kill switch, smart bypass (21 РФ-приложение).
+
+### Phase A: Consolidation (Май 2026) — ЗАВЕРШЕНА
+Консолидация кодовой базы и исправление архитектурных проблем:
+
+- [x] **A1. Консолидация криптографии.** Одна реализация Encrypt/Decrypt в `core/crypto.go`.
+  `main.go` и `server/server.go` импортируют `core/` вместо своих копий (-206 строк).
+- [x] **A2. `math/rand` → `crypto/rand`** для паддинга. Устранение предсказуемости для DPI.
+- [x] **A3. Экспорт `Fnv1a16`/`Fnv1a64`** в `core/` для общего доступа с сервером.
+- [x] **A4. `core/vpn_other.go`** — заглушки для Linux/неклиентских платформ.
+- [x] **A5. Удалён `core/go.mod`** — core стал подпакетом корневого модуля. `go.sum` консолидирован.
+
+### Phase B: Kill Switch + Auto-Reconnect (Май 2026) — ЗАВЕРШЕНА
+- [x] **B1. Kill Switch Windows.** При обрыве — удаление default route через route delete.
+- [x] **B2. Kill Switch Android.** `VpnService.Builder.setBlocking(true)` + `setAlwaysOn(true)`.
+- [x] **B3. Auto-Reconnect.** Экспоненциальный backoff 1s→2s→4s→...→60s cap в `core/vpn.go`.
+- [x] **B4. UI-индикация.** Каналы connected/disconnected/reconnecting через StatusListener.
+
+### Phase C: Android — Добивка (Май 2026) — ЗАВЕРШЕНА
+- [x] **C1. Smart Bypass MVP.** Хардкод-список из 21 РФ-приложения (Сбер, ВТБ, Тинькофф и др.).
+- [x] **C2. `GetStatus()` для Kotlin.** androidListener хранит статус, Kotlin опрашивает.
+- [x] **C3. Статистика в UI.** Poll `GetStats()` каждую секунду, отображение 2×2 карточек.
+
+### Phase D: Батчевые фиксы (Май 2026) — ЗАВЕРШЕНА
+- [x] **D1. Кумулятивные счётчики трафика.** `CumTx`/`CumRx` — никогда не сбрасываются.
+- [x] **D2. `logDrops()`.** Агрегированное логирование отброшенных пакетов (shortID/replay/HMAC/decrypt).
+- [x] **D3. Исправление ошибок.** `ListenUDP`, `os.OpenFile` — перестали игнорировать ошибки.
+- [x] **D4. Data race.** `speedMu` мьютекс в `handleStats`, `handleReset` сбрасывает CumTx/CumRx.
+- [x] **D5. Вложенность функций.** `fmtSpeed`/`fmtUptime`/`resetTraffic` — разделены в index.html.
+- [x] **D6. Keep-alive 5-15с.** Уменьшен интервал для мобильных NAT.
+- [x] **D7. Ring-buffer loss.** Кольцевой буфер 100 слотов, скользящее окно 30с.
+- [x] **D8. Версионирование.** `core/version.go` — v0.2.2, отображается в web/GUI/Android.
+- [x] **D9. 16KB page alignment.** AAR с флагом `-Wl,-z,max-page-size=16384`.
 
 ---
 
@@ -50,12 +82,12 @@
 
 Без этого блока продукт не готов к реальным пользователям:
 
-- [ ] **Auto-reconnect.** При обрыве соединения клиент автоматически переподключается
+- [x] **Auto-reconnect.** При обрыве соединения клиент автоматически переподключается
   с экспоненциальным backoff (1s → 2s → 4s → ... → 60s cap). UI показывает «Reconnecting...»
   с таймером следующей попытки.
-- [ ] **Kill Switch.** При падении тоннеля (UDP conn error / keep-alive timeout > 60s) —
-  блокировать весь трафик через WFP (Windows Filtering Platform) до восстановления соединения.
+- [x] **Kill Switch (Windows).** При падении тоннеля — удаление default route.
   Никаких утечек реального IP в момент переподключения.
+- [x] **Kill Switch (Android).** `setBlocking(true)` + `setAlwaysOn(true)`.
 - [ ] **Windows Installer.** Inno Setup: устанавливает клиент, wintun.dll, создаёт автозапуск,
   ярлык на рабочем столе. Пользователь скачивает один `.exe`.
 - [ ] **Auto-update.** Клиент при старте проверяет endpoint на сервере (или GitHub Releases)
@@ -275,16 +307,21 @@ Android создаёт для исключённого приложения от
 
 ## 11. Current Task
 
-**Phase 8 (Android Client):** Рефакторинг core/ под build tags, gomobile bind,
-Kotlin + VpnService + нативный UI, QR-онбординг через Web-панель.
+**Текущее состояние (Май 2026):**
+- [x] Phase 8: Android базовый клиент — ✅
+- [x] Phase A: Consolidation — ✅
+- [x] Phase B: Kill Switch + Auto-Reconnect — ✅
+- [x] Phase C: Добивка Android — ✅
+- [x] Phase D: Батчевые фиксы — ✅
+- [ ] Phase E: Production Hardening (installer, rate limiting, quotas, systemd) — ФОКУС
+- [ ] Phase D: Полевое тестирование против DPI РКН — НЕОБХОДИМО
+- [ ] Phase F: Коммерциализация — отложено
 
-**Что уже есть для старта:**
-- Web-панель генерирует QR с конфигом — Android будет сканировать
-- core/crypto.go — общий, не зависит от платформы
-- core/config.go — общий, не зависит от платформы
+**Ближайшие задачи (приоритет):**
+1. Rate limiting на сервере (защита от UDP flood)
+2. `expires_at` + `quota_bytes` в конфиге пользователя
+3. Windows Installer (Inno Setup)
+4. Systemd unit для сервера
+5. Полевое тестирование с 5-10 реальными пользователями в РФ
 
-**Что нужно сделать:**
-1. core/ разделить по build tags (vpn_interface.go, vpn_windows.go, vpn_android.go)
-2. Переписать callback → interface (gomobile не умеет func-колбеки)
-3. Создать Android-проект на Kotlin с VpnService
-4. Интегрировать gomobile библиотеку
+**Версия:** `v0.2.2` — определена в `core/version.go`, отображается во всех клиентах.
