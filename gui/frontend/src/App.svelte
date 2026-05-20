@@ -204,7 +204,7 @@
     </div>
     <div class="card">
       <div class="card-title">NETWORK</div>
-      <div class="card-body">Ping: {rtt > 0 ? rtt + 'ms' : '—'}  Loss: {rtt > 0 ? loss + '%' : '—'}</div>
+      <div class="card-body">Ping: {rtt > 0 ? rtt + 'ms' : '—'}  Loss: {rtt > 0 ? loss.toFixed(1) + '%' : '—'}</div>
     </div>
     <div class="card">
       <div class="card-title">UPTIME</div>

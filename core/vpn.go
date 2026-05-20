@@ -13,7 +13,7 @@ import (
 // Заменяет StatusCallback func, т.к. gomobile не поддерживает
 // передачу Go-функций как параметров (нужен interface).
 type StatusListener interface {
-	OnStatus(status string, txSpeed, rxSpeed int64, totalTx, totalRx uint64, pingMs int, lossPct int)
+	OnStatus(status string, txSpeed, rxSpeed int64, totalTx, totalRx uint64, pingMs int, lossPct float64)
 }
 
 // VPN — клиентский VPN-движок.
@@ -101,7 +101,7 @@ func (v *VPN) IsRunning() bool {
 	return v.running.Load()
 }
 
-func (v *VPN) callback(status string, txSpeed, rxSpeed int64, totalTx, totalRx uint64, pingMs, lossPct int) {
+func (v *VPN) callback(status string, txSpeed, rxSpeed int64, totalTx, totalRx uint64, pingMs int, lossPct float64) {
 	if v.listener != nil {
 		v.listener.OnStatus(status, txSpeed, rxSpeed, totalTx, totalRx, pingMs, lossPct)
 	}
@@ -189,7 +189,7 @@ func (v *VPN) keepAliveLoop() {
 		select {
 		case <-v.stopCh:
 			return
-		case <-time.After(time.Duration(10+mathrand.Intn(21)) * time.Second):
+		case <-time.After(time.Duration(5+mathrand.Intn(11)) * time.Second):
 		}
 	}
 }
@@ -204,13 +204,14 @@ func (v *VPN) statsLoop() {
 		case <-ticker.C:
 			txSpeed := v.txBytes.Swap(0)
 			rxSpeed := v.rxBytes.Swap(0)
-			var pingMs, lossPct int
+			var pingMs int
+			var lossPct float64
 			if v.echoReceived.Load() {
 				pingMs = int(v.echoRtt.Load())
 				sent := v.echoSent.Load()
 				acked := v.echoAcked.Load()
 				if sent > 0 {
-					lossPct = int((sent - acked) * 100 / sent)
+					lossPct = float64(sent-acked) * 100 / float64(sent)
 				}
 			}
 			v.callback("traffic", txSpeed, rxSpeed, v.sessionTotalTx.Load(), v.sessionTotalRx.Load(), pingMs, lossPct)

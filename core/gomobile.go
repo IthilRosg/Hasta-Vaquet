@@ -85,9 +85,9 @@ func GetStats() string {
 	ttx := globalVPN.sessionTotalTx.Load()
 	trx := globalVPN.sessionTotalRx.Load()
 	ping := globalVPN.echoRtt.Load()
-	loss := int64(0)
+	loss := float64(0)
 	if sent := globalVPN.echoSent.Load(); sent > 0 {
-		loss = (globalVPN.echoSent.Load() - globalVPN.echoAcked.Load()) * 100 / sent
+		loss = float64(globalVPN.echoSent.Load()-globalVPN.echoAcked.Load()) * 100 / float64(sent)
 	}
 	data, _ := json.Marshal(map[string]interface{}{
 		"online":   true,
@@ -111,12 +111,12 @@ type androidListener struct {
 	totalTx  uint64
 	totalRx  uint64
 	pingMs   int
-	lossPct  int
+	lossPct  float64
 }
 
 var androidState androidListener
 
-func (l *androidListener) OnStatus(status string, txSpeed, rxSpeed int64, totalTx, totalRx uint64, pingMs, lossPct int) {
+func (l *androidListener) OnStatus(status string, txSpeed, rxSpeed int64, totalTx, totalRx uint64, pingMs int, lossPct float64) {
 	l.mu.Lock()
 	l.status = status
 	l.txSpeed = txSpeed

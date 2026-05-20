@@ -156,7 +156,7 @@ stopCh := make(chan struct{})
 			select {
 			case <-stopCh:
 				return
-			case <-time.After(time.Duration(10+mathrand.Intn(21)) * time.Second):
+			case <-time.After(time.Duration(5+mathrand.Intn(11)) * time.Second):
 				keepAlive, err := vpncore.Encrypt([]byte{}, derivedKey[:], cfg.ShortID, cfg.RoutingSalt)
 				if err != nil {
 					log.Printf("[ОШИБКА KEEP-ALIVE] %v", err)
