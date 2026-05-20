@@ -212,6 +212,9 @@ func (v *VPN) statsLoop() {
 				acked := v.echoAcked.Load()
 				if sent > 0 {
 					lossPct = float64(sent-acked) * 100 / float64(sent)
+					if lossPct < 0 {
+						lossPct = 0
+					}
 				}
 			}
 			v.callback("traffic", txSpeed, rxSpeed, v.sessionTotalTx.Load(), v.sessionTotalRx.Load(), pingMs, lossPct)

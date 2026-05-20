@@ -88,6 +88,9 @@ func GetStats() string {
 	loss := float64(0)
 	if sent := globalVPN.echoSent.Load(); sent > 0 {
 		loss = float64(globalVPN.echoSent.Load()-globalVPN.echoAcked.Load()) * 100 / float64(sent)
+		if loss < 0 {
+			loss = 0
+		}
 	}
 	data, _ := json.Marshal(map[string]interface{}{
 		"online":   true,
