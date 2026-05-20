@@ -231,3 +231,123 @@ func TestIntegrationConcurrentPackets(t *testing.T) {
 		t.Fatalf("expected %d packets, got %d", count, n)
 	}
 }
+
+type testListener struct {
+	statuses    []string
+	reconnectingCh chan string
+}
+
+func (l *testListener) OnStatus(status string, txSpeed, rxSpeed int64, totalTx, totalRx uint64, pingMs int, lossPct float64) {
+	l.statuses = append(l.statuses, status)
+	if status == "reconnecting" && l.reconnectingCh != nil {
+		select {
+		case l.reconnectingCh <- status:
+		default:
+		}
+	}
+}
+
+func TestReconnectStateMachine(t *testing.T) {
+	listener := &testListener{reconnectingCh: make(chan string, 10)}
+	cfg := Config{
+		ServerIP:    "127.0.0.1",
+		Port:        19999,
+		ShortID:     1,
+		SecretKey:   "reconnect-test-key",
+		RoutingSalt: "test-salt",
+		InternalIP:  "10.0.0.99",
+		GatewayIP:   "192.168.100.1",
+		DNS:         "1.1.1.1",
+	}
+	vpn := New(cfg, listener)
+	vpn.running.Store(true)
+	vpn.stopCh = make(chan struct{})
+
+	go vpn.onConnectionLost()
+
+	select {
+	case <-listener.reconnectingCh:
+		t.Log("Reconnect loop started: callback('reconnecting') received")
+	case <-time.After(3 * time.Second):
+		t.Fatal("Timed out waiting for reconnect callback")
+	}
+
+	if !vpn.reconnecting.Load() {
+		t.Fatal("reconnecting flag should be true")
+	}
+
+	// reconnecting flag clears running
+	if vpn.running.Load() {
+		t.Fatal("running should be false after connection lost")
+	}
+
+	// Stop during reconnect
+	vpn.Stop()
+
+	time.Sleep(200 * time.Millisecond)
+	if vpn.reconnecting.Load() {
+		t.Fatal("reconnecting should be false after Stop()")
+	}
+}
+
+func TestReconnectStopCancels(t *testing.T) {
+	listener := &testListener{reconnectingCh: make(chan string, 10)}
+	cfg := Config{
+		ServerIP:    "127.0.0.1",
+		Port:        19998,
+		ShortID:     1,
+		SecretKey:   "cancel-key",
+		RoutingSalt: "test-salt",
+		InternalIP:  "10.0.0.98",
+		GatewayIP:   "192.168.100.1",
+		DNS:         "1.1.1.1",
+	}
+	vpn := New(cfg, listener)
+	vpn.running.Store(true)
+	vpn.stopCh = make(chan struct{})
+
+	go vpn.onConnectionLost()
+
+	<-listener.reconnectingCh
+	t.Log("Reconnect started")
+
+	// Stop during reconnect
+	go vpn.Stop()
+	time.Sleep(200 * time.Millisecond)
+
+	if vpn.reconnecting.Load() {
+		t.Fatal("reconnecting should be false after Stop()")
+	}
+}
+
+func TestReconnectDoubleCallIsSafe(t *testing.T) {
+	listener := &testListener{reconnectingCh: make(chan string, 10)}
+	vpn := New(Config{
+		ServerIP: "127.0.0.1", Port: 19997, ShortID: 1,
+		SecretKey: "double-key", RoutingSalt: "salt",
+		InternalIP: "10.0.0.97",
+	}, listener)
+	vpn.running.Store(true)
+	vpn.stopCh = make(chan struct{})
+
+	// Call onConnectionLost twice in parallel
+	go vpn.onConnectionLost()
+	go vpn.onConnectionLost()
+
+	// Should only get one reconnect
+	count := 0
+	select {
+	case <-listener.reconnectingCh:
+		count++
+	case <-time.After(3 * time.Second):
+	}
+	select {
+	case <-listener.reconnectingCh:
+		count++
+	case <-time.After(200 * time.Millisecond):
+	}
+
+	if count > 1 {
+		t.Fatal("onConnectionLost should only execute once")
+	}
+}

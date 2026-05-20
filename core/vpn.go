@@ -128,11 +128,17 @@ func (v *VPN) platformDeactivateKillSwitch()     { platformDeactivateKillSwitch(
 // ─── Reconnect ────────────────────────────────────────────────────
 
 func (v *VPN) onConnectionLost() {
-	if !v.running.Load() || v.reconnecting.Swap(true) {
+	v.mu.Lock()
+	v.reconnecting.Swap(true)
+	if !v.running.Load() {
+		v.reconnecting.Store(false)
+		v.mu.Unlock()
 		return
 	}
 	v.running.Store(false)
 	close(v.stopCh)
+	v.mu.Unlock()
+
 	v.platformCloseTunnel()
 	v.platformActivateKillSwitch()
 
@@ -161,7 +167,9 @@ func (v *VPN) reconnectLoop() {
 
 		v.callback("reconnecting", 0, 0, 0, 0, 0, 0)
 
+		v.mu.Lock()
 		v.stopCh = make(chan struct{})
+		v.mu.Unlock()
 		if err := v.platformOpenTunnel(); err != nil {
 			backoff *= 2
 			if backoff > maxBackoff {
