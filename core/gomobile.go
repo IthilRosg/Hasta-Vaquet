@@ -85,13 +85,7 @@ func GetStats() string {
 	ttx := globalVPN.sessionTotalTx.Load()
 	trx := globalVPN.sessionTotalRx.Load()
 	ping := globalVPN.echoRtt.Load()
-	loss := float64(0)
-	if sent := globalVPN.echoSent.Load(); sent > 0 {
-		loss = float64(globalVPN.echoSent.Load()-globalVPN.echoAcked.Load()) * 100 / float64(sent)
-		if loss < 0 {
-			loss = 0
-		}
-	}
+	loss := globalVPN.echoCalcLoss()
 	data, _ := json.Marshal(map[string]interface{}{
 		"online":   true,
 		"tx_speed": tx,

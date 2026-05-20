@@ -102,7 +102,7 @@ func (p *vpnPlatform) readerLoop(v *VPN) {
 
 		// Echo-пинг (1 байт 0x01)
 		if len(decrypted) == 1 && decrypted[0] == 0x01 {
-			v.echoAcked.Add(1)
+			v.echoAck()
 			last := v.lastAliveMs.Load()
 			if last > 0 {
 				rtt := time.Now().UnixMilli() - last

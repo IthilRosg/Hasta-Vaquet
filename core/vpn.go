@@ -9,16 +9,20 @@ import (
 	"time"
 )
 
+const echoWindowSize = 100
+
+// echoSlot — один слот в кольцевом буфере для трекинга потерь.
+type echoSlot struct {
+	time  time.Time
+	acked bool
+}
+
 // StatusListener — интерфейс для колбеков состояния VPN.
-// Заменяет StatusCallback func, т.к. gomobile не поддерживает
-// передачу Go-функций как параметров (нужен interface).
 type StatusListener interface {
 	OnStatus(status string, txSpeed, rxSpeed int64, totalTx, totalRx uint64, pingMs int, lossPct float64)
 }
 
 // VPN — клиентский VPN-движок.
-// Платформозависимая часть туннеля реализуется в
-// vpn_windows.go (Wintun) и vpn_android.go (VpnService).
 type VPN struct {
 	config         Config
 	key            [32]byte
@@ -34,8 +38,12 @@ type VPN struct {
 	lastAliveMs    atomic.Int64  // unix milli of last keep-alive sent
 	echoReceived   atomic.Bool   // true if at least one echo came back
 	echoRtt        atomic.Int64  // latest RTT in ms
-	echoSent       atomic.Int64  // keep-alives sent
-	echoAcked      atomic.Int64  // echos received
+
+	// echoRing — кольцевой буфер потерь (без синхронизации — всё в одной горутине keepAliveLoop)
+	echoRing   [echoWindowSize]echoSlot
+	echoPos    int // следующая свободная позиция в кольце
+	echoMu     sync.Mutex
+
 	reconnecting   atomic.Bool   // true during reconnect loop
 	readFails      atomic.Int64  // consecutive UDP read failures
 }
@@ -65,6 +73,7 @@ func (v *VPN) Start() error {
 	}
 
 	v.running.Store(true)
+	v.echoReset()
 	v.callback("connected", 0, 0, 0, 0, 0, 0)
 
 	go v.keepAliveLoop()
@@ -176,6 +185,64 @@ func (v *VPN) reconnectLoop() {
 	}
 }
 
+// echoPush добавляет слот отправленного keep-alive в кольцевой буфер.
+func (v *VPN) echoPush() {
+	v.echoMu.Lock()
+	v.echoRing[v.echoPos] = echoSlot{time: time.Now(), acked: false}
+	v.echoPos = (v.echoPos + 1) % echoWindowSize
+	v.echoMu.Unlock()
+}
+
+// echoAck помечает последний неотвеченный слот как полученный.
+func (v *VPN) echoAck() {
+	v.echoMu.Lock()
+	// Ищем с конца — самый свежий ещё не acked слот
+	for i := echoWindowSize - 1; i >= 0; i-- {
+		idx := (v.echoPos - 1 - i + echoWindowSize) % echoWindowSize
+		if !v.echoRing[idx].acked && !v.echoRing[idx].time.IsZero() {
+			v.echoRing[idx].acked = true
+			break
+		}
+	}
+	v.echoMu.Unlock()
+}
+
+// echoCalcLoss вычисляет процент потерь в скользящем окне (последние 30 сек).
+// Слоты старше 10 сек без ack считаются потерянными.
+func (v *VPN) echoCalcLoss() float64 {
+	v.echoMu.Lock()
+	defer v.echoMu.Unlock()
+	now := time.Now()
+	windowDur := 30 * time.Second
+	lostDur := 10 * time.Second
+	var total, lost int
+	for i := 0; i < echoWindowSize; i++ {
+		sl := v.echoRing[i]
+		if sl.time.IsZero() {
+			continue
+		}
+		if now.Sub(sl.time) > windowDur {
+			continue
+		}
+		total++
+		if !sl.acked && now.Sub(sl.time) > lostDur {
+			lost++
+		}
+	}
+	if total == 0 {
+		return 0
+	}
+	return float64(lost) * 100 / float64(total)
+}
+
+// echoReset очищает кольцевой буфер (при переподключении).
+func (v *VPN) echoReset() {
+	v.echoMu.Lock()
+	v.echoRing = [echoWindowSize]echoSlot{}
+	v.echoPos = 0
+	v.echoMu.Unlock()
+}
+
 // ─── Общие циклы ─────────────────────────────────────────────────
 
 func (v *VPN) keepAliveLoop() {
@@ -184,7 +251,7 @@ func (v *VPN) keepAliveLoop() {
 		if err == nil {
 			v.conn.Write(packet)
 			v.lastAliveMs.Store(time.Now().UnixMilli())
-			v.echoSent.Add(1)
+			v.echoPush()
 		}
 		select {
 		case <-v.stopCh:
@@ -204,19 +271,8 @@ func (v *VPN) statsLoop() {
 		case <-ticker.C:
 			txSpeed := v.txBytes.Swap(0)
 			rxSpeed := v.rxBytes.Swap(0)
-			var pingMs int
-			var lossPct float64
-			if v.echoReceived.Load() {
-				pingMs = int(v.echoRtt.Load())
-				sent := v.echoSent.Load()
-				acked := v.echoAcked.Load()
-				if sent > 0 {
-					lossPct = float64(sent-acked) * 100 / float64(sent)
-					if lossPct < 0 {
-						lossPct = 0
-					}
-				}
-			}
+			pingMs := int(v.echoRtt.Load())
+			lossPct := v.echoCalcLoss()
 			v.callback("traffic", txSpeed, rxSpeed, v.sessionTotalTx.Load(), v.sessionTotalRx.Load(), pingMs, lossPct)
 		}
 	}
