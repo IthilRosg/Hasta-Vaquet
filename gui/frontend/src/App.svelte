@@ -74,20 +74,23 @@
   }
 
   EventsOn('status', (s: string) => {
-    statusText = s === 'connected' ? 'Connected' : 'Disconnected'
-    connected = s === 'connected'
-    if (connected) {
+    if (s === 'connected') {
+      connected = true
+      statusText = 'Connected'
       startTime = Date.now()
       uptime = '00:00'
-      // Таймер обновления uptime каждую секунду
       clearInterval(uptimeTimer)
       uptimeTimer = setInterval(() => {
         const sec = Math.floor((Date.now() - startTime) / 1000)
         uptime = formatTime(sec)
       }, 1000)
-    } else {
+    } else if (s === 'disconnected') {
+      connected = false
+      statusText = 'Disconnected'
       txSpeed = '0 B/s'; rxSpeed = '0 B/s'; rtt = 0; loss = 0; uptime = '00:00'
       clearInterval(uptimeTimer)
+    } else if (s === 'connecting' || s === 'reconnecting') {
+      statusText = s === 'reconnecting' ? 'Reconnecting...' : 'Connecting...'
     }
   })
 

@@ -5,6 +5,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -21,6 +22,7 @@ type App struct {
 	ctx      context.Context
 	vpn      *core.VPN
 	profiles []string
+	logger   *log.Logger
 }
 
 // vpnListener реализует core.StatusListener для отправки событий в UI.
@@ -47,6 +49,12 @@ func (a *App) startup(ctx context.Context) {
 	dllPath := filepath.Join(exeDir, "wintun.dll")
 	if _, err := os.Stat(dllPath); os.IsNotExist(err) {
 		os.WriteFile(dllPath, wintunDLL, 0755)
+	}
+	logPath := filepath.Join(exeDir, "gui.log")
+	f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err == nil {
+		a.logger = log.New(f, "", log.LstdFlags)
+		a.logger.Println("GUI started")
 	}
 }
 
@@ -216,7 +224,13 @@ func (a *App) ListProfileItems() []ProfileItem {
 
 func (a *App) DoConnect(serverIP, secretKey, routingSalt, internalIP, gatewayIP, dns string, port int, shortID uint16) string {
 	if a.vpn != nil && a.vpn.IsRunning() {
+		if a.logger != nil {
+			a.logger.Println("DoConnect: already running, returning 'already connected'")
+		}
 		return "already connected"
+	}
+	if a.logger != nil {
+		a.logger.Printf("DoConnect: server=%s:%d shortID=%d", serverIP, port, shortID)
 	}
 	cfg := core.Config{
 		ServerIP:    serverIP,
@@ -230,15 +244,27 @@ func (a *App) DoConnect(serverIP, secretKey, routingSalt, internalIP, gatewayIP,
 	}
 	vpn := core.New(cfg, &vpnListener{ctx: a.ctx})
 	if err := vpn.Start(); err != nil {
+		if a.logger != nil {
+			a.logger.Printf("DoConnect: Start() error: %v", err)
+		}
 		return err.Error()
 	}
 	a.vpn = vpn
+	if a.logger != nil {
+		a.logger.Println("DoConnect: connected successfully")
+	}
 	return "connected"
 }
 
 func (a *App) DoDisconnect() string {
 	if a.vpn == nil || !a.vpn.IsRunning() {
+		if a.logger != nil {
+			a.logger.Println("DoDisconnect: not connected")
+		}
 		return "not connected"
+	}
+	if a.logger != nil {
+		a.logger.Println("DoDisconnect: stopping VPN")
 	}
 	a.vpn.Stop()
 	a.vpn = nil
