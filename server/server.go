@@ -210,7 +210,7 @@ func main() {
 		logger.Printf("[ПИР] ShortID=%d IP=%s зарегистрирован", p.ShortID, p.Internal)
 	}
 
-	logger.Printf("[ЗАПУСК] Сервер Phase 6, порт %d, пиров: %d\n", cfg.Port, len(peers))
+	logger.Printf("[ЗАПУСК] Сервер v%s, порт %d, пиров: %d\n", vpncore.Version, cfg.Port, len(peers))
 
 	if cfg.AdminToken != "" {
 		go startWebPanel()

@@ -280,6 +280,8 @@
 </div>
 {/if}
 
+<div class="version">v0.2.2</div>
+
 <style>
   .app-root {
     display: flex; flex-direction: column; align-items: center;
@@ -422,4 +424,5 @@
   .field input:focus { outline: none; border-color: var(--accent); }
   .import-btn { background: none; border: 1px dashed var(--border); color: var(--accent); padding: 10px; border-radius: var(--radius-sm); cursor: pointer; font-size: 14px; transition: all 0.2s; }
   .import-btn:hover { border-color: var(--accent); background: var(--accent-glow); }
+  .version { position: fixed; bottom: 8px; right: 12px; font-size: 11px; color: var(--text-dim); opacity: 0.5; }
 </style>
