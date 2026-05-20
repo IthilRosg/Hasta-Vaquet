@@ -1,6 +1,7 @@
 package main
 
 import (
+	_ "embed"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -20,6 +22,9 @@ import (
 	"golang.org/x/sys/windows"
 	"golang.zx2c4.com/wintun"
 )
+
+//go:embed wintun.dll
+var wintunDLL []byte
 
 
 func getInterfaceIndex(name string) string {
@@ -94,6 +99,13 @@ func main() {
 
 	log.Printf("[ЗАПУСК] Клиент Hasta-Vaquet Phase 6")
 	log.Printf("[КОНФИГ] Сервер %s:%d, ShortID=%d, InternalIP=%s", cfg.ServerIP, cfg.Port, cfg.ShortID, cfg.InternalIP)
+
+	// Развёртываем wintun.dll если нет рядом с exe
+	exeDir := filepath.Dir(os.Args[0])
+	dllPath := filepath.Join(exeDir, "wintun.dll")
+	if _, err := os.Stat(dllPath); os.IsNotExist(err) {
+		os.WriteFile(dllPath, wintunDLL, 0755)
+	}
 
 	adapter, err := wintun.CreateAdapter("HastaVaquet", "HastaVaquet", nil)
 	if err != nil { log.Fatal(err) }

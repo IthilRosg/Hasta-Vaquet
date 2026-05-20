@@ -35,6 +35,7 @@ func (p *vpnPlatform) openTunnel(v *VPN) error {
 	}
 
 	run("netsh", "interface", "ip", "set", "address", "name=HastaVaquet", "static", v.config.InternalIP, "255.255.255.0")
+	run("netsh", "interface", "ipv4", "set", "subinterface", "name=HastaVaquet", "mtu=1300")
 	run("netsh", "interface", "ip", "set", "dns", "name=HastaVaquet", "static", v.config.DNS)
 	run("route", "delete", v.config.ServerIP)
 	run("route", "add", v.config.ServerIP, "mask", "255.255.255.255", v.config.GatewayIP)
