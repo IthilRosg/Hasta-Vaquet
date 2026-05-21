@@ -131,17 +131,18 @@ func (p *vpnPlatform) readerLoop(v *VPN) {
 			return
 		default:
 		}
-		v.conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+		v.conn.SetReadDeadline(time.Now().Add(10 * time.Second))
 		n, err := v.conn.Read(buf)
 		if err != nil {
+			fails := v.readFails.Add(1)
+			if fails >= 2 {
+				v.onConnectionLost()
+				return
+			}
 			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
-				fails := v.readFails.Add(1)
-				if fails >= 3 {
-					v.onConnectionLost()
-					return
-				}
+				log.Printf("[VPN] readerLoop: timeout #%d", fails)
 			} else {
-				v.readFails.Add(1)
+				log.Printf("[VPN] readerLoop: error #%d: %v", fails, err)
 			}
 			continue
 		}
