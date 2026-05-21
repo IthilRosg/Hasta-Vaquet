@@ -351,3 +351,65 @@ func TestReconnectDoubleCallIsSafe(t *testing.T) {
 		t.Fatal("onConnectionLost should only execute once")
 	}
 }
+
+func TestKillSwitchTimeout(t *testing.T) {
+	listener := &testListener{reconnectingCh: make(chan string, 10)}
+	vpn := New(Config{
+		ServerIP: "127.0.0.1", Port: 19996, ShortID: 1,
+		SecretKey: "ks-timeout", RoutingSalt: "salt",
+		InternalIP: "10.0.0.96", GatewayIP: "192.168.1.1",
+	}, listener)
+	vpn.running.Store(true)
+	vpn.stopCh = make(chan struct{})
+
+	go vpn.onConnectionLost()
+
+	// Должен стартовать reconnect
+	select {
+	case <-listener.reconnectingCh:
+		t.Log("Reconnect started")
+	case <-time.After(3 * time.Second):
+		t.Fatal("No reconnect callback")
+	}
+
+	// Стопаем через 1с — проверяем что можно безопасно остановить во время reconnect
+	vpn.Stop()
+	if vpn.reconnecting.Load() {
+		t.Fatal("reconnecting should be false after Stop()")
+	}
+	t.Log("KillSwitch: Stop() during reconnect — OK")
+}
+
+func TestKillSwitchHooksNoPanic(t *testing.T) {
+	// Этот тест проверяет что activateKillSwitch сначала добавляет route до сервера
+	// прежде чем удалить default route. На этой платформе — только проверка вызова
+	// (реальная имплементация в vpn_windows.go)
+
+	vpn := New(Config{
+		ServerIP: "31.42.120.154", Port: 9999, ShortID: 1,
+		SecretKey: "ks-route", RoutingSalt: "salt",
+		InternalIP: "10.0.0.1", GatewayIP: "192.168.1.1",
+	}, &testListener{})
+
+	// Симулируем kill switch через прямой вызов platform-хуков
+	// Это проверит что вызовы не падают
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				t.Fatalf("platformActivateKillSwitch panicked: %v", r)
+			}
+		}()
+		vpn.platformActivateKillSwitch()
+	}()
+
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				t.Fatalf("platformDeactivateKillSwitch panicked: %v", r)
+			}
+		}()
+		vpn.platformDeactivateKillSwitch()
+	}()
+
+	t.Log("KillSwitch hook calls completed without panic")
+}
