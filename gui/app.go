@@ -31,12 +31,23 @@ type vpnListener struct {
 }
 
 func (l *vpnListener) OnStatus(status string, txSpeed, rxSpeed int64, totalTx, totalRx uint64, pingMs int, lossPct float64) {
-	runtime.EventsEmit(l.ctx, "status", status)
-	runtime.EventsEmit(l.ctx, "traffic", map[string]interface{}{
-		"tx_speed": txSpeed, "rx_speed": rxSpeed,
-		"total_tx": totalTx, "total_rx": totalRx,
+	runtime.EventsEmit(l.ctx, "status", map[string]interface{}{
+		"status":      status,
+		"attempt":     txSpeed,
+		"tx_speed":    txSpeed,
+		"rx_speed":    rxSpeed,
+		"total_tx":    totalTx,
+		"total_rx":    totalRx,
+		"ping_ms":     pingMs,
+		"loss_pct":    lossPct,
 	})
-	runtime.EventsEmit(l.ctx, "ping", map[string]interface{}{"rtt": pingMs, "loss": lossPct})
+	if status == "traffic" {
+		runtime.EventsEmit(l.ctx, "traffic", map[string]interface{}{
+			"tx_speed": txSpeed, "rx_speed": rxSpeed,
+			"total_tx": totalTx, "total_rx": totalRx,
+		})
+		runtime.EventsEmit(l.ctx, "ping", map[string]interface{}{"rtt": pingMs, "loss": lossPct})
+	}
 }
 
 func NewApp() *App {

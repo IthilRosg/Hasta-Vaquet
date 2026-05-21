@@ -3,6 +3,7 @@
   import { EventsOn } from '../wailsjs/runtime/runtime'
 
   let connected = false
+  let reconnecting = false
   let statusText = 'Disconnected'
   let txSpeed = '0 B/s'
   let rxSpeed = '0 B/s'
@@ -73,24 +74,29 @@
     return String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0')
   }
 
-  EventsOn('status', (s: string) => {
+  EventsOn('status', (data: any) => {
+    const s = typeof data === 'string' ? data : data.status
+    const attempt = typeof data === 'object' ? data.attempt || 0 : 0
     if (s === 'connected') {
-      connected = true
+      connected = true; reconnecting = false
       statusText = 'Connected'
       startTime = Date.now()
-      uptime = '00:00'
       clearInterval(uptimeTimer)
       uptimeTimer = setInterval(() => {
         const sec = Math.floor((Date.now() - startTime) / 1000)
         uptime = formatTime(sec)
       }, 1000)
     } else if (s === 'disconnected') {
-      connected = false
+      connected = false; reconnecting = false
       statusText = 'Disconnected'
       txSpeed = '0 B/s'; rxSpeed = '0 B/s'; rtt = 0; loss = 0; uptime = '00:00'
       clearInterval(uptimeTimer)
-    } else if (s === 'connecting' || s === 'reconnecting') {
-      statusText = s === 'reconnecting' ? 'Reconnecting...' : 'Connecting...'
+    } else if (s === 'connecting') {
+      statusText = 'Connecting...'
+    } else if (s === 'reconnecting') {
+      reconnecting = true
+      statusText = 'Reconnecting… #' + attempt
+      clearInterval(uptimeTimer)
     }
   })
 
@@ -191,7 +197,13 @@
         <span class="label">{connected ? 'Disconnect' : 'Connect'}</span>
       </button>
     </div>
-    <div class="status">{statusText}</div>
+    <div class="status" class:reconnecting>{statusText}</div>
+    {#if reconnecting}
+    <div class="reconnect-indicator">
+      <span class="dot-pulse"></span>
+      <span>auto-reconnect…</span>
+    </div>
+    {/if}
   </div>
 
   <!-- Stats panel (only when connected) -->
@@ -428,4 +440,9 @@
   .import-btn { background: none; border: 1px dashed var(--border); color: var(--accent); padding: 10px; border-radius: var(--radius-sm); cursor: pointer; font-size: 14px; transition: all 0.2s; }
   .import-btn:hover { border-color: var(--accent); background: var(--accent-glow); }
   .version { position: fixed; bottom: 8px; right: 12px; font-size: 11px; color: var(--text-dim); opacity: 0.5; }
+
+  .status.reconnecting { color: var(--yellow); }
+  .reconnect-indicator { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-dim); margin-top: 4px; }
+  .dot-pulse { width: 6px; height: 6px; border-radius: 50%; background: var(--yellow); animation: pulse 1.2s ease-in-out infinite; }
+  @keyframes pulse { 0%, 100% { opacity: 0.3; transform: scale(0.8); } 50% { opacity: 1; transform: scale(1.2); } }
 </style>

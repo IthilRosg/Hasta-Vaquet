@@ -24,17 +24,18 @@ type vpnPlatform struct {
 }
 
 func getDefaultGateway() string {
-	// Парсим route print 0.0.0.0 — первая строка с 0.0.0.0 и шлюзом
-	out, err := exec.Command("cmd", "/c", "route print 0.0.0.0 | findstr 0.0.0.0").Output()
+	// Используем netsh вместо route+findstr — так можно скрыть окно консоли
+	cmd := exec.Command("powershell", "-Command",
+		"Get-NetRoute -DestinationPrefix '0.0.0.0/0' | Select-Object -First 1 -ExpandProperty NextHop")
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	out, err := cmd.Output()
 	if err != nil {
 		return ""
 	}
-	fields := strings.Fields(string(out))
-	for _, f := range fields {
-		ip := net.ParseIP(f)
-		if ip != nil && !ip.IsLoopback() && !ip.Equal(net.IPv4zero) {
-			return ip.String()
-		}
+	gw := strings.TrimSpace(string(out))
+	ip := net.ParseIP(gw)
+	if ip != nil && !ip.IsLoopback() {
+		return gw
 	}
 	return ""
 }
@@ -135,14 +136,20 @@ func (p *vpnPlatform) readerLoop(v *VPN) {
 		n, err := v.conn.Read(buf)
 		if err != nil {
 			fails := v.readFails.Add(1)
-			if fails >= 2 {
+			isTimeout := false
+			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+				isTimeout = true
+			}
+			// Не-timeout ошибка (network down, interface reset) — reconnect мгновенно
+			// Timeout — после 2 подряд (20с макс)
+			trigger := fails >= 2
+			if !isTimeout {
+				trigger = fails >= 1
+			}
+			log.Printf("[VPN] readerLoop: fail #%d timeout=%v trigger=%v err=%v", fails, isTimeout, trigger, err)
+			if trigger {
 				v.onConnectionLost()
 				return
-			}
-			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
-				log.Printf("[VPN] readerLoop: timeout #%d", fails)
-			} else {
-				log.Printf("[VPN] readerLoop: error #%d: %v", fails, err)
 			}
 			continue
 		}
@@ -187,11 +194,15 @@ func (p *vpnPlatform) activateKillSwitch(v *VPN) {
 		gw = v.config.GatewayIP
 	}
 	log.Printf("[ROUTE] activateKillSwitch: adding server route %s via %s", v.config.ServerIP, gw)
+	hide := func(cmd string, args ...string) {
+		c := exec.Command(cmd, args...)
+		c.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+		c.Run()
+	}
 	// 1. Добавляем маршрут до сервера через реальный шлюз — чтобы reconnect мог до него достучаться
-	exec.Command("route", "add", v.config.ServerIP, "mask", "255.255.255.255",
-		gw, "metric", "1").Run()
+	hide("route", "add", v.config.ServerIP, "mask", "255.255.255.255", gw, "metric", "1")
 	// 2. Удаляем default route — блокируем весь остальной трафик
-	exec.Command("route", "delete", "0.0.0.0", "mask", "0.0.0.0").Run()
+	hide("route", "delete", "0.0.0.0", "mask", "0.0.0.0")
 }
 
 func (p *vpnPlatform) deactivateKillSwitch(v *VPN) {
@@ -199,19 +210,25 @@ func (p *vpnPlatform) deactivateKillSwitch(v *VPN) {
 	if gw == "" {
 		gw = v.config.GatewayIP
 	}
+	hide := func(cmd string, args ...string) {
+		c := exec.Command(cmd, args...)
+		c.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+		c.Run()
+	}
 	if p.ifIndex == "" {
 		log.Printf("[ROUTE] deactivateKillSwitch: no ifIndex, fallback to gateway %s", gw)
-		exec.Command("route", "add", "0.0.0.0", "mask", "0.0.0.0",
-			gw, "metric", "1").Run()
+		hide("route", "add", "0.0.0.0", "mask", "0.0.0.0", gw, "metric", "1")
 		return
 	}
 	log.Printf("[ROUTE] deactivateKillSwitch: restoring default route via %s if=%s", v.config.InternalIP, p.ifIndex)
-	exec.Command("route", "add", "0.0.0.0", "mask", "0.0.0.0",
-		v.config.InternalIP, "metric", "1", "if", p.ifIndex).Run()
+	hide("route", "add", "0.0.0.0", "mask", "0.0.0.0",
+		v.config.InternalIP, "metric", "1", "if", p.ifIndex)
 }
 
 func platformDumpRoutes() {
-	out, _ := exec.Command("route", "print", "0.0.0.0").Output()
+	c := exec.Command("route", "print", "0.0.0.0")
+	c.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	out, _ := c.Output()
 	log.Printf("[ROUTE] DUMP:\n%s", string(out))
 }
 

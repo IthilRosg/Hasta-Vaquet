@@ -160,16 +160,18 @@ func (v *VPN) onConnectionLost() {
 		v.conn = nil
 	}
 
-	v.callback("disconnected", 0, 0, 0, 0, 0, 0)
+	v.callback("reconnecting", 0, 0, 0, 0, 0, 0)
 	go v.reconnectLoop()
 }
 
 func (v *VPN) reconnectLoop() {
 	backoff := 1 * time.Second
 	maxBackoff := 60 * time.Second
+	attempt := 0
 
 	for {
-		log.Printf("[VPN] reconnecting in %.0fs (backoff=%v)", backoff.Seconds(), backoff)
+		attempt++
+		log.Printf("[VPN] reconnect attempt #%d in %.0fs (backoff=%v)", attempt, backoff.Seconds(), backoff)
 
 		select {
 		case <-time.After(backoff):
@@ -181,7 +183,7 @@ func (v *VPN) reconnectLoop() {
 			return
 		}
 
-		v.callback("reconnecting", 0, 0, 0, 0, 0, 0)
+		v.callback("reconnecting", int64(attempt), 0, 0, 0, 0, 0)
 
 		v.stopCh = make(chan struct{})
 		if err := v.platformOpenTunnel(); err != nil {
