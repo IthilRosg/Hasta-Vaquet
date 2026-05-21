@@ -181,3 +181,5 @@ func platformDeactivateKillSwitch(v *VPN)     {}
 
 func (p *vpnPlatform) activateKillSwitch(v *VPN)   {}
 func (p *vpnPlatform) deactivateKillSwitch(v *VPN) {}
+
+func platformDumpRoutes() {}

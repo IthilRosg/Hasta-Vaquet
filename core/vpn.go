@@ -2,6 +2,7 @@ package core
 
 import (
 	"fmt"
+	"log"
 	mathrand "math/rand"
 	"net"
 	"sync"
@@ -139,6 +140,8 @@ func (v *VPN) onConnectionLost() {
 	close(v.stopCh)
 	v.mu.Unlock()
 
+	log.Printf("[VPN] connectionLost: closing tunnel + kill switch")
+	platformDumpRoutes()
 	v.platformCloseTunnel()
 	v.platformActivateKillSwitch()
 
@@ -147,6 +150,7 @@ func (v *VPN) onConnectionLost() {
 	go func() {
 		time.Sleep(120 * time.Second)
 		if v.reconnecting.Load() {
+			log.Printf("[VPN] killSwitch timeout 120s expired — restoring internet")
 			v.platformDeactivateKillSwitch()
 		}
 	}()
@@ -165,21 +169,23 @@ func (v *VPN) reconnectLoop() {
 	maxBackoff := 60 * time.Second
 
 	for {
+		log.Printf("[VPN] reconnecting in %.0fs (backoff=%v)", backoff.Seconds(), backoff)
+
 		select {
 		case <-time.After(backoff):
 		}
 
 		// Stop() was called during reconnect
 		if !v.reconnecting.Load() {
+			log.Printf("[VPN] reconnect cancelled by Stop()")
 			return
 		}
 
 		v.callback("reconnecting", 0, 0, 0, 0, 0, 0)
 
-		v.mu.Lock()
 		v.stopCh = make(chan struct{})
-		v.mu.Unlock()
 		if err := v.platformOpenTunnel(); err != nil {
+			log.Printf("[VPN] reconnect failed: %v", err)
 			backoff *= 2
 			if backoff > maxBackoff {
 				backoff = maxBackoff
@@ -187,6 +193,7 @@ func (v *VPN) reconnectLoop() {
 			continue
 		}
 
+		log.Printf("[VPN] reconnect success — deactivating kill switch")
 		v.platformDeactivateKillSwitch()
 		v.readFails.Store(0)
 		v.running.Store(true)

@@ -4,6 +4,7 @@ package core
 
 import (
 	"fmt"
+	"log"
 	"net"
 	"os/exec"
 	"strings"
@@ -22,6 +23,7 @@ type vpnPlatform struct {
 }
 
 func (p *vpnPlatform) openTunnel(v *VPN) error {
+	log.Printf("[ROUTE] openTunnel: creating adapter + routes")
 	adapter, err := wintun.CreateAdapter("HastaVaquet", "HastaVaquet", nil)
 	if err != nil {
 		return fmt.Errorf("adapter: %w", err)
@@ -44,6 +46,8 @@ func (p *vpnPlatform) openTunnel(v *VPN) error {
 	run("route", "delete", "0.0.0.0", v.config.InternalIP)
 	run("route", "add", "0.0.0.0", "mask", "0.0.0.0", v.config.InternalIP, "metric", "1", "if", index)
 	run("netsh", "interface", "ipv6", "add", "route", "::/0", "name=HastaVaquet", v.config.InternalIP, "metric=1")
+	log.Printf("[ROUTE] openTunnel done: ifIndex=%s, internal=%s, gateway=%s, server=%s",
+		p.ifIndex, v.config.InternalIP, v.config.GatewayIP, v.config.ServerIP)
 
 	conn, err := net.DialUDP("udp", nil, &net.UDPAddr{
 		IP:   net.ParseIP(v.config.ServerIP),
@@ -66,6 +70,7 @@ func (p *vpnPlatform) openTunnel(v *VPN) error {
 }
 
 func (p *vpnPlatform) closeTunnel(v *VPN) {
+	log.Printf("[ROUTE] closeTunnel: cleaning up %s/%s", v.config.InternalIP, v.config.GatewayIP)
 	hide := func(cmd string, args ...string) {
 		c := exec.Command(cmd, args...)
 		c.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
@@ -80,6 +85,7 @@ func (p *vpnPlatform) closeTunnel(v *VPN) {
 	if p.adapter != nil {
 		p.adapter.Close()
 	}
+	log.Printf("[ROUTE] closeTunnel done")
 }
 
 func (p *vpnPlatform) readerLoop(v *VPN) {
@@ -140,6 +146,7 @@ func (p *vpnPlatform) readerLoop(v *VPN) {
 }
 
 func (p *vpnPlatform) activateKillSwitch(v *VPN) {
+	log.Printf("[ROUTE] activateKillSwitch: adding server route %s via %s", v.config.ServerIP, v.config.GatewayIP)
 	// 1. Добавляем маршрут до сервера через реальный шлюз — чтобы reconnect мог до него достучаться
 	exec.Command("route", "add", v.config.ServerIP, "mask", "255.255.255.255",
 		v.config.GatewayIP, "metric", "1").Run()
@@ -149,13 +156,19 @@ func (p *vpnPlatform) activateKillSwitch(v *VPN) {
 
 func (p *vpnPlatform) deactivateKillSwitch(v *VPN) {
 	if p.ifIndex == "" {
-		// fallback: восстанавливаем маршрут через шлюз, если нет сохранённого индекса
+		log.Printf("[ROUTE] deactivateKillSwitch: no ifIndex, fallback to gateway %s", v.config.GatewayIP)
 		exec.Command("route", "add", "0.0.0.0", "mask", "0.0.0.0",
 			v.config.GatewayIP, "metric", "1").Run()
 		return
 	}
+	log.Printf("[ROUTE] deactivateKillSwitch: restoring default route via %s if=%s", v.config.InternalIP, p.ifIndex)
 	exec.Command("route", "add", "0.0.0.0", "mask", "0.0.0.0",
 		v.config.InternalIP, "metric", "1", "if", p.ifIndex).Run()
+}
+
+func platformDumpRoutes() {
+	out, _ := exec.Command("route", "print", "0.0.0.0").Output()
+	log.Printf("[ROUTE] DUMP:\n%s", string(out))
 }
 
 func (p *vpnPlatform) writerLoop(v *VPN) {

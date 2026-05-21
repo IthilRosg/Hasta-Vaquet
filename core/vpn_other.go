@@ -19,6 +19,8 @@ func (p *vpnPlatform) writerLoop(v *VPN)       {}
 func (p *vpnPlatform) activateKillSwitch(v *VPN)   {}
 func (p *vpnPlatform) deactivateKillSwitch(v *VPN) {}
 
+func platformDumpRoutes() {}
+
 var plat vpnPlatform
 
 func platformOpenTunnel(v *VPN) error         { return plat.openTunnel(v) }
