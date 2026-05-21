@@ -18,6 +18,7 @@ import (
 type vpnPlatform struct {
 	session *wintun.Session
 	adapter *wintun.Adapter
+	ifIndex string // сохранённый индекс интерфейса для восстановления маршрута после закрытия адаптера
 }
 
 func (p *vpnPlatform) openTunnel(v *VPN) error {
@@ -28,6 +29,7 @@ func (p *vpnPlatform) openTunnel(v *VPN) error {
 	p.adapter = adapter
 
 	index := getInterfaceIndex("HastaVaquet")
+	p.ifIndex = index
 	run := func(cmd string, args ...string) {
 		c := exec.Command(cmd, args...)
 		c.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
@@ -144,11 +146,14 @@ func (p *vpnPlatform) activateKillSwitch(v *VPN) {
 }
 
 func (p *vpnPlatform) deactivateKillSwitch(v *VPN) {
-	index := getInterfaceIndex("HastaVaquet")
-	c := exec.Command("route", "add", "0.0.0.0", "mask", "0.0.0.0",
-		v.config.InternalIP, "metric", "1", "if", index)
-	c.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
-	c.Run()
+	if p.ifIndex == "" {
+		// fallback: восстанавливаем маршрут через шлюз, если нет сохранённого индекса
+		exec.Command("route", "add", "0.0.0.0", "mask", "0.0.0.0",
+			v.config.GatewayIP, "metric", "1").Run()
+		return
+	}
+	exec.Command("route", "add", "0.0.0.0", "mask", "0.0.0.0",
+		v.config.InternalIP, "metric", "1", "if", p.ifIndex).Run()
 }
 
 func (p *vpnPlatform) writerLoop(v *VPN) {
