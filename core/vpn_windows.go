@@ -140,9 +140,11 @@ func (p *vpnPlatform) readerLoop(v *VPN) {
 }
 
 func (p *vpnPlatform) activateKillSwitch(v *VPN) {
-	c := exec.Command("route", "delete", "0.0.0.0", "mask", "0.0.0.0")
-	c.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
-	c.Run()
+	// 1. Добавляем маршрут до сервера через реальный шлюз — чтобы reconnect мог до него достучаться
+	exec.Command("route", "add", v.config.ServerIP, "mask", "255.255.255.255",
+		v.config.GatewayIP, "metric", "1").Run()
+	// 2. Удаляем default route — блокируем весь остальной трафик
+	exec.Command("route", "delete", "0.0.0.0", "mask", "0.0.0.0").Run()
 }
 
 func (p *vpnPlatform) deactivateKillSwitch(v *VPN) {
