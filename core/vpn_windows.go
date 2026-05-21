@@ -70,13 +70,20 @@ func (p *vpnPlatform) openTunnel(v *VPN) error {
 }
 
 func (p *vpnPlatform) closeTunnel(v *VPN) {
-	log.Printf("[ROUTE] closeTunnel: cleaning up %s/%s", v.config.InternalIP, v.config.GatewayIP)
+	log.Printf("[ROUTE] closeTunnel: restoring default via %s, removing tunnel %s", v.config.GatewayIP, v.config.InternalIP)
 	hide := func(cmd string, args ...string) {
 		c := exec.Command(cmd, args...)
 		c.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 		c.Run()
 	}
+
+	// 1. Сначала восстанавливаем default route через реальный шлюз — чтобы интернет не пропал
+	hide("route", "add", "0.0.0.0", "mask", "0.0.0.0",
+		v.config.GatewayIP, "metric", "10")
+	// 2. Только потом удаляем туннельный route (может быть несколько попыток)
 	hide("route", "delete", "0.0.0.0", v.config.InternalIP)
+	hide("route", "delete", "0.0.0.0", v.config.InternalIP)
+
 	hide("netsh", "interface", "ipv6", "delete", "route", "::/0", "name=HastaVaquet")
 
 	if p.session != nil {
