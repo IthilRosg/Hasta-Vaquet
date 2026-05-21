@@ -142,6 +142,15 @@ func (v *VPN) onConnectionLost() {
 	v.platformCloseTunnel()
 	v.platformActivateKillSwitch()
 
+	// Kill Switch timeout: если reconnect не удался за 120с — отключаем блокировку сами
+	// чтобы пользователь не остался без интернета при фатальном обрыве.
+	go func() {
+		time.Sleep(120 * time.Second)
+		if v.reconnecting.Load() {
+			v.platformDeactivateKillSwitch()
+		}
+	}()
+
 	if v.conn != nil {
 		v.conn.Close()
 		v.conn = nil
