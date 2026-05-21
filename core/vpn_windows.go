@@ -17,13 +17,36 @@ import (
 
 // platform-специфичные поля VPN
 type vpnPlatform struct {
-	session *wintun.Session
-	adapter *wintun.Adapter
-	ifIndex string // сохранённый индекс интерфейса для восстановления маршрута после закрытия адаптера
+	session     *wintun.Session
+	adapter     *wintun.Adapter
+	ifIndex     string // сохранённый индекс интерфейса для восстановления маршрута после закрытия адаптера
+	realGateway string // реальный шлюз, определённый при старте
+}
+
+func getDefaultGateway() string {
+	// Парсим route print 0.0.0.0 — первая строка с 0.0.0.0 и шлюзом
+	out, err := exec.Command("cmd", "/c", "route print 0.0.0.0 | findstr 0.0.0.0").Output()
+	if err != nil {
+		return ""
+	}
+	fields := strings.Fields(string(out))
+	for _, f := range fields {
+		ip := net.ParseIP(f)
+		if ip != nil && !ip.IsLoopback() && !ip.Equal(net.IPv4zero) {
+			return ip.String()
+		}
+	}
+	return ""
 }
 
 func (p *vpnPlatform) openTunnel(v *VPN) error {
 	log.Printf("[ROUTE] openTunnel: creating adapter + routes")
+	// Определяем реальный шлюз ДО изменения таблицы маршрутизации
+	p.realGateway = getDefaultGateway()
+	if p.realGateway == "" {
+		p.realGateway = v.config.GatewayIP // fallback на конфиг, если не смогли определить
+	}
+	log.Printf("[ROUTE] openTunnel: detected gateway=%s (config=%s)", p.realGateway, v.config.GatewayIP)
 	adapter, err := wintun.CreateAdapter("HastaVaquet", "HastaVaquet", nil)
 	if err != nil {
 		return fmt.Errorf("adapter: %w", err)
@@ -42,7 +65,8 @@ func (p *vpnPlatform) openTunnel(v *VPN) error {
 	run("netsh", "interface", "ipv4", "set", "subinterface", "name=HastaVaquet", "mtu=1300")
 	run("netsh", "interface", "ip", "set", "dns", "name=HastaVaquet", "static", v.config.DNS)
 	run("route", "delete", v.config.ServerIP)
-	run("route", "add", v.config.ServerIP, "mask", "255.255.255.255", v.config.GatewayIP)
+	run("route", "add", v.config.ServerIP, "mask", "255.255.255.255", p.realGateway)
+	run("route", "delete", "0.0.0.0", "mask", "0.0.0.0", v.config.InternalIP)
 	run("route", "delete", "0.0.0.0", v.config.InternalIP)
 	run("route", "add", "0.0.0.0", "mask", "0.0.0.0", v.config.InternalIP, "metric", "1", "if", index)
 	run("netsh", "interface", "ipv6", "add", "route", "::/0", "name=HastaVaquet", v.config.InternalIP, "metric=1")
@@ -70,7 +94,11 @@ func (p *vpnPlatform) openTunnel(v *VPN) error {
 }
 
 func (p *vpnPlatform) closeTunnel(v *VPN) {
-	log.Printf("[ROUTE] closeTunnel: restoring default via %s, removing tunnel %s", v.config.GatewayIP, v.config.InternalIP)
+	gw := p.realGateway
+	if gw == "" {
+		gw = v.config.GatewayIP
+	}
+	log.Printf("[ROUTE] closeTunnel: restoring default via %s, removing tunnel %s", gw, v.config.InternalIP)
 	hide := func(cmd string, args ...string) {
 		c := exec.Command(cmd, args...)
 		c.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
@@ -79,10 +107,10 @@ func (p *vpnPlatform) closeTunnel(v *VPN) {
 
 	// 1. Сначала восстанавливаем default route через реальный шлюз — чтобы интернет не пропал
 	hide("route", "add", "0.0.0.0", "mask", "0.0.0.0",
-		v.config.GatewayIP, "metric", "10")
-	// 2. Только потом удаляем туннельный route (может быть несколько попыток)
-	hide("route", "delete", "0.0.0.0", v.config.InternalIP)
-	hide("route", "delete", "0.0.0.0", v.config.InternalIP)
+		gw, "metric", "10")
+	// 2. Только потом удаляем туннельный route
+	hide("route", "delete", "0.0.0.0", "mask", "0.0.0.0", v.config.InternalIP)
+	hide("route", "delete", "0.0.0.0", v.config.InternalIP) // запасной вариант без mask
 
 	hide("netsh", "interface", "ipv6", "delete", "route", "::/0", "name=HastaVaquet")
 
@@ -153,19 +181,27 @@ func (p *vpnPlatform) readerLoop(v *VPN) {
 }
 
 func (p *vpnPlatform) activateKillSwitch(v *VPN) {
-	log.Printf("[ROUTE] activateKillSwitch: adding server route %s via %s", v.config.ServerIP, v.config.GatewayIP)
+	gw := p.realGateway
+	if gw == "" {
+		gw = v.config.GatewayIP
+	}
+	log.Printf("[ROUTE] activateKillSwitch: adding server route %s via %s", v.config.ServerIP, gw)
 	// 1. Добавляем маршрут до сервера через реальный шлюз — чтобы reconnect мог до него достучаться
 	exec.Command("route", "add", v.config.ServerIP, "mask", "255.255.255.255",
-		v.config.GatewayIP, "metric", "1").Run()
+		gw, "metric", "1").Run()
 	// 2. Удаляем default route — блокируем весь остальной трафик
 	exec.Command("route", "delete", "0.0.0.0", "mask", "0.0.0.0").Run()
 }
 
 func (p *vpnPlatform) deactivateKillSwitch(v *VPN) {
+	gw := p.realGateway
+	if gw == "" {
+		gw = v.config.GatewayIP
+	}
 	if p.ifIndex == "" {
-		log.Printf("[ROUTE] deactivateKillSwitch: no ifIndex, fallback to gateway %s", v.config.GatewayIP)
+		log.Printf("[ROUTE] deactivateKillSwitch: no ifIndex, fallback to gateway %s", gw)
 		exec.Command("route", "add", "0.0.0.0", "mask", "0.0.0.0",
-			v.config.GatewayIP, "metric", "1").Run()
+			gw, "metric", "1").Run()
 		return
 	}
 	log.Printf("[ROUTE] deactivateKillSwitch: restoring default route via %s if=%s", v.config.InternalIP, p.ifIndex)
