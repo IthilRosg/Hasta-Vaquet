@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 )
@@ -117,7 +118,7 @@ func (p *vpnPlatform) readerLoop(v *VPN) {
 		// Echo-пинг (1 байт 0x01)
 		if len(decrypted) == 1 && decrypted[0] == 0x01 {
 			v.echoAck()
-			if v.reconnecting.Load() && v.confirmReq.Load() {
+			if v.reconnecting.Load() && atomic.LoadInt32(&v.confirming) == 1 {
 				v.confirmOk.Add(1)
 			}
 			last := v.lastAliveMs.Load()

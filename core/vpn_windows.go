@@ -208,7 +208,7 @@ func (p *vpnPlatform) readerLoop(v *VPN) {
 		// Server echo response (1-byte marker for RTT measurement)
 		if len(decrypted) == 1 && decrypted[0] == 0x01 {
 			v.echoAck()
-			if v.reconnecting.Load() && v.confirmReq.Load() {
+			if v.reconnecting.Load() && v.confirming == 1 {
 				v.confirmOk.Add(1)
 			}
 			last := v.lastAliveMs.Load()
@@ -220,6 +220,10 @@ func (p *vpnPlatform) readerLoop(v *VPN) {
 				}
 			}
 			continue
+		}
+		// Защита от паники: session мог быть обнулён в closeTunnel после Stop()
+		if v.stopping.Load() || p.session == nil {
+			return
 		}
 		packet, err := p.session.AllocateSendPacket(len(decrypted))
 		if err != nil {

@@ -49,7 +49,7 @@ type VPN struct {
 	readFails         atomic.Int64  // consecutive UDP read failures
 	consecutiveMisses atomic.Int32  // keep-alive misses (reset on any echo)
 
-	confirmReq        atomic.Bool   // burst confirmation in progress
+	confirming        int32         // 1 = burst confirmation in progress (CAS gate)
 	confirmOk         atomic.Int32  // echo acks received during burst
 	graceUntil        atomic.Int64  // unix nano: skip miss counting before this
 }
@@ -152,6 +152,7 @@ func (v *VPN) enterReconnecting() {
 }
 
 // tryConfirmReconnect запускает burst-подтверждение вместо мгновенного выхода.
+// CAS-шлюз гарантирует строго одну горутину подтверждения в момент времени.
 func (v *VPN) tryConfirmReconnect() {
 	if v.stopping.Load() || !v.reconnecting.Load() {
 		return
@@ -166,7 +167,7 @@ func (v *VPN) tryConfirmReconnect() {
 		return
 	}
 
-	if !v.confirmReq.CompareAndSwap(false, true) {
+	if !atomic.CompareAndSwapInt32(&v.confirming, 0, 1) {
 		return
 	}
 	log.Printf("[VPN] tryConfirmReconnect: gateway OK, sending burst probes")
@@ -175,7 +176,7 @@ func (v *VPN) tryConfirmReconnect() {
 
 // confirmBurst отправляет 3 пинга с интервалом 400ms и проверяет min 2 ответа.
 func (v *VPN) confirmBurst() {
-	defer v.confirmReq.Store(false)
+	defer atomic.StoreInt32(&v.confirming, 0)
 	v.confirmOk.Store(0)
 
 	for i := 0; i < 3; i++ {
@@ -196,15 +197,23 @@ func (v *VPN) confirmBurst() {
 	select {
 	case <-v.stopCh:
 		return
-	case <-time.After(300 * time.Millisecond):
+	case <-time.After(400 * time.Millisecond):
 	}
 
 	acks := v.confirmOk.Load()
 	if acks >= 2 {
 		log.Printf("[VPN] confirmBurst: %d/3 acks — connection confirmed", acks)
 		v.exitReconnecting()
+		atomic.StoreInt32(&v.confirming, 0)
 	} else {
-		log.Printf("[VPN] confirmBurst: only %d/3 acks — staying in reconnect", acks)
+		log.Printf("[VPN] confirmBurst: only %d/3 acks — cooldown 1s before next", acks)
+		// Cooldown — не пускаем следующий burst сразу
+		select {
+		case <-v.stopCh:
+			return
+		case <-time.After(1 * time.Second):
+		}
+		atomic.StoreInt32(&v.confirming, 0)
 	}
 }
 
