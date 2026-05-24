@@ -139,28 +139,26 @@ func (v *VPN) platformReconnectSocket()             { platformReconnectSocket(v)
 
 // ─── Stateless Persistent Ping ───────────────────────────────────
 
-// persistentPingLoop — «тупой» NAT-puncher: раз в 3s шлёт пустой пакет.
-// Игнорирует ошибки, статусы, шлюзы. Единственное условие — conn != nil.
-// Дополнительно проверяет lastPacketRx: если >6s без ответа — шлёт UI.
+// persistentPingLoop — «тупой» NAT-puncher: отправляет зашифрованный пустой
+// пакет (тот же, что и первичный handshake). Первый пакет — немедленно,
+// затем каждые 3s. Игнорирует ошибки. Если conn nil — ждёт следующего тика.
 func (v *VPN) persistentPingLoop() {
 	ticker := time.NewTicker(pingInterval)
 	defer ticker.Stop()
 	var wasDead bool
-	for {
-		select {
-		case <-v.stopCh:
-			return
-		case <-ticker.C:
-		}
+	// Отправляем первый handshake сразу, без ожидания ticker.C
+	for first := true; ; first = false {
 		if v.stopping.Load() {
 			return
 		}
 		if v.conn != nil {
+			// Стандартный keep-alive / handshake: Encrypt([]byte{})
+			// Сервер на пустой пакет обновляет UDP-адрес пира и шлёт echo 0x01.
 			pkt, err := Encrypt([]byte{}, v.key[:], v.config.ShortID, v.config.RoutingSalt)
 			if err == nil {
 				n, _ := v.conn.Write(pkt)
 				if n > 0 {
-					log.Printf("[VPN] persistentPingLoop: sent NAT-punch ping (%d bytes)", n)
+					log.Printf("[VPN] persistentPingLoop: sent handshake ping (%d bytes)", n)
 				}
 				v.lastAliveMs.Store(time.Now().UnixMilli())
 				v.echoPush()
@@ -174,6 +172,14 @@ func (v *VPN) persistentPingLoop() {
 		} else if !isDead && wasDead {
 			wasDead = false
 			v.callback("connected", 0, 0, 0, 0, 0, 0)
+		}
+		if first {
+			continue // первый пакет уже отправлен, без ожидания
+		}
+		select {
+		case <-v.stopCh:
+			return
+		case <-ticker.C:
 		}
 	}
 }
