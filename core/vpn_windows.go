@@ -43,9 +43,18 @@ func getDefaultGateway() string {
 
 func (p *vpnPlatform) openTunnel(v *VPN) error {
 	log.Printf("[ROUTE] openTunnel: detecting default gateway")
-	p.realGateway = getDefaultGateway()
+	for i := 0; i < 3; i++ {
+		p.realGateway = getDefaultGateway()
+		if p.realGateway != "" {
+			break
+		}
+		if i < 2 {
+			log.Printf("[ROUTE] openTunnel: gateway not found, retry %d/3 in 1s", i+1)
+			time.Sleep(1 * time.Second)
+		}
+	}
 	if p.realGateway == "" {
-		return fmt.Errorf("no default gateway detected — cannot set up routes, ensure network is connected")
+		return fmt.Errorf("no internet connection — no default gateway detected after 3 attempts")
 	}
 	log.Printf("[ROUTE] openTunnel: detected gateway=%s", p.realGateway)
 
@@ -257,14 +266,14 @@ func (p *vpnPlatform) deactivateKillSwitch(v *VPN) {
 		log.Printf("[ROUTE] deactivateKillSwitch: no gateway, skipping route restore")
 		return
 	}
+	// ВАЖНО: gateway — всегда p.realGateway, НЕ v.config.InternalIP (10.0.0.x)!
 	if p.ifIndex == "" {
-		log.Printf("[ROUTE] deactivateKillSwitch: no ifIndex, fallback to gateway %s", gw)
+		log.Printf("[ROUTE] deactivateKillSwitch: restoring default via %s (no ifIndex)", gw)
 		hide("route", "add", "0.0.0.0", "mask", "0.0.0.0", gw, "metric", "1")
-		return
+	} else {
+		log.Printf("[ROUTE] deactivateKillSwitch: restoring default via %s if=%s", gw, p.ifIndex)
+		hide("route", "add", "0.0.0.0", "mask", "0.0.0.0", gw, "metric", "1", "if", p.ifIndex)
 	}
-	log.Printf("[ROUTE] deactivateKillSwitch: restoring default route via %s if=%s", v.config.InternalIP, p.ifIndex)
-	hide("route", "add", "0.0.0.0", "mask", "0.0.0.0",
-		v.config.InternalIP, "metric", "1", "if", p.ifIndex)
 }
 
 func platformDumpRoutes() {
