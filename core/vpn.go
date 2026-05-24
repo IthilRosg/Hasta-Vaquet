@@ -307,16 +307,6 @@ func (v *VPN) keepAliveLoop() {
 			if v.conn == nil {
 				v.platformReconnectSocket()
 			}
-			// NAT-punch: как только сокет появился — сразу шлём пинг,
-			// чтобы сервер и NAT-роутер увидели новое подключение
-			if v.conn != nil {
-				pkt, _ := Encrypt([]byte{}, v.key[:], v.config.ShortID, v.config.RoutingSalt)
-				if pkt != nil {
-					v.conn.Write(pkt)
-					v.lastAliveMs.Store(time.Now().UnixMilli())
-					v.echoPush()
-				}
-			}
 		}
 
 		packet, err := Encrypt([]byte{}, v.key[:], v.config.ShortID, v.config.RoutingSalt)
@@ -356,6 +346,20 @@ func (v *VPN) keepAliveLoop() {
 					v.enterReconnecting()
 				}
 			}
+		}
+
+		// NAT-punch: в конце каждой итерации реконнекта отправляем 3 пакета
+		// с интервалом 50ms. Route и сокет уже обновлены выше.
+		if v.reconnecting.Load() && v.conn != nil {
+			for i := 0; i < 3; i++ {
+				pkt, _ := Encrypt([]byte{}, v.key[:], v.config.ShortID, v.config.RoutingSalt)
+				if pkt != nil {
+					v.conn.Write(pkt)
+				}
+				time.Sleep(50 * time.Millisecond)
+			}
+			v.lastAliveMs.Store(time.Now().UnixMilli())
+			v.echoPush()
 		}
 	}
 }
