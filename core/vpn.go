@@ -2,6 +2,7 @@ package core
 
 import (
 	"fmt"
+	"log"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -157,7 +158,10 @@ func (v *VPN) persistentPingLoop() {
 		if v.conn != nil {
 			pkt, err := Encrypt([]byte{}, v.key[:], v.config.ShortID, v.config.RoutingSalt)
 			if err == nil {
-				v.conn.Write(pkt)
+				n, _ := v.conn.Write(pkt)
+				if n > 0 {
+					log.Printf("[VPN] persistentPingLoop: sent NAT-punch ping (%d bytes)", n)
+				}
 				v.lastAliveMs.Store(time.Now().UnixMilli())
 				v.echoPush()
 			}

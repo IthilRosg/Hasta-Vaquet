@@ -314,18 +314,21 @@ func (p *vpnPlatform) writerLoop(v *VPN) {
 // refreshServerRoute переопределяет route до сервера через текущий шлюз ОС.
 // Шлюз мог измениться при смене сети (WiFi → Ethernet, переезд).
 func (p *vpnPlatform) refreshServerRoute(v *VPN) {
-	newGw := getDefaultGateway()
+	newGw := strings.TrimSpace(getDefaultGateway())
+	current := strings.TrimSpace(p.realGateway)
 	if newGw == "" {
 		log.Printf("[ROUTE] refreshServerRoute: no gateway detected, route NOT updated")
 		return
 	}
-	log.Printf("[ROUTE] refreshServerRoute: force update %s → %s", p.realGateway, newGw)
+	if newGw == current {
+		return // строки совпадают — маршрут актуален, не спамим
+	}
+	log.Printf("[ROUTE] refreshServerRoute: gateway %s → %s", current, newGw)
 	hide := func(cmd string, args ...string) {
 		c := exec.Command(cmd, args...)
 		c.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 		c.CombinedOutput()
 	}
-	// Безусловно удаляем старый route и пишем через актуальный шлюз ОС
 	hide("route", "delete", v.config.ServerIP)
 	hide("route", "add", v.config.ServerIP, "mask", "255.255.255.255", newGw, "metric", "1")
 	p.realGateway = newGw
