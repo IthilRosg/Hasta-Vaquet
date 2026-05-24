@@ -300,10 +300,13 @@ func (v *VPN) keepAliveLoop() {
 			return
 		}
 
-		// Каждую итерацию реконнекта пробуем обновить route до сервера —
-		// шлюз мог появиться или измениться, пока мы ждали
+		// Каждую итерацию реконнекта пробуем обновить route до сервера
+		// и пересоздать сокет — шлюз мог появиться/измениться
 		if v.reconnecting.Load() {
 			v.platformRefreshServerRoute()
+			if v.conn == nil {
+				v.platformReconnectSocket()
+			}
 		}
 
 		packet, err := Encrypt([]byte{}, v.key[:], v.config.ShortID, v.config.RoutingSalt)

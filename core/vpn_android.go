@@ -201,12 +201,12 @@ func platformWriterLoop(v *VPN)                  { plat.writerLoop(v) }
 func platformActivateKillSwitch(v *VPN)          {}
 func platformDeactivateKillSwitch(v *VPN)        {}
 func (p *vpnPlatform) reconnectSocket(v *VPN) {
-	if v.conn == nil {
-		return
+	// Закрываем старый сокет если есть
+	if v.conn != nil {
+		old := v.conn
+		v.conn = nil
+		old.Close()
 	}
-	old := v.conn
-	v.conn = nil
-	old.Close()
 
 	serverAddr := fmt.Sprintf("%s:%d", v.config.ServerIP, v.config.Port)
 	dialer := &net.Dialer{

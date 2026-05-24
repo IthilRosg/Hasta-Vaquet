@@ -156,6 +156,12 @@ func (p *vpnPlatform) readerLoop(v *VPN) {
 		default:
 		}
 
+		// Железный гард: сокет может быть временно nil во время recreateSocket
+		if v.conn == nil {
+			time.Sleep(100 * time.Millisecond)
+			continue
+		}
+
 		// При reconnect — короткий таймаут для быстрой реакции на ответ сервера
 		if v.reconnecting.Load() {
 			v.conn.SetReadDeadline(time.Now().Add(3 * time.Second))
@@ -353,7 +359,7 @@ func (p *vpnPlatform) reconnectSocket(v *VPN) {
 	if v.conn == nil {
 		return
 	}
-	// Закрываем старый сокет — readerLoop поймает "use of closed" и продолжит
+	// Закрываем старый сокет — readerLoop поймает "use of closed" и встанет на nil-guard
 	old := v.conn
 	v.conn = nil
 	old.Close()
@@ -364,8 +370,8 @@ func (p *vpnPlatform) reconnectSocket(v *VPN) {
 		Port: v.config.Port,
 	})
 	if err != nil {
-		log.Printf("[VPN] reconnectSocket: dial failed: %v", err)
-		v.conn = old // fallback на старый
+		log.Printf("[VPN] reconnectSocket: dial failed: %v, will retry next cycle", err)
+		// НЕ восстанавливаем старый — он закрыт. readerLoop подождёт через nil-guard.
 		return
 	}
 	v.conn = newConn
