@@ -110,6 +110,14 @@ func (v *VPN) IsRunning() bool {
 	return v.running.Load()
 }
 
+// Destroy — полное уничтожение Wintun-адаптера (вызывать только при выходе).
+func (v *VPN) Destroy() {
+	v.Stop()
+	v.mu.Lock()
+	v.platformDestroyTunnel()
+	v.mu.Unlock()
+}
+
 func (v *VPN) callback(status string, txSpeed, rxSpeed int64, totalTx, totalRx uint64, pingMs int, lossPct float64) {
 	if v.listener != nil {
 		v.listener.OnStatus(status, txSpeed, rxSpeed, totalTx, totalRx, pingMs, lossPct)
@@ -120,6 +128,7 @@ func (v *VPN) callback(status string, txSpeed, rxSpeed int64, totalTx, totalRx u
 
 func (v *VPN) platformOpenTunnel() error            { return platformOpenTunnel(v) }
 func (v *VPN) platformCloseTunnel()                 { platformCloseTunnel(v) }
+func (v *VPN) platformDestroyTunnel()               { platformDestroyTunnel(v) }
 func (v *VPN) platformReaderLoop()                  { platformReaderLoop(v) }
 func (v *VPN) platformWriterLoop()                  { platformWriterLoop(v) }
 func (v *VPN) platformActivateKillSwitch()          { platformActivateKillSwitch(v) }

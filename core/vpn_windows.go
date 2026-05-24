@@ -21,6 +21,7 @@ type vpnPlatform struct {
 	adapter     *wintun.Adapter
 	ifIndex     string // сохранённый индекс интерфейса для восстановления маршрута после закрытия адаптера
 	realGateway string // реальный шлюз, определённый при старте
+	ipSet       bool   // true после первого назначения IP — пропускаем netsh
 }
 
 func getDefaultGateway() string {
@@ -61,7 +62,7 @@ func (p *vpnPlatform) openTunnel(v *VPN) error {
 	}
 	p.adapter = adapter
 
-	// Гарантированное закрытие адаптера при ошибках ниже
+	// Гарантированное закрытие при ошибках
 	closeOnErr := true
 	defer func() {
 		if closeOnErr {
@@ -69,10 +70,7 @@ func (p *vpnPlatform) openTunnel(v *VPN) error {
 				p.session.End()
 				p.session = nil
 			}
-			if p.adapter != nil {
-				p.adapter.Close()
-				p.adapter = nil
-			}
+			// Не закрываем adapter — он живёт между рестартами
 		}
 	}()
 
@@ -84,15 +82,19 @@ func (p *vpnPlatform) openTunnel(v *VPN) error {
 		c.CombinedOutput()
 	}
 
-	run("netsh", "interface", "ip", "set", "address", "name=HastaVaquet", "static", v.config.InternalIP, "255.255.255.0")
-	run("netsh", "interface", "ipv4", "set", "subinterface", "name=HastaVaquet", "mtu=1300")
-	run("netsh", "interface", "ip", "set", "dns", "name=HastaVaquet", "static", v.config.DNS)
+	// netsh только при первом запуске
+	if !p.ipSet {
+		run("netsh", "interface", "ip", "set", "address", "name=HastaVaquet", "static", v.config.InternalIP, "255.255.255.0")
+		run("netsh", "interface", "ipv4", "set", "subinterface", "name=HastaVaquet", "mtu=1300")
+		run("netsh", "interface", "ip", "set", "dns", "name=HastaVaquet", "static", v.config.DNS)
+		run("netsh", "interface", "ipv6", "add", "route", "::/0", "name=HastaVaquet", v.config.InternalIP, "metric=1")
+		p.ipSet = true
+	}
 	run("route", "delete", v.config.ServerIP)
 	run("route", "add", v.config.ServerIP, "mask", "255.255.255.255", p.realGateway)
 	run("route", "delete", "0.0.0.0", "mask", "0.0.0.0", v.config.InternalIP)
 	run("route", "delete", "0.0.0.0", v.config.InternalIP)
 	run("route", "add", "0.0.0.0", "mask", "0.0.0.0", v.config.InternalIP, "metric", "1", "if", index)
-	run("netsh", "interface", "ipv6", "add", "route", "::/0", "name=HastaVaquet", v.config.InternalIP, "metric=1")
 	log.Printf("[ROUTE] openTunnel done: ifIndex=%s, internal=%s, gateway=%s, server=%s",
 		p.ifIndex, v.config.InternalIP, p.realGateway, v.config.ServerIP)
 
@@ -117,7 +119,7 @@ func (p *vpnPlatform) openTunnel(v *VPN) error {
 func (p *vpnPlatform) closeTunnel(v *VPN) {
 	gw := p.realGateway
 	if gw == "" {
-		gw = getDefaultGateway() // динамическое автоопределение на момент закрытия
+		gw = getDefaultGateway()
 	}
 	hide := func(cmd string, args ...string) {
 		c := exec.Command(cmd, args...)
@@ -127,18 +129,24 @@ func (p *vpnPlatform) closeTunnel(v *VPN) {
 
 	if gw != "" {
 		log.Printf("[ROUTE] closeTunnel: restoring default via %s, removing tunnel %s", gw, v.config.InternalIP)
-		// 1. Сначала восстанавливаем default route через реальный шлюз — чтобы интернет не пропал
-		hide("route", "add", "0.0.0.0", "mask", "0.0.0.0",
-			gw, "metric", "10")
+		hide("route", "add", "0.0.0.0", "mask", "0.0.0.0", gw, "metric", "10")
 	} else {
 		log.Printf("[ROUTE] closeTunnel: no gateway detected, skipping route restore")
 	}
-	// 2. Только потом удаляем туннельный route
 	hide("route", "delete", "0.0.0.0", "mask", "0.0.0.0", v.config.InternalIP)
-	hide("route", "delete", "0.0.0.0", v.config.InternalIP) // запасной вариант без mask
-
+	hide("route", "delete", "0.0.0.0", v.config.InternalIP)
 	hide("netsh", "interface", "ipv6", "delete", "route", "::/0", "name=HastaVaquet")
 
+	// Закрываем сессию, НО НЕ адаптер — он остаётся в Windows для быстрого старта
+	if p.session != nil {
+		p.session.End()
+		p.session = nil
+	}
+	log.Printf("[ROUTE] closeTunnel done (adapter kept alive)")
+}
+
+// destroyTunnel — полное уничтожение Wintun-адаптера (только при выходе из программы).
+func (p *vpnPlatform) destroyTunnel() {
 	if p.session != nil {
 		p.session.End()
 		p.session = nil
@@ -147,7 +155,7 @@ func (p *vpnPlatform) closeTunnel(v *VPN) {
 		p.adapter.Close()
 		p.adapter = nil
 	}
-	log.Printf("[ROUTE] closeTunnel done")
+	log.Printf("[ROUTE] destroyTunnel: adapter destroyed")
 }
 
 func (p *vpnPlatform) readerLoop(v *VPN) {
@@ -320,39 +328,37 @@ func (p *vpnPlatform) gatewayIsValid(v *VPN) bool {
 	return true
 }
 
-// ─── Глобальный экземпляр платформы для хуков ────────────────────
-
-var plat vpnPlatform
-
-func platformOpenTunnel(v *VPN) error            { return plat.openTunnel(v) }
-func platformCloseTunnel(v *VPN)                 { plat.closeTunnel(v) }
-func platformReaderLoop(v *VPN)                  { plat.readerLoop(v) }
-func platformWriterLoop(v *VPN)                  { plat.writerLoop(v) }
-func platformActivateKillSwitch(v *VPN)          { plat.activateKillSwitch(v) }
-func platformDeactivateKillSwitch(v *VPN)        { plat.deactivateKillSwitch(v) }
 func (p *vpnPlatform) reconnectSocket(v *VPN) {
 	if v.conn == nil {
 		return
 	}
-	// Закрываем старый сокет — readerLoop поймает "use of closed" и встанет на nil-guard
 	old := v.conn
 	v.conn = nil
 	old.Close()
 
-	// Создаём новый сокет — он привяжется к актуальному сетевому интерфейсу
 	newConn, err := net.DialUDP("udp", nil, &net.UDPAddr{
 		IP:   net.ParseIP(v.config.ServerIP),
 		Port: v.config.Port,
 	})
 	if err != nil {
 		log.Printf("[VPN] reconnectSocket: dial failed: %v, will retry next cycle", err)
-		// НЕ восстанавливаем старый — он закрыт. readerLoop подождёт через nil-guard.
 		return
 	}
 	v.conn = newConn
 	log.Printf("[VPN] reconnectSocket: socket recreated (%s:%d)", v.config.ServerIP, v.config.Port)
 }
 
+// ─── Глобальный экземпляр платформы для хуков ────────────────────
+
+var plat vpnPlatform
+
+func platformOpenTunnel(v *VPN) error            { return plat.openTunnel(v) }
+func platformCloseTunnel(v *VPN)                 { plat.closeTunnel(v) }
+func platformDestroyTunnel(v *VPN)               { plat.destroyTunnel() }
+func platformReaderLoop(v *VPN)                  { plat.readerLoop(v) }
+func platformWriterLoop(v *VPN)                  { plat.writerLoop(v) }
+func platformActivateKillSwitch(v *VPN)          { plat.activateKillSwitch(v) }
+func platformDeactivateKillSwitch(v *VPN)        { plat.deactivateKillSwitch(v) }
 func platformRefreshServerRoute(v *VPN)          { plat.refreshServerRoute(v) }
 func platformGatewayIsValid(v *VPN) bool         { return plat.gatewayIsValid(v) }
 func platformReconnectSocket(v *VPN)             { plat.reconnectSocket(v) }

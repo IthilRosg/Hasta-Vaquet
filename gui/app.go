@@ -59,6 +59,15 @@ func NewApp() *App {
 	return &App{}
 }
 
+func (a *App) shutdown(ctx context.Context) {
+	if a.logger != nil {
+		a.logger.Println("GUI shutting down — destroying VPN adapter")
+	}
+	if a.vpn != nil {
+		a.vpn.Destroy()
+	}
+}
+
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 	exeDir := filepath.Dir(os.Args[0])
