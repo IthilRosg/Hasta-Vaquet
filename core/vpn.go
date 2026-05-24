@@ -307,6 +307,16 @@ func (v *VPN) keepAliveLoop() {
 			if v.conn == nil {
 				v.platformReconnectSocket()
 			}
+			// NAT-punch: как только сокет появился — сразу шлём пинг,
+			// чтобы сервер и NAT-роутер увидели новое подключение
+			if v.conn != nil {
+				pkt, _ := Encrypt([]byte{}, v.key[:], v.config.ShortID, v.config.RoutingSalt)
+				if pkt != nil {
+					v.conn.Write(pkt)
+					v.lastAliveMs.Store(time.Now().UnixMilli())
+					v.echoPush()
+				}
+			}
 		}
 
 		packet, err := Encrypt([]byte{}, v.key[:], v.config.ShortID, v.config.RoutingSalt)
