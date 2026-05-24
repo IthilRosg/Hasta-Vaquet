@@ -4,8 +4,18 @@ server_linux
 server/server_linux
 
 client.log
+client_stderr.log
+client_stdout.log
 config.json
 server/server_config.json
 *.key
 *.pem
 last_profile.txt
+node_modules/
+.codegraph/
+.cursor/
+.vscode/
+.idea/
+*.log
+build/
+dist/
