@@ -130,27 +130,38 @@ func (v *VPN) platformReconnectSocket()             { platformReconnectSocket(v)
 // ─── Stateless Persistent Ping ───────────────────────────────────
 
 // persistentPingLoop — «тупой» NAT-puncher: раз в 3s шлёт пустой пакет.
-// Не проверяет статусы, шлюзы, ошибки. Если conn nil — ждёт и повторяет.
+// Игнорирует ошибки, статусы, шлюзы. Единственное условие — conn != nil.
+// Дополнительно проверяет lastPacketRx: если >6s без ответа — шлёт UI.
 func (v *VPN) persistentPingLoop() {
+	ticker := time.NewTicker(pingInterval)
+	defer ticker.Stop()
+	var wasDead bool
 	for {
 		select {
 		case <-v.stopCh:
 			return
-		case <-time.After(pingInterval):
+		case <-ticker.C:
 		}
 		if v.stopping.Load() {
 			return
 		}
-		if v.conn == nil {
-			continue
+		if v.conn != nil {
+			pkt, err := Encrypt([]byte{}, v.key[:], v.config.ShortID, v.config.RoutingSalt)
+			if err == nil {
+				v.conn.Write(pkt)
+				v.lastAliveMs.Store(time.Now().UnixMilli())
+				v.echoPush()
+			}
 		}
-		pkt, err := Encrypt([]byte{}, v.key[:], v.config.ShortID, v.config.RoutingSalt)
-		if err != nil {
-			continue
+		// Passive reconnect: если пакетов нет 6+ секунд — шлём UI
+		isDead := time.Since(time.UnixMilli(v.lastPacketRx.Load())) > reconnectTimeout
+		if isDead && !wasDead {
+			wasDead = true
+			v.callback("reconnecting", 0, 0, 0, 0, 0, 0)
+		} else if !isDead && wasDead {
+			wasDead = false
+			v.callback("connected", 0, 0, 0, 0, 0, 0)
 		}
-		v.conn.Write(pkt)
-		v.lastAliveMs.Store(time.Now().UnixMilli())
-		v.echoPush()
 	}
 }
 
@@ -234,7 +245,6 @@ func (v *VPN) echoReset() {
 func (v *VPN) statsLoop() {
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
-	wasReconnecting := false
 	for {
 		select {
 		case <-v.stopCh:
@@ -245,18 +255,6 @@ func (v *VPN) statsLoop() {
 			pingMs := int(v.echoRtt.Load())
 			lossPct := v.echoCalcLoss()
 			v.callback("traffic", txSpeed, rxSpeed, v.sessionTotalTx.Load(), v.sessionTotalRx.Load(), pingMs, lossPct)
-
-			// Пассивный reconnect: если пакетов нет 6+ секунд
-			now := time.Now().UnixMilli()
-			rx := v.lastPacketRx.Load()
-			isDead := rx > 0 && (now-rx) > reconnectTimeout.Milliseconds()
-			if isDead && !wasReconnecting {
-				wasReconnecting = true
-				v.callback("reconnecting", 0, 0, 0, 0, 0, 0)
-			} else if !isDead && wasReconnecting {
-				wasReconnecting = false
-				v.callback("connected", 0, 0, 0, 0, 0, 0)
-			}
 		}
 	}
 }
