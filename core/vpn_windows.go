@@ -41,13 +41,12 @@ func getDefaultGateway() string {
 }
 
 func (p *vpnPlatform) openTunnel(v *VPN) error {
-	log.Printf("[ROUTE] openTunnel: creating adapter + routes")
-	// Определяем реальный шлюз ДО изменения таблицы маршрутизации
+	log.Printf("[ROUTE] openTunnel: detecting default gateway")
 	p.realGateway = getDefaultGateway()
 	if p.realGateway == "" {
-		p.realGateway = v.config.GatewayIP // fallback на конфиг, если не смогли определить
+		return fmt.Errorf("no default gateway detected — cannot set up routes, ensure network is connected")
 	}
-	log.Printf("[ROUTE] openTunnel: detected gateway=%s (config=%s)", p.realGateway, v.config.GatewayIP)
+	log.Printf("[ROUTE] openTunnel: detected gateway=%s", p.realGateway)
 
 	// Пытаемся открыть существующий адаптер, чтобы не плодить лишние
 	adapter, err := wintun.OpenAdapter("HastaVaquet")
@@ -95,7 +94,7 @@ func (p *vpnPlatform) openTunnel(v *VPN) error {
 	run("route", "add", "0.0.0.0", "mask", "0.0.0.0", v.config.InternalIP, "metric", "1", "if", index)
 	run("netsh", "interface", "ipv6", "add", "route", "::/0", "name=HastaVaquet", v.config.InternalIP, "metric=1")
 	log.Printf("[ROUTE] openTunnel done: ifIndex=%s, internal=%s, gateway=%s, server=%s",
-		p.ifIndex, v.config.InternalIP, v.config.GatewayIP, v.config.ServerIP)
+		p.ifIndex, v.config.InternalIP, p.realGateway, v.config.ServerIP)
 
 	conn, err := net.DialUDP("udp", nil, &net.UDPAddr{
 		IP:   net.ParseIP(v.config.ServerIP),
@@ -118,18 +117,22 @@ func (p *vpnPlatform) openTunnel(v *VPN) error {
 func (p *vpnPlatform) closeTunnel(v *VPN) {
 	gw := p.realGateway
 	if gw == "" {
-		gw = v.config.GatewayIP
+		gw = getDefaultGateway() // динамическое автоопределение на момент закрытия
 	}
-	log.Printf("[ROUTE] closeTunnel: restoring default via %s, removing tunnel %s", gw, v.config.InternalIP)
 	hide := func(cmd string, args ...string) {
 		c := exec.Command(cmd, args...)
 		c.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 		c.Run()
 	}
 
-	// 1. Сначала восстанавливаем default route через реальный шлюз — чтобы интернет не пропал
-	hide("route", "add", "0.0.0.0", "mask", "0.0.0.0",
-		gw, "metric", "10")
+	if gw != "" {
+		log.Printf("[ROUTE] closeTunnel: restoring default via %s, removing tunnel %s", gw, v.config.InternalIP)
+		// 1. Сначала восстанавливаем default route через реальный шлюз — чтобы интернет не пропал
+		hide("route", "add", "0.0.0.0", "mask", "0.0.0.0",
+			gw, "metric", "10")
+	} else {
+		log.Printf("[ROUTE] closeTunnel: no gateway detected, skipping route restore")
+	}
 	// 2. Только потом удаляем туннельный route
 	hide("route", "delete", "0.0.0.0", "mask", "0.0.0.0", v.config.InternalIP)
 	hide("route", "delete", "0.0.0.0", v.config.InternalIP) // запасной вариант без mask
@@ -250,7 +253,11 @@ func (p *vpnPlatform) readerLoop(v *VPN) {
 func (p *vpnPlatform) activateKillSwitch(v *VPN) {
 	gw := p.realGateway
 	if gw == "" {
-		gw = v.config.GatewayIP
+		gw = getDefaultGateway()
+	}
+	if gw == "" {
+		log.Printf("[ROUTE] activateKillSwitch: no gateway, skipping")
+		return
 	}
 	log.Printf("[ROUTE] activateKillSwitch: adding server route %s via %s", v.config.ServerIP, gw)
 	hide := func(cmd string, args ...string) {
@@ -267,12 +274,16 @@ func (p *vpnPlatform) activateKillSwitch(v *VPN) {
 func (p *vpnPlatform) deactivateKillSwitch(v *VPN) {
 	gw := p.realGateway
 	if gw == "" {
-		gw = v.config.GatewayIP
+		gw = getDefaultGateway()
 	}
 	hide := func(cmd string, args ...string) {
 		c := exec.Command(cmd, args...)
 		c.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 		c.Run()
+	}
+	if gw == "" {
+		log.Printf("[ROUTE] deactivateKillSwitch: no gateway, skipping route restore")
+		return
 	}
 	if p.ifIndex == "" {
 		log.Printf("[ROUTE] deactivateKillSwitch: no ifIndex, fallback to gateway %s", gw)
