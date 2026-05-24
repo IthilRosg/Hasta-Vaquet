@@ -77,9 +77,13 @@ func (p *vpnPlatform) readerLoop(v *VPN) {
 		n, err := v.conn.Read(buf)
 		if err != nil {
 			// Плановый останов — не трогаем reconnect
-			if v.stopping.Load() || strings.Contains(err.Error(), "use of closed") {
+			if v.stopping.Load() {
 				log.Printf("[ANDROID] readerLoop: stopping, err=%v — exit", err)
 				return
+			}
+			// Сокет закрыт намеренно (enterReconnecting → reconnectSocket)
+			if strings.Contains(err.Error(), "use of closed") {
+				continue
 			}
 			log.Printf("[ANDROID] readerLoop: UDP read error: %v", err)
 			// Во время reconnect не закрываем TUN
@@ -196,8 +200,36 @@ func platformReaderLoop(v *VPN)                  { plat.readerLoop(v) }
 func platformWriterLoop(v *VPN)                  { plat.writerLoop(v) }
 func platformActivateKillSwitch(v *VPN)          {}
 func platformDeactivateKillSwitch(v *VPN)        {}
+func (p *vpnPlatform) reconnectSocket(v *VPN) {
+	if v.conn == nil {
+		return
+	}
+	old := v.conn
+	v.conn = nil
+	old.Close()
+
+	serverAddr := fmt.Sprintf("%s:%d", v.config.ServerIP, v.config.Port)
+	dialer := &net.Dialer{
+		Control: func(network, address string, c syscall.RawConn) error {
+			return c.Control(func(fd uintptr) {
+				if !globalProtector.Protect(int(fd)) {
+					log.Printf("[ANDROID] reconnectSocket: protect failed for fd %d", fd)
+				}
+			})
+		},
+	}
+	newConn, err := dialer.Dial("udp", serverAddr)
+	if err != nil {
+		log.Printf("[ANDROID] reconnectSocket: dial failed: %v", err)
+		return
+	}
+	v.conn = newConn.(*net.UDPConn)
+	log.Printf("[ANDROID] reconnectSocket: socket recreated (%s)", serverAddr)
+}
+
 func platformRefreshServerRoute(v *VPN)          { plat.refreshServerRoute(v) }
 func platformGatewayIsValid(v *VPN) bool         { return plat.gatewayIsValid(v) }
+func platformReconnectSocket(v *VPN)             { plat.reconnectSocket(v) }
 
 func (p *vpnPlatform) activateKillSwitch(v *VPN)       {}
 func (p *vpnPlatform) deactivateKillSwitch(v *VPN)     {}

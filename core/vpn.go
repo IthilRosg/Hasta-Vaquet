@@ -137,6 +137,7 @@ func (v *VPN) platformActivateKillSwitch()          { platformActivateKillSwitch
 func (v *VPN) platformDeactivateKillSwitch()        { platformDeactivateKillSwitch(v) }
 func (v *VPN) platformRefreshServerRoute()          { platformRefreshServerRoute(v) }
 func (v *VPN) platformGatewayIsValid() bool         { return platformGatewayIsValid(v) }
+func (v *VPN) platformReconnectSocket()             { platformReconnectSocket(v) }
 
 // ─── Seamless Reconnect ──────────────────────────────────────────
 
@@ -145,10 +146,14 @@ func (v *VPN) enterReconnecting() {
 		return
 	}
 	v.reconnecting.Store(true)
-	// Обновляем route до сервера — шлюз мог поменяться при смене сети
+
+	// Безусловно обновляем route и пересоздаём UDP-сокет —
+	// старый мог быть привязан к упавшему сетевому интерфейсу
 	v.platformRefreshServerRoute()
+	v.platformReconnectSocket()
+
 	v.callback("reconnecting", 0, 0, 0, 0, 0, 0)
-	log.Printf("[VPN] enterReconnecting: network lost, TUN+UDP kept alive")
+	log.Printf("[VPN] enterReconnecting: network lost, TUN kept alive, socket recreated")
 }
 
 // tryConfirmReconnect запускает burst-подтверждение вместо мгновенного выхода.

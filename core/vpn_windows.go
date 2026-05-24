@@ -166,9 +166,14 @@ func (p *vpnPlatform) readerLoop(v *VPN) {
 		n, err := v.conn.Read(buf)
 		if err != nil {
 			// Плановый останов — не трогаем reconnect
-			if v.stopping.Load() || strings.Contains(err.Error(), "use of closed") {
+			if v.stopping.Load() {
 				log.Printf("[VPN] readerLoop: stopping, err=%v — exit", err)
 				return
+			}
+			// Сокет закрыт намеренно (enterReconnecting → reconnectSocket)
+			// Продолжаем — на следующей итерации читаем из нового сокета
+			if strings.Contains(err.Error(), "use of closed") {
+				continue
 			}
 			// Во время reconnect ошибки ожидаемы — не триггерим закрытие TUN
 			if !v.reconnecting.Load() {
@@ -309,20 +314,16 @@ func (p *vpnPlatform) writerLoop(v *VPN) {
 func (p *vpnPlatform) refreshServerRoute(v *VPN) {
 	newGw := getDefaultGateway()
 	if newGw == "" {
-		log.Printf("[ROUTE] refreshServerRoute: no gateway detected, keeping %s", p.realGateway)
+		log.Printf("[ROUTE] refreshServerRoute: no gateway detected, route NOT updated")
 		return
 	}
-	currentIsBad := p.realGateway == "" || strings.HasPrefix(p.realGateway, "0.0")
-	if newGw == p.realGateway && !currentIsBad {
-		return
-	}
-	log.Printf("[ROUTE] refreshServerRoute: gateway %s → %s", p.realGateway, newGw)
+	log.Printf("[ROUTE] refreshServerRoute: force update %s → %s", p.realGateway, newGw)
 	hide := func(cmd string, args ...string) {
 		c := exec.Command(cmd, args...)
 		c.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 		c.CombinedOutput()
 	}
-	// Принудительно удаляем старый route (даже если висит на 0.0.0.0) и пишем новый
+	// Безусловно удаляем старый route и пишем через актуальный шлюз ОС
 	hide("route", "delete", v.config.ServerIP)
 	hide("route", "add", v.config.ServerIP, "mask", "255.255.255.255", newGw, "metric", "1")
 	p.realGateway = newGw
@@ -348,8 +349,32 @@ func platformReaderLoop(v *VPN)                  { plat.readerLoop(v) }
 func platformWriterLoop(v *VPN)                  { plat.writerLoop(v) }
 func platformActivateKillSwitch(v *VPN)          { plat.activateKillSwitch(v) }
 func platformDeactivateKillSwitch(v *VPN)        { plat.deactivateKillSwitch(v) }
+func (p *vpnPlatform) reconnectSocket(v *VPN) {
+	if v.conn == nil {
+		return
+	}
+	// Закрываем старый сокет — readerLoop поймает "use of closed" и продолжит
+	old := v.conn
+	v.conn = nil
+	old.Close()
+
+	// Создаём новый сокет — он привяжется к актуальному сетевому интерфейсу
+	newConn, err := net.DialUDP("udp", nil, &net.UDPAddr{
+		IP:   net.ParseIP(v.config.ServerIP),
+		Port: v.config.Port,
+	})
+	if err != nil {
+		log.Printf("[VPN] reconnectSocket: dial failed: %v", err)
+		v.conn = old // fallback на старый
+		return
+	}
+	v.conn = newConn
+	log.Printf("[VPN] reconnectSocket: socket recreated (%s:%d)", v.config.ServerIP, v.config.Port)
+}
+
 func platformRefreshServerRoute(v *VPN)          { plat.refreshServerRoute(v) }
 func platformGatewayIsValid(v *VPN) bool         { return plat.gatewayIsValid(v) }
+func platformReconnectSocket(v *VPN)             { plat.reconnectSocket(v) }
 
 func getInterfaceIndex(name string) string {
 	cmd := exec.Command("powershell", "-Command",
