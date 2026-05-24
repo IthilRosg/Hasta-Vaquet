@@ -25,9 +25,9 @@ type vpnPlatform struct {
 }
 
 func getDefaultGateway() string {
-	// Используем netsh вместо route+findstr — так можно скрыть окно консоли
+	// Ищем default-маршруты через физические интерфейсы (не Wintun)
 	cmd := exec.Command("powershell", "-Command",
-		"Get-NetRoute -DestinationPrefix '0.0.0.0/0' | Select-Object -First 1 -ExpandProperty NextHop")
+		"Get-NetRoute -DestinationPrefix '0.0.0.0/0' | Where-Object { $_.InterfaceAlias -ne 'HastaVaquet' } | Sort-Object RouteMetric | Select-Object -First 1 -ExpandProperty NextHop")
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	out, err := cmd.Output()
 	if err != nil {
@@ -36,6 +36,10 @@ func getDefaultGateway() string {
 	gw := strings.TrimSpace(string(out))
 	ip := net.ParseIP(gw)
 	if ip != nil && !ip.IsLoopback() && !ip.IsUnspecified() {
+		// Дополнительный фильтр: исключаем 10.0.0.0/8 (совпадает с туннелем)
+		if ip.IsPrivate() && ip.To4() != nil && ip.To4()[0] == 10 {
+			return ""
+		}
 		return gw
 	}
 	return ""
