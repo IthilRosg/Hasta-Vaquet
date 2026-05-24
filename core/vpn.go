@@ -294,6 +294,13 @@ func (v *VPN) keepAliveLoop() {
 		if v.stopping.Load() {
 			return
 		}
+
+		// Каждую итерацию реконнекта пробуем обновить route до сервера —
+		// шлюз мог появиться или измениться, пока мы ждали
+		if v.reconnecting.Load() {
+			v.platformRefreshServerRoute()
+		}
+
 		packet, err := Encrypt([]byte{}, v.key[:], v.config.ShortID, v.config.RoutingSalt)
 		if err == nil && v.conn != nil {
 			v.conn.Write(packet)
