@@ -8,7 +8,6 @@ import (
 	"net"
 	"os"
 	"strings"
-	"sync/atomic"
 	"syscall"
 	"time"
 )
@@ -76,26 +75,17 @@ func (p *vpnPlatform) readerLoop(v *VPN) {
 
 		n, err := v.conn.Read(buf)
 		if err != nil {
-			// Плановый останов — не трогаем reconnect
 			if v.stopping.Load() {
-				log.Printf("[ANDROID] readerLoop: stopping, err=%v — exit", err)
 				return
 			}
-			// Сокет закрыт намеренно (enterReconnecting → reconnectSocket)
 			if strings.Contains(err.Error(), "use of closed") {
 				continue
 			}
-			log.Printf("[ANDROID] readerLoop: UDP read error: %v", err)
-			// Во время reconnect не закрываем TUN
-			if !v.reconnecting.Load() {
-				fails := v.readFails.Add(1)
-				if fails >= 5 {
-					v.enterReconnecting()
-				}
-			}
 			continue
 		}
-		v.readFails.Store(0)
+		// Любой успешный пакет = сервер жив
+		v.lastPacketRx.Store(time.Now().UnixMilli())
+
 		if n < 4+2+12 {
 			continue
 		}
@@ -103,11 +93,6 @@ func (p *vpnPlatform) readerLoop(v *VPN) {
 		decrypted, err := Decrypt(buf[:n], v.key[:])
 		if err != nil {
 			continue
-		}
-
-		// Любой валидный пакет во время reconnect — запускаем burst-подтверждение
-		if v.reconnecting.Load() {
-			v.tryConfirmReconnect()
 		}
 
 		if len(decrypted) == 0 {
@@ -122,15 +107,11 @@ func (p *vpnPlatform) readerLoop(v *VPN) {
 		// Echo-пинг (1 байт 0x01)
 		if len(decrypted) == 1 && decrypted[0] == 0x01 {
 			v.echoAck()
-			if v.reconnecting.Load() && atomic.LoadInt32(&v.confirming) == 1 {
-				v.confirmOk.Add(1)
-			}
 			last := v.lastAliveMs.Load()
 			if last > 0 {
 				rtt := time.Now().UnixMilli() - last
 				if rtt > 0 && rtt < 10000 {
 					v.echoRtt.Store(rtt)
-					v.echoReceived.Store(true)
 				}
 			}
 			continue

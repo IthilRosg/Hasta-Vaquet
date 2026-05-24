@@ -159,50 +159,25 @@ func (p *vpnPlatform) readerLoop(v *VPN) {
 		default:
 		}
 
-		// Железный гард: сокет может быть временно nil во время recreateSocket
 		if v.conn == nil {
 			time.Sleep(100 * time.Millisecond)
 			continue
 		}
-
-		// При reconnect — короткий таймаут для быстрой реакции на ответ сервера
-		if v.reconnecting.Load() {
-			v.conn.SetReadDeadline(time.Now().Add(3 * time.Second))
-		} else {
-			v.conn.SetReadDeadline(time.Now().Add(10 * time.Second))
-		}
+		v.conn.SetReadDeadline(time.Now().Add(10 * time.Second))
 
 		n, err := v.conn.Read(buf)
 		if err != nil {
-			// Плановый останов — не трогаем reconnect
 			if v.stopping.Load() {
-				log.Printf("[VPN] readerLoop: stopping, err=%v — exit", err)
 				return
 			}
-			// Сокет закрыт намеренно (enterReconnecting → reconnectSocket)
-			// Продолжаем — на следующей итерации читаем из нового сокета
 			if strings.Contains(err.Error(), "use of closed") {
 				continue
 			}
-			// Во время reconnect ошибки ожидаемы — не триггерим закрытие TUN
-			if !v.reconnecting.Load() {
-				fails := v.readFails.Add(1)
-				isTimeout := false
-				if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
-					isTimeout = true
-				}
-				trigger := fails >= 2
-				if !isTimeout {
-					trigger = fails >= 1
-				}
-				log.Printf("[VPN] readerLoop: fail #%d timeout=%v trigger=%v err=%v", fails, isTimeout, trigger, err)
-				if trigger {
-					v.enterReconnecting()
-				}
-			}
 			continue
 		}
-		v.readFails.Store(0)
+		// Любой успешный пакет = сервер жив
+		v.lastPacketRx.Store(time.Now().UnixMilli())
+
 		if n < 4+2+12 {
 			continue
 		}
@@ -210,32 +185,21 @@ func (p *vpnPlatform) readerLoop(v *VPN) {
 		if err != nil {
 			continue
 		}
-
-		// Любой валидный пакет во время reconnect — запускаем burst-подтверждение
-		if v.reconnecting.Load() {
-			v.tryConfirmReconnect()
-		}
-
 		if len(decrypted) == 0 {
 			continue
 		}
-		// Server echo response (1-byte marker for RTT measurement)
+		// Echo response — обновляем RTT
 		if len(decrypted) == 1 && decrypted[0] == 0x01 {
 			v.echoAck()
-			if v.reconnecting.Load() && v.confirming == 1 {
-				v.confirmOk.Add(1)
-			}
 			last := v.lastAliveMs.Load()
 			if last > 0 {
 				rtt := time.Now().UnixMilli() - last
 				if rtt > 0 && rtt < 10000 {
 					v.echoRtt.Store(rtt)
-					v.echoReceived.Store(true)
 				}
 			}
 			continue
 		}
-		// Защита от паники: session мог быть обнулён в closeTunnel после Stop()
 		if v.stopping.Load() || p.session == nil {
 			return
 		}
