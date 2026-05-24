@@ -41,6 +41,11 @@ func (l *vpnListener) OnStatus(status string, txSpeed, rxSpeed int64, totalTx, t
 		"ping_ms":     pingMs,
 		"loss_pct":    lossPct,
 	})
+	// Специализированные события для фронтенда
+	switch status {
+	case "reconnecting", "connected", "disconnected":
+		runtime.EventsEmit(l.ctx, "connection_status", status)
+	}
 	if status == "traffic" {
 		runtime.EventsEmit(l.ctx, "traffic", map[string]interface{}{
 			"tx_speed": txSpeed, "rx_speed": rxSpeed,

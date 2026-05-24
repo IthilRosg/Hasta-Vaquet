@@ -3,7 +3,6 @@ package core
 import (
 	"fmt"
 	"log"
-	mathrand "math/rand"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -45,8 +44,14 @@ type VPN struct {
 	echoPos    int // следующая свободная позиция в кольце
 	echoMu     sync.Mutex
 
-	reconnecting   atomic.Bool   // true during reconnect loop
-	readFails      atomic.Int64  // consecutive UDP read failures
+	reconnecting      atomic.Bool   // true during reconnect loop
+	stopping          atomic.Bool   // true when user initiated Stop()
+	readFails         atomic.Int64  // consecutive UDP read failures
+	consecutiveMisses atomic.Int32  // keep-alive misses (reset on any echo)
+
+	confirmReq        atomic.Bool   // burst confirmation in progress
+	confirmOk         atomic.Int32  // echo acks received during burst
+	graceUntil        atomic.Int64  // unix nano: skip miss counting before this
 }
 
 func New(cfg Config, listener StatusListener) *VPN {
@@ -86,11 +91,15 @@ func (v *VPN) Start() error {
 }
 
 func (v *VPN) Stop() {
+	// Флаг планового останова — самый первый сигнал всем горутинам
+	v.stopping.Store(true)
+
 	v.mu.Lock()
 	defer v.mu.Unlock()
 
 	v.reconnecting.Store(false)
 	if !v.running.Load() {
+		v.stopping.Store(false)
 		return
 	}
 	v.running.Store(false)
@@ -105,6 +114,7 @@ func (v *VPN) Stop() {
 	}
 
 	v.callback("disconnected", 0, 0, 0, 0, 0, 0)
+	v.stopping.Store(false)
 }
 
 func (v *VPN) IsRunning() bool {
@@ -119,96 +129,95 @@ func (v *VPN) callback(status string, txSpeed, rxSpeed int64, totalTx, totalRx u
 
 // ─── Платформозависимые хуки ─────────────────────────────────────
 
-func (v *VPN) platformOpenTunnel() error         { return platformOpenTunnel(v) }
-func (v *VPN) platformCloseTunnel()              { platformCloseTunnel(v) }
-func (v *VPN) platformReaderLoop()               { platformReaderLoop(v) }
-func (v *VPN) platformWriterLoop()               { platformWriterLoop(v) }
-func (v *VPN) platformActivateKillSwitch()       { platformActivateKillSwitch(v) }
-func (v *VPN) platformDeactivateKillSwitch()     { platformDeactivateKillSwitch(v) }
+func (v *VPN) platformOpenTunnel() error            { return platformOpenTunnel(v) }
+func (v *VPN) platformCloseTunnel()                 { platformCloseTunnel(v) }
+func (v *VPN) platformReaderLoop()                  { platformReaderLoop(v) }
+func (v *VPN) platformWriterLoop()                  { platformWriterLoop(v) }
+func (v *VPN) platformActivateKillSwitch()          { platformActivateKillSwitch(v) }
+func (v *VPN) platformDeactivateKillSwitch()        { platformDeactivateKillSwitch(v) }
+func (v *VPN) platformRefreshServerRoute()          { platformRefreshServerRoute(v) }
+func (v *VPN) platformGatewayIsValid() bool         { return platformGatewayIsValid(v) }
 
-// ─── Reconnect ────────────────────────────────────────────────────
+// ─── Seamless Reconnect ──────────────────────────────────────────
 
-func (v *VPN) onConnectionLost() {
-	v.mu.Lock()
-	v.reconnecting.Swap(true)
-	if !v.running.Load() {
-		v.reconnecting.Store(false)
-		v.mu.Unlock()
+func (v *VPN) enterReconnecting() {
+	if v.reconnecting.Load() {
 		return
 	}
-	v.running.Store(false)
-	close(v.stopCh)
-	v.mu.Unlock()
-
-	log.Printf("[VPN] connectionLost: closing tunnel + kill switch")
-	platformDumpRoutes()
-	v.platformCloseTunnel()
-	v.platformActivateKillSwitch()
-
-	// Kill Switch timeout: если reconnect не удался за 120с — отключаем блокировку сами
-	// чтобы пользователь не остался без интернета при фатальном обрыве.
-	go func() {
-		time.Sleep(120 * time.Second)
-		if v.reconnecting.Load() {
-			log.Printf("[VPN] killSwitch timeout 120s expired — restoring internet")
-			v.platformDeactivateKillSwitch()
-		}
-	}()
-
-	if v.conn != nil {
-		v.conn.Close()
-		v.conn = nil
-	}
-
+	v.reconnecting.Store(true)
+	// Обновляем route до сервера — шлюз мог поменяться при смене сети
+	v.platformRefreshServerRoute()
 	v.callback("reconnecting", 0, 0, 0, 0, 0, 0)
-	go v.reconnectLoop()
+	log.Printf("[VPN] enterReconnecting: network lost, TUN+UDP kept alive")
 }
 
-func (v *VPN) reconnectLoop() {
-	backoff := 1 * time.Second
-	maxBackoff := 60 * time.Second
-	attempt := 0
-
-	for {
-		attempt++
-		log.Printf("[VPN] reconnect attempt #%d in %.0fs (backoff=%v)", attempt, backoff.Seconds(), backoff)
-
-		select {
-		case <-time.After(backoff):
-		}
-
-		// Stop() was called during reconnect
-		if !v.reconnecting.Load() {
-			log.Printf("[VPN] reconnect cancelled by Stop()")
-			return
-		}
-
-		v.callback("reconnecting", int64(attempt), 0, 0, 0, 0, 0)
-
-		v.stopCh = make(chan struct{})
-		if err := v.platformOpenTunnel(); err != nil {
-			log.Printf("[VPN] reconnect failed: %v", err)
-			backoff *= 2
-			if backoff > maxBackoff {
-				backoff = maxBackoff
-			}
-			continue
-		}
-
-		log.Printf("[VPN] reconnect success — deactivating kill switch")
-		v.platformDeactivateKillSwitch()
-		v.readFails.Store(0)
-		v.running.Store(true)
-		v.reconnecting.Store(false)
-
-		v.callback("connected", 0, 0, 0, 0, 0, 0)
-
-		go v.keepAliveLoop()
-		go v.platformReaderLoop()
-		go v.platformWriterLoop()
-		go v.statsLoop()
+// tryConfirmReconnect запускает burst-подтверждение вместо мгновенного выхода.
+func (v *VPN) tryConfirmReconnect() {
+	if v.stopping.Load() || !v.reconnecting.Load() {
 		return
 	}
+
+	// Принудительно обновляем маршрут до сервера — шлюз мог появиться
+	v.platformRefreshServerRoute()
+
+	// Не запускаем burst, пока шлюз невалидный (0.0.0.0 или пустой)
+	if !v.platformGatewayIsValid() {
+		log.Printf("[VPN] tryConfirmReconnect: gateway invalid — burst blocked")
+		return
+	}
+
+	if !v.confirmReq.CompareAndSwap(false, true) {
+		return
+	}
+	log.Printf("[VPN] tryConfirmReconnect: gateway OK, sending burst probes")
+	go v.confirmBurst()
+}
+
+// confirmBurst отправляет 3 пинга с интервалом 400ms и проверяет min 2 ответа.
+func (v *VPN) confirmBurst() {
+	defer v.confirmReq.Store(false)
+	v.confirmOk.Store(0)
+
+	for i := 0; i < 3; i++ {
+		packet, err := Encrypt([]byte{}, v.key[:], v.config.ShortID, v.config.RoutingSalt)
+		if err == nil && v.conn != nil {
+			v.conn.Write(packet)
+			v.lastAliveMs.Store(time.Now().UnixMilli())
+			v.echoPush()
+		}
+		select {
+		case <-v.stopCh:
+			return
+		case <-time.After(400 * time.Millisecond):
+		}
+	}
+
+	// Ждём последний echo-ответ
+	select {
+	case <-v.stopCh:
+		return
+	case <-time.After(300 * time.Millisecond):
+	}
+
+	acks := v.confirmOk.Load()
+	if acks >= 2 {
+		log.Printf("[VPN] confirmBurst: %d/3 acks — connection confirmed", acks)
+		v.exitReconnecting()
+	} else {
+		log.Printf("[VPN] confirmBurst: only %d/3 acks — staying in reconnect", acks)
+	}
+}
+
+func (v *VPN) exitReconnecting() {
+	if !v.reconnecting.Load() {
+		return
+	}
+	v.reconnecting.Store(false)
+	v.readFails.Store(0)
+	v.consecutiveMisses.Store(0)
+	v.graceUntil.Store(time.Now().Add(4 * time.Second).UnixNano())
+	log.Printf("[VPN] exitReconnecting: network restored (grace 4s)")
+	v.callback("connected", 0, 0, 0, 0, 0, 0)
 }
 
 // echoPush добавляет слот отправленного keep-alive в кольцевой буфер.
@@ -273,16 +282,46 @@ func (v *VPN) echoReset() {
 
 func (v *VPN) keepAliveLoop() {
 	for {
+		if v.stopping.Load() {
+			return
+		}
 		packet, err := Encrypt([]byte{}, v.key[:], v.config.ShortID, v.config.RoutingSalt)
-		if err == nil {
+		if err == nil && v.conn != nil {
 			v.conn.Write(packet)
 			v.lastAliveMs.Store(time.Now().UnixMilli())
 			v.echoPush()
 		}
+
+		// 2s в норме, 1s при reconnect (агрессивный опрос)
+		interval := 2 * time.Second
+		if v.reconnecting.Load() {
+			interval = 1 * time.Second
+		}
 		select {
 		case <-v.stopCh:
 			return
-		case <-time.After(time.Duration(5+mathrand.Intn(11)) * time.Second):
+		case <-time.After(interval):
+		}
+
+		if v.stopping.Load() {
+			return
+		}
+
+		// Проверяем, пришёл ли echo-ответ с прошлого раза
+		if v.echoReceived.Swap(false) {
+			v.consecutiveMisses.Store(0)
+			// Выход из reconnect теперь только через confirmBurst
+		} else {
+			graceEnd := v.graceUntil.Load()
+			if graceEnd > 0 && graceEnd > time.Now().UnixNano() {
+				// Grace-период — не считаем пропуски
+				v.consecutiveMisses.Store(0)
+			} else {
+				v.consecutiveMisses.Add(1)
+				if v.consecutiveMisses.Load() >= 3 && !v.reconnecting.Load() {
+					v.enterReconnecting()
+				}
+			}
 		}
 	}
 }

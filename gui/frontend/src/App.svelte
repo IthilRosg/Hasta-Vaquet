@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { fade } from 'svelte/transition'
   import { DoConnect, DoDisconnect, ImportConfigFromDialog, LoadDefaultConfig, LoadProfile, ListProfileItems, SaveLastProfile, LoadLastProfile, DeleteProfile } from '../wailsjs/go/main/App'
   import { EventsOn } from '../wailsjs/runtime/runtime'
 
@@ -96,7 +97,19 @@
     } else if (s === 'reconnecting') {
       reconnecting = true
       statusText = 'Reconnecting… #' + attempt
-      clearInterval(uptimeTimer)
+    }
+  })
+
+  EventsOn('connection_status', (s: string) => {
+    if (s === 'connected') {
+      reconnecting = false
+      statusText = 'Connected'
+    } else if (s === 'reconnecting') {
+      reconnecting = true
+      statusText = 'Network lost — reconnecting…'
+    } else if (s === 'disconnected') {
+      reconnecting = false; connected = false
+      statusText = 'Disconnected'
     }
   })
 
@@ -198,16 +211,10 @@
       </button>
     </div>
     <div class="status" class:reconnecting>{statusText}</div>
-    {#if reconnecting}
-    <div class="reconnect-indicator">
-      <span class="dot-pulse"></span>
-      <span>auto-reconnect…</span>
-    </div>
-    {/if}
   </div>
 
-  <!-- Stats panel (only when connected) -->
-  {#if connected}
+  <!-- Stats panel (visible during reconnect too — no reset) -->
+  {#if connected || reconnecting}
   <div class="stats-grid">
     <div class="card">
       <div class="card-title">SPEED</div>
@@ -224,6 +231,17 @@
     <div class="card">
       <div class="card-title">UPTIME</div>
       <div class="card-body card-uptime">{uptime}</div>
+    </div>
+  </div>
+  {/if}
+
+  <!-- Reconnect overlay with blur -->
+  {#if reconnecting}
+  <div class="reconnect-overlay" transition:fade={{ duration: 300 }}>
+    <div class="reconnect-spinner">
+      <div class="pulsing-circle"></div>
+      <p class="reconnect-text">Восстановление сети...</p>
+      <p class="reconnect-hint">Кнопка отключения активна</p>
     </div>
   </div>
   {/if}
@@ -442,7 +460,38 @@
   .version { position: fixed; bottom: 8px; right: 12px; font-size: 11px; color: var(--text-dim); opacity: 0.5; }
 
   .status.reconnecting { color: var(--yellow); }
-  .reconnect-indicator { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-dim); margin-top: 4px; }
-  .dot-pulse { width: 6px; height: 6px; border-radius: 50%; background: var(--yellow); animation: pulse 1.2s ease-in-out infinite; }
-  @keyframes pulse { 0%, 100% { opacity: 0.3; transform: scale(0.8); } 50% { opacity: 1; transform: scale(1.2); } }
+
+  /* ----- Reconnect overlay ----- */
+  .reconnect-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0, 0, 0, 0.35);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    z-index: 40;
+    display: flex; align-items: center; justify-content: center;
+    pointer-events: none;
+  }
+  .reconnect-spinner {
+    pointer-events: none;
+    text-align: center;
+    display: flex; flex-direction: column; align-items: center; gap: 12px;
+  }
+  .pulsing-circle {
+    width: 56px; height: 56px;
+    border-radius: 50%;
+    border: 3px solid var(--yellow);
+    border-top-color: transparent;
+    animation: reconnect-spin 0.9s linear infinite;
+    box-shadow: 0 0 20px rgba(250, 197, 28, 0.15), 0 0 40px rgba(250, 197, 28, 0.05);
+  }
+  @keyframes reconnect-spin {
+    to { transform: rotate(360deg); }
+  }
+  .reconnect-text {
+    font-size: 16px; font-weight: 600; color: var(--text);
+    letter-spacing: 0.3px;
+  }
+  .reconnect-hint {
+    font-size: 12px; color: var(--text-dim); opacity: 0.7;
+  }
 </style>

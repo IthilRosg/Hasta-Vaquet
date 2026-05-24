@@ -263,11 +263,11 @@ func TestReconnectStateMachine(t *testing.T) {
 	vpn.running.Store(true)
 	vpn.stopCh = make(chan struct{})
 
-	go vpn.onConnectionLost()
+	go vpn.enterReconnecting()
 
 	select {
 	case <-listener.reconnectingCh:
-		t.Log("Reconnect loop started: callback('reconnecting') received")
+		t.Log("enterReconnecting: callback('reconnecting') received")
 	case <-time.After(3 * time.Second):
 		t.Fatal("Timed out waiting for reconnect callback")
 	}
@@ -276,12 +276,12 @@ func TestReconnectStateMachine(t *testing.T) {
 		t.Fatal("reconnecting flag should be true")
 	}
 
-	// reconnecting flag clears running
-	if vpn.running.Load() {
-		t.Fatal("running should be false after connection lost")
+	// running остаётся true — TUN не закрывается
+	if !vpn.running.Load() {
+		t.Fatal("running should stay true (TUN kept alive)")
 	}
 
-	// Stop during reconnect
+	// Stop во время reconnect
 	vpn.Stop()
 
 	time.Sleep(200 * time.Millisecond)
@@ -306,7 +306,7 @@ func TestReconnectStopCancels(t *testing.T) {
 	vpn.running.Store(true)
 	vpn.stopCh = make(chan struct{})
 
-	go vpn.onConnectionLost()
+	go vpn.enterReconnecting()
 
 	<-listener.reconnectingCh
 	t.Log("Reconnect started")
@@ -330,9 +330,9 @@ func TestReconnectDoubleCallIsSafe(t *testing.T) {
 	vpn.running.Store(true)
 	vpn.stopCh = make(chan struct{})
 
-	// Call onConnectionLost twice in parallel
-	go vpn.onConnectionLost()
-	go vpn.onConnectionLost()
+	// Call enterReconnecting twice in parallel
+	go vpn.enterReconnecting()
+	go vpn.enterReconnecting()
 
 	// Should only get one reconnect
 	count := 0
@@ -348,36 +348,38 @@ func TestReconnectDoubleCallIsSafe(t *testing.T) {
 	}
 
 	if count > 1 {
-		t.Fatal("onConnectionLost should only execute once")
+		t.Fatal("enterReconnecting should only execute once")
 	}
 }
 
-func TestKillSwitchTimeout(t *testing.T) {
+func TestExitReconnectingResetsState(t *testing.T) {
 	listener := &testListener{reconnectingCh: make(chan string, 10)}
 	vpn := New(Config{
-		ServerIP: "127.0.0.1", Port: 19996, ShortID: 1,
-		SecretKey: "ks-timeout", RoutingSalt: "salt",
-		InternalIP: "10.0.0.96", GatewayIP: "192.168.1.1",
+		ServerIP: "127.0.0.1", Port: 19995, ShortID: 1,
+		SecretKey: "exit-key", RoutingSalt: "salt",
+		InternalIP: "10.0.0.95",
 	}, listener)
 	vpn.running.Store(true)
 	vpn.stopCh = make(chan struct{})
 
-	go vpn.onConnectionLost()
+	vpn.enterReconnecting()
 
-	// Должен стартовать reconnect
-	select {
-	case <-listener.reconnectingCh:
-		t.Log("Reconnect started")
-	case <-time.After(3 * time.Second):
-		t.Fatal("No reconnect callback")
+	if !vpn.reconnecting.Load() {
+		t.Fatal("reconnecting should be true after enterReconnecting")
+	}
+	if vpn.readFails.Load() != 0 {
+		t.Fatal("readFails should be 0 initially")
 	}
 
-	// Стопаем через 1с — проверяем что можно безопасно остановить во время reconnect
-	vpn.Stop()
+	vpn.readFails.Store(5)
+	vpn.exitReconnecting()
+
 	if vpn.reconnecting.Load() {
-		t.Fatal("reconnecting should be false after Stop()")
+		t.Fatal("reconnecting should be false after exitReconnecting")
 	}
-	t.Log("KillSwitch: Stop() during reconnect — OK")
+	if vpn.readFails.Load() != 0 {
+		t.Fatal("readFails should be reset to 0 after exitReconnecting")
+	}
 }
 
 func TestKillSwitchHooksNoPanic(t *testing.T) {

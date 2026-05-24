@@ -7,6 +7,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -74,11 +75,18 @@ func (p *vpnPlatform) readerLoop(v *VPN) {
 
 		n, err := v.conn.Read(buf)
 		if err != nil {
-			log.Printf("[ANDROID] readerLoop: UDP read error: %v", err)
-			fails := v.readFails.Add(1)
-			if fails >= 5 {
-				v.onConnectionLost()
+			// Плановый останов — не трогаем reconnect
+			if v.stopping.Load() || strings.Contains(err.Error(), "use of closed") {
+				log.Printf("[ANDROID] readerLoop: stopping, err=%v — exit", err)
 				return
+			}
+			log.Printf("[ANDROID] readerLoop: UDP read error: %v", err)
+			// Во время reconnect не закрываем TUN
+			if !v.reconnecting.Load() {
+				fails := v.readFails.Add(1)
+				if fails >= 5 {
+					v.enterReconnecting()
+				}
 			}
 			continue
 		}
@@ -91,6 +99,12 @@ func (p *vpnPlatform) readerLoop(v *VPN) {
 		if err != nil {
 			continue
 		}
+
+		// Любой валидный пакет во время reconnect — запускаем burst-подтверждение
+		if v.reconnecting.Load() {
+			v.tryConfirmReconnect()
+		}
+
 		if len(decrypted) == 0 {
 			pktCount++
 			if pktCount%10 == 0 {
@@ -103,6 +117,9 @@ func (p *vpnPlatform) readerLoop(v *VPN) {
 		// Echo-пинг (1 байт 0x01)
 		if len(decrypted) == 1 && decrypted[0] == 0x01 {
 			v.echoAck()
+			if v.reconnecting.Load() && v.confirmReq.Load() {
+				v.confirmOk.Add(1)
+			}
 			last := v.lastAliveMs.Load()
 			if last > 0 {
 				rtt := time.Now().UnixMilli() - last
@@ -172,14 +189,18 @@ func (p *vpnPlatform) writerLoop(v *VPN) {
 
 var plat vpnPlatform
 
-func platformOpenTunnel(v *VPN) error         { return plat.openTunnel(v) }
-func platformCloseTunnel(v *VPN)              { plat.closeTunnel(v) }
-func platformReaderLoop(v *VPN)               { plat.readerLoop(v) }
-func platformWriterLoop(v *VPN)               { plat.writerLoop(v) }
-func platformActivateKillSwitch(v *VPN)       {}
-func platformDeactivateKillSwitch(v *VPN)     {}
+func platformOpenTunnel(v *VPN) error            { return plat.openTunnel(v) }
+func platformCloseTunnel(v *VPN)                 { plat.closeTunnel(v) }
+func platformReaderLoop(v *VPN)                  { plat.readerLoop(v) }
+func platformWriterLoop(v *VPN)                  { plat.writerLoop(v) }
+func platformActivateKillSwitch(v *VPN)          {}
+func platformDeactivateKillSwitch(v *VPN)        {}
+func platformRefreshServerRoute(v *VPN)          { plat.refreshServerRoute(v) }
+func platformGatewayIsValid(v *VPN) bool         { return plat.gatewayIsValid(v) }
 
-func (p *vpnPlatform) activateKillSwitch(v *VPN)   {}
-func (p *vpnPlatform) deactivateKillSwitch(v *VPN) {}
+func (p *vpnPlatform) activateKillSwitch(v *VPN)       {}
+func (p *vpnPlatform) deactivateKillSwitch(v *VPN)     {}
+func (p *vpnPlatform) refreshServerRoute(v *VPN)       {}
+func (p *vpnPlatform) gatewayIsValid(v *VPN) bool      { return true }
 
 func platformDumpRoutes() {}

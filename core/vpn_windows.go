@@ -34,7 +34,7 @@ func getDefaultGateway() string {
 	}
 	gw := strings.TrimSpace(string(out))
 	ip := net.ParseIP(gw)
-	if ip != nil && !ip.IsLoopback() {
+	if ip != nil && !ip.IsLoopback() && !ip.IsUnspecified() {
 		return gw
 	}
 	return ""
@@ -48,11 +48,34 @@ func (p *vpnPlatform) openTunnel(v *VPN) error {
 		p.realGateway = v.config.GatewayIP // fallback на конфиг, если не смогли определить
 	}
 	log.Printf("[ROUTE] openTunnel: detected gateway=%s (config=%s)", p.realGateway, v.config.GatewayIP)
-	adapter, err := wintun.CreateAdapter("HastaVaquet", "HastaVaquet", nil)
+
+	// Пытаемся открыть существующий адаптер, чтобы не плодить лишние
+	adapter, err := wintun.OpenAdapter("HastaVaquet")
 	if err != nil {
-		return fmt.Errorf("adapter: %w", err)
+		log.Printf("[ROUTE] openTunnel: no existing adapter (%v), creating new one", err)
+		adapter, err = wintun.CreateAdapter("HastaVaquet", "HastaVaquet", nil)
+		if err != nil {
+			return fmt.Errorf("adapter: %w", err)
+		}
+	} else {
+		log.Printf("[ROUTE] openTunnel: reused existing adapter")
 	}
 	p.adapter = adapter
+
+	// Гарантированное закрытие адаптера при ошибках ниже
+	closeOnErr := true
+	defer func() {
+		if closeOnErr {
+			if p.session != nil {
+				p.session.End()
+				p.session = nil
+			}
+			if p.adapter != nil {
+				p.adapter.Close()
+				p.adapter = nil
+			}
+		}
+	}()
 
 	index := getInterfaceIndex("HastaVaquet")
 	p.ifIndex = index
@@ -79,18 +102,16 @@ func (p *vpnPlatform) openTunnel(v *VPN) error {
 		Port: v.config.Port,
 	})
 	if err != nil {
-		adapter.Close()
 		return fmt.Errorf("dial: %w", err)
 	}
 	v.conn = conn
 
 	sess, err := adapter.StartSession(0x800000)
 	if err != nil {
-		conn.Close()
-		adapter.Close()
 		return fmt.Errorf("session: %w", err)
 	}
 	p.session = &sess
+	closeOnErr = false
 	return nil
 }
 
@@ -117,9 +138,11 @@ func (p *vpnPlatform) closeTunnel(v *VPN) {
 
 	if p.session != nil {
 		p.session.End()
+		p.session = nil
 	}
 	if p.adapter != nil {
 		p.adapter.Close()
+		p.adapter = nil
 	}
 	log.Printf("[ROUTE] closeTunnel done")
 }
@@ -132,24 +155,36 @@ func (p *vpnPlatform) readerLoop(v *VPN) {
 			return
 		default:
 		}
-		v.conn.SetReadDeadline(time.Now().Add(10 * time.Second))
+
+		// При reconnect — короткий таймаут для быстрой реакции на ответ сервера
+		if v.reconnecting.Load() {
+			v.conn.SetReadDeadline(time.Now().Add(3 * time.Second))
+		} else {
+			v.conn.SetReadDeadline(time.Now().Add(10 * time.Second))
+		}
+
 		n, err := v.conn.Read(buf)
 		if err != nil {
-			fails := v.readFails.Add(1)
-			isTimeout := false
-			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
-				isTimeout = true
-			}
-			// Не-timeout ошибка (network down, interface reset) — reconnect мгновенно
-			// Timeout — после 2 подряд (20с макс)
-			trigger := fails >= 2
-			if !isTimeout {
-				trigger = fails >= 1
-			}
-			log.Printf("[VPN] readerLoop: fail #%d timeout=%v trigger=%v err=%v", fails, isTimeout, trigger, err)
-			if trigger {
-				v.onConnectionLost()
+			// Плановый останов — не трогаем reconnect
+			if v.stopping.Load() || strings.Contains(err.Error(), "use of closed") {
+				log.Printf("[VPN] readerLoop: stopping, err=%v — exit", err)
 				return
+			}
+			// Во время reconnect ошибки ожидаемы — не триггерим закрытие TUN
+			if !v.reconnecting.Load() {
+				fails := v.readFails.Add(1)
+				isTimeout := false
+				if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+					isTimeout = true
+				}
+				trigger := fails >= 2
+				if !isTimeout {
+					trigger = fails >= 1
+				}
+				log.Printf("[VPN] readerLoop: fail #%d timeout=%v trigger=%v err=%v", fails, isTimeout, trigger, err)
+				if trigger {
+					v.enterReconnecting()
+				}
 			}
 			continue
 		}
@@ -161,12 +196,21 @@ func (p *vpnPlatform) readerLoop(v *VPN) {
 		if err != nil {
 			continue
 		}
+
+		// Любой валидный пакет во время reconnect — запускаем burst-подтверждение
+		if v.reconnecting.Load() {
+			v.tryConfirmReconnect()
+		}
+
 		if len(decrypted) == 0 {
 			continue
 		}
 		// Server echo response (1-byte marker for RTT measurement)
 		if len(decrypted) == 1 && decrypted[0] == 0x01 {
 			v.echoAck()
+			if v.reconnecting.Load() && v.confirmReq.Load() {
+				v.confirmOk.Add(1)
+			}
 			last := v.lastAliveMs.Load()
 			if last > 0 {
 				rtt := time.Now().UnixMilli() - last
@@ -256,16 +300,52 @@ func (p *vpnPlatform) writerLoop(v *VPN) {
 	}
 }
 
+// refreshServerRoute переопределяет route до сервера через текущий шлюз ОС.
+// Шлюз мог измениться при смене сети (WiFi → Ethernet, переезд).
+func (p *vpnPlatform) refreshServerRoute(v *VPN) {
+	newGw := getDefaultGateway()
+	if newGw == "" {
+		log.Printf("[ROUTE] refreshServerRoute: no gateway detected, keeping %s", p.realGateway)
+		return
+	}
+	currentIsBad := p.realGateway == "" || strings.HasPrefix(p.realGateway, "0.0")
+	if newGw == p.realGateway && !currentIsBad {
+		return
+	}
+	log.Printf("[ROUTE] refreshServerRoute: gateway %s → %s", p.realGateway, newGw)
+	hide := func(cmd string, args ...string) {
+		c := exec.Command(cmd, args...)
+		c.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+		c.CombinedOutput()
+	}
+	// Принудительно удаляем старый route (даже если висит на 0.0.0.0) и пишем новый
+	hide("route", "delete", v.config.ServerIP)
+	hide("route", "add", v.config.ServerIP, "mask", "255.255.255.255", newGw, "metric", "1")
+	p.realGateway = newGw
+	log.Printf("[ROUTE] refreshServerRoute: updated route to %s via %s", v.config.ServerIP, newGw)
+}
+
+func (p *vpnPlatform) gatewayIsValid(v *VPN) bool {
+	gw := p.realGateway
+	if gw == "" || strings.HasPrefix(gw, "0.0") {
+		log.Printf("[ROUTE] gatewayIsValid: false (gateway=%q)", gw)
+		return false
+	}
+	return true
+}
+
 // ─── Глобальный экземпляр платформы для хуков ────────────────────
 
 var plat vpnPlatform
 
-func platformOpenTunnel(v *VPN) error         { return plat.openTunnel(v) }
-func platformCloseTunnel(v *VPN)              { plat.closeTunnel(v) }
-func platformReaderLoop(v *VPN)               { plat.readerLoop(v) }
-func platformWriterLoop(v *VPN)               { plat.writerLoop(v) }
-func platformActivateKillSwitch(v *VPN)       { plat.activateKillSwitch(v) }
-func platformDeactivateKillSwitch(v *VPN)     { plat.deactivateKillSwitch(v) }
+func platformOpenTunnel(v *VPN) error            { return plat.openTunnel(v) }
+func platformCloseTunnel(v *VPN)                 { plat.closeTunnel(v) }
+func platformReaderLoop(v *VPN)                  { plat.readerLoop(v) }
+func platformWriterLoop(v *VPN)                  { plat.writerLoop(v) }
+func platformActivateKillSwitch(v *VPN)          { plat.activateKillSwitch(v) }
+func platformDeactivateKillSwitch(v *VPN)        { plat.deactivateKillSwitch(v) }
+func platformRefreshServerRoute(v *VPN)          { plat.refreshServerRoute(v) }
+func platformGatewayIsValid(v *VPN) bool         { return plat.gatewayIsValid(v) }
 
 func getInterfaceIndex(name string) string {
 	cmd := exec.Command("powershell", "-Command",
