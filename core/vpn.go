@@ -152,12 +152,11 @@ func (v *VPN) persistentPingLoop() {
 		if v.stopping.Load() {
 			return
 		}
-		if v.conn != nil {
-			// Стандартный keep-alive / handshake: Encrypt([]byte{})
-			// Сервер на пустой пакет обновляет UDP-адрес пира и шлёт echo 0x01.
+		conn := v.conn
+		if conn != nil {
 			pkt, err := Encrypt([]byte{}, v.key[:], v.config.ShortID, v.config.RoutingSalt)
 			if err == nil {
-				n, _ := v.conn.Write(pkt)
+				n, _ := conn.Write(pkt)
 				if n > 0 {
 					log.Printf("[VPN] persistentPingLoop: sent handshake ping (%d bytes)", n)
 				}

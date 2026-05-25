@@ -193,13 +193,15 @@ func (p *vpnPlatform) readerLoop(v *VPN) {
 		default:
 		}
 
-		if v.conn == nil {
+		// Локальная копия — защита от гонки с persistentPingLoop (может обнулить v.conn)
+		conn := v.conn
+		if conn == nil {
 			time.Sleep(100 * time.Millisecond)
 			continue
 		}
-		v.conn.SetReadDeadline(time.Now().Add(10 * time.Second))
+		conn.SetReadDeadline(time.Now().Add(10 * time.Second))
 
-		n, err := v.conn.Read(buf)
+		n, err := conn.Read(buf)
 		if err != nil {
 			if v.stopping.Load() {
 				return
@@ -222,7 +224,7 @@ func (p *vpnPlatform) readerLoop(v *VPN) {
 		if len(decrypted) == 0 {
 			continue
 		}
-		// Echo response — обновляем RTT
+		// Server echo response (1-byte marker for RTT measurement)
 		if len(decrypted) == 1 && decrypted[0] == 0x01 {
 			v.echoAck()
 			last := v.lastAliveMs.Load()
@@ -303,11 +305,12 @@ func (p *vpnPlatform) writerLoop(v *VPN) {
 			return
 		default:
 		}
-		if p.session == nil {
+		sess := p.session
+		if sess == nil {
 			time.Sleep(100 * time.Millisecond)
 			continue
 		}
-		packet, err := p.session.ReceivePacket()
+		packet, err := sess.ReceivePacket()
 		if err == nil {
 			if len(packet) >= 20 && (packet[0]>>4) == 4 {
 				encrypted, err := Encrypt(packet, v.key[:], v.config.ShortID, v.config.RoutingSalt)
@@ -317,12 +320,11 @@ func (p *vpnPlatform) writerLoop(v *VPN) {
 					v.sessionTotalTx.Add(uint64(len(encrypted)))
 				}
 			}
-			p.session.ReleaseReceivePacket(packet)
+			sess.ReleaseReceivePacket(packet)
 		} else if err == windows.ERROR_NO_MORE_ITEMS {
-			if p.session == nil {
-				continue
+			if sess != nil {
+				windows.WaitForSingleObject(sess.ReadWaitEvent(), windows.INFINITE)
 			}
-			windows.WaitForSingleObject(p.session.ReadWaitEvent(), windows.INFINITE)
 		}
 	}
 }
