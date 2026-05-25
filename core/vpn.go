@@ -164,11 +164,16 @@ func (v *VPN) persistentPingLoop() {
 				v.echoPush()
 			}
 		}
-		// Passive reconnect: если пакетов нет 6+ секунд — шлём UI
+		// Passive reconnect: если пакетов нет 6+ секунд — шлём UI и закрываем сокет,
+		// чтобы routeMonitorLoop пересоздал его через reconnectSocket().
 		isDead := time.Since(time.UnixMilli(v.lastPacketRx.Load())) > reconnectTimeout
 		if isDead && !wasDead {
 			wasDead = true
 			v.callback("reconnecting", 0, 0, 0, 0, 0, 0)
+			if v.conn != nil {
+				v.conn.Close()
+				v.conn = nil
+			}
 		} else if !isDead && wasDead {
 			wasDead = false
 			v.callback("connected", 0, 0, 0, 0, 0, 0)
@@ -195,7 +200,7 @@ func (v *VPN) routeMonitorLoop() {
 			return
 		case <-time.After(routeCheckInterval):
 		}
-		if v.stopping.Load() {
+		if v.stopping.Load() || !v.running.Load() {
 			return
 		}
 		v.platformRefreshServerRoute()

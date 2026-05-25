@@ -298,7 +298,7 @@ func (p *vpnPlatform) writerLoop(v *VPN) {
 		if err == nil {
 			if len(packet) >= 20 && (packet[0]>>4) == 4 {
 				encrypted, err := Encrypt(packet, v.key[:], v.config.ShortID, v.config.RoutingSalt)
-				if err == nil {
+				if err == nil && v.conn != nil {
 					v.conn.Write(encrypted)
 					v.txBytes.Add(int64(len(encrypted)))
 					v.sessionTotalTx.Add(uint64(len(encrypted)))
@@ -345,12 +345,11 @@ func (p *vpnPlatform) gatewayIsValid(v *VPN) bool {
 }
 
 func (p *vpnPlatform) reconnectSocket(v *VPN) {
-	if v.conn == nil {
-		return
+	if v.conn != nil {
+		old := v.conn
+		v.conn = nil
+		old.Close()
 	}
-	old := v.conn
-	v.conn = nil
-	old.Close()
 
 	newConn, err := net.DialUDP("udp", nil, &net.UDPAddr{
 		IP:   net.ParseIP(v.config.ServerIP),
@@ -362,6 +361,18 @@ func (p *vpnPlatform) reconnectSocket(v *VPN) {
 	}
 	v.conn = newConn
 	log.Printf("[VPN] reconnectSocket: socket recreated (%s:%d)", v.config.ServerIP, v.config.Port)
+
+	// Маршрут до сервера мог пропасть при переподключении сети — передобавляем
+	gw := strings.TrimSpace(p.realGateway)
+	if gw != "" {
+		hide := func(cmd string, args ...string) {
+			c := exec.Command(cmd, args...)
+			c.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+			c.CombinedOutput()
+		}
+		hide("route", "delete", v.config.ServerIP)
+		hide("route", "add", v.config.ServerIP, "mask", "255.255.255.255", gw, "metric", "1")
+	}
 }
 
 // ─── Глобальный экземпляр платформы для хуков ────────────────────
