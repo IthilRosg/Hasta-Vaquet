@@ -108,9 +108,14 @@ func (p *vpnPlatform) openTunnel(v *VPN) error {
 	}
 	run("route", "delete", v.config.ServerIP)
 	run("route", "add", v.config.ServerIP, "mask", "255.255.255.255", p.realGateway)
-	run("route", "delete", "0.0.0.0", "mask", "0.0.0.0", v.config.InternalIP)
+	if index != "" {
+		run("route", "delete", "0.0.0.0", "mask", "0.0.0.0", "0.0.0.0", "if", index)
+	}
 	run("route", "delete", "0.0.0.0", v.config.InternalIP)
-	run("route", "add", "0.0.0.0", "mask", "0.0.0.0", v.config.InternalIP, "metric", "1", "if", index)
+	// WireGuard-style: gateway 0.0.0.0 (без IP шлюза) — пакеты НЕ заворачиваются обратно в туннель
+	if index != "" {
+		run("route", "add", "0.0.0.0", "mask", "0.0.0.0", "0.0.0.0", "metric", "1", "if", index)
+	}
 	log.Printf("[ROUTE] openTunnel done: ifIndex=%s, internal=%s, gateway=%s, server=%s",
 		p.ifIndex, v.config.InternalIP, p.realGateway, v.config.ServerIP)
 
@@ -150,8 +155,10 @@ func (p *vpnPlatform) closeTunnel(v *VPN) {
 	} else {
 		log.Printf("[ROUTE] closeTunnel: no gateway detected, skipping route restore")
 	}
-	hide("route", "delete", "0.0.0.0", "mask", "0.0.0.0", v.config.InternalIP)
-	hide("route", "delete", "0.0.0.0", v.config.InternalIP)
+	if p.ifIndex != "" {
+		hide("route", "delete", "0.0.0.0", "mask", "0.0.0.0", "0.0.0.0", "if", p.ifIndex)
+	}
+	hide("route", "delete", "0.0.0.0", v.config.InternalIP) // старая запись со шлюзом 10.0.0.x
 	hide("netsh", "interface", "ipv6", "delete", "route", "::/0", "name=HastaVaquet")
 
 	// Сессию закрываем — иначе следующий StartSession не сможет создать новую.
