@@ -296,6 +296,10 @@ func (p *vpnPlatform) writerLoop(v *VPN) {
 			return
 		default:
 		}
+		if p.session == nil {
+			time.Sleep(100 * time.Millisecond)
+			continue
+		}
 		packet, err := p.session.ReceivePacket()
 		if err == nil {
 			if len(packet) >= 20 && (packet[0]>>4) == 4 {
@@ -308,6 +312,9 @@ func (p *vpnPlatform) writerLoop(v *VPN) {
 			}
 			p.session.ReleaseReceivePacket(packet)
 		} else if err == windows.ERROR_NO_MORE_ITEMS {
+			if p.session == nil {
+				continue
+			}
 			windows.WaitForSingleObject(p.session.ReadWaitEvent(), windows.INFINITE)
 		}
 	}
@@ -356,21 +363,27 @@ func (p *vpnPlatform) gatewayIsValid(v *VPN) bool {
 	return true
 }
 
-// reconnectSession — сбрасывает Wintun-сессию (чистит буфер TUN).
-// Вызывается при обнаружении reconnect, чтобы старые пакеты из буфера
-// не уходили в новый сокет как мусор.
+// reconnectSession — вычищает буфер TUN без пересоздания сессии.
+// Читает и дропает все накопившиеся пакеты, чтобы старый мусор
+// не уходил в новый сокет. Не трогает session handle (безопасно для writerLoop).
 func (p *vpnPlatform) reconnectSession(v *VPN) {
-	if p.session != nil {
-		p.session.End()
-		p.session = nil
-	}
-	sess, err := p.adapter.StartSession(0x800000)
-	if err != nil {
-		log.Printf("[VPN] reconnectSession: StartSession failed: %v", err)
+	if p.session == nil {
 		return
 	}
-	p.session = &sess
-	log.Printf("[VPN] reconnectSession: session reset")
+	dropped := 0
+	for i := 0; i < 2000; i++ {
+		pkt, err := p.session.ReceivePacket()
+		if err != nil {
+			break
+		}
+		p.session.ReleaseReceivePacket(pkt)
+		dropped++
+	}
+	if dropped > 0 {
+		log.Printf("[VPN] reconnectSession: drained %d stale packets from TUN buffer", dropped)
+	} else {
+		log.Printf("[VPN] reconnectSession: TUN buffer clean")
+	}
 }
 
 func (p *vpnPlatform) reconnectSocket(v *VPN) {
