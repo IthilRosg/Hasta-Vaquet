@@ -5,6 +5,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -27,10 +28,24 @@ type App struct {
 
 // vpnListener реализует core.StatusListener для отправки событий в UI.
 type vpnListener struct {
-	ctx context.Context
+	ctx    context.Context
+	logger *log.Logger
 }
 
 func (l *vpnListener) OnStatus(status string, txSpeed, rxSpeed int64, totalTx, totalRx uint64, pingMs int, lossPct float64) {
+	switch status {
+	case "connected":
+		l.logger.Printf("[STATUS] connected — tx=%d rx=%d", txSpeed, rxSpeed)
+	case "disconnected":
+		l.logger.Printf("[STATUS] disconnected")
+	case "reconnecting":
+		l.logger.Printf("[STATUS] reconnecting")
+	case "connecting":
+		l.logger.Printf("[STATUS] connecting...")
+	case "traffic":
+		l.logger.Printf("[TRAFFIC] ↑%d B/s ↓%d B/s ping=%dms loss=%.1f%% total_tx=%d total_rx=%d",
+			txSpeed, rxSpeed, pingMs, lossPct, totalTx, totalRx)
+	}
 	runtime.EventsEmit(l.ctx, "status", map[string]interface{}{
 		"status":      status,
 		"attempt":     txSpeed,
@@ -41,7 +56,6 @@ func (l *vpnListener) OnStatus(status string, txSpeed, rxSpeed int64, totalTx, t
 		"ping_ms":     pingMs,
 		"loss_pct":    lossPct,
 	})
-	// Специализированные события для фронтенда
 	switch status {
 	case "reconnecting", "connected", "disconnected":
 		runtime.EventsEmit(l.ctx, "connection_status", status)
@@ -61,7 +75,7 @@ func NewApp() *App {
 
 func (a *App) shutdown(ctx context.Context) {
 	if a.logger != nil {
-		a.logger.Println("GUI shutting down — destroying VPN adapter")
+		a.logger.Println("[APP] shutdown — destroying VPN adapter")
 	}
 	if a.vpn != nil {
 		a.vpn.Destroy()
@@ -75,11 +89,12 @@ func (a *App) startup(ctx context.Context) {
 	if _, err := os.Stat(dllPath); os.IsNotExist(err) {
 		os.WriteFile(dllPath, wintunDLL, 0755)
 	}
+	// Лог идёт и в файл, и в stdout (wails dev)
 	logPath := filepath.Join(exeDir, "gui.log")
 	f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err == nil {
-		a.logger = log.New(f, "", log.LstdFlags)
-		a.logger.Println("GUI started")
+		a.logger = log.New(io.MultiWriter(f, os.Stdout), "", log.LstdFlags)
+		a.logger.Println("GUI started (wails dev verbose)")
 	}
 }
 
@@ -267,7 +282,7 @@ func (a *App) DoConnect(serverIP, secretKey, routingSalt, internalIP, gatewayIP,
 		GatewayIP:   gatewayIP,
 		DNS:         dns,
 	}
-	vpn := core.New(cfg, &vpnListener{ctx: a.ctx})
+	vpn := core.New(cfg, &vpnListener{ctx: a.ctx, logger: a.logger})
 	if err := vpn.Start(); err != nil {
 		if a.logger != nil {
 			a.logger.Printf("DoConnect: Start() error: %v", err)

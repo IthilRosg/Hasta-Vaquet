@@ -62,20 +62,24 @@ func (p *vpnPlatform) openTunnel(v *VPN) error {
 	}
 	log.Printf("[ROUTE] openTunnel: detected gateway=%s", p.realGateway)
 
-	// Пытаемся открыть существующий адаптер, чтобы не плодить лишние
-	adapter, err := wintun.OpenAdapter("HastaVaquet")
-	if err != nil {
-		log.Printf("[ROUTE] openTunnel: no existing adapter (%v), creating new one", err)
-		adapter, err = wintun.CreateAdapter("HastaVaquet", "HastaVaquet", nil)
+	// Если адаптер уже открыт (предыдущий Stop не убил его) — переиспользуем
+	if p.adapter == nil {
+		adapter, err := wintun.OpenAdapter("HastaVaquet")
 		if err != nil {
-			return fmt.Errorf("adapter: %w", err)
+			log.Printf("[ROUTE] openTunnel: no existing adapter (%v), creating new one", err)
+			adapter, err = wintun.CreateAdapter("HastaVaquet", "HastaVaquet", nil)
+			if err != nil {
+				return fmt.Errorf("adapter: %w", err)
+			}
+		} else {
+			log.Printf("[ROUTE] openTunnel: reused existing adapter")
 		}
+		p.adapter = adapter
 	} else {
-		log.Printf("[ROUTE] openTunnel: reused existing adapter")
+		log.Printf("[ROUTE] openTunnel: adapter already open, reusing existing handle")
 	}
-	p.adapter = adapter
 
-	// Гарантированное закрытие при ошибках
+	// Гарантированное закрытие при ошибках (только session, adapter живёт)
 	closeOnErr := true
 	defer func() {
 		if closeOnErr {
@@ -83,7 +87,6 @@ func (p *vpnPlatform) openTunnel(v *VPN) error {
 				p.session.End()
 				p.session = nil
 			}
-			// Не закрываем adapter — он живёт между рестартами
 		}
 	}()
 
@@ -120,11 +123,16 @@ func (p *vpnPlatform) openTunnel(v *VPN) error {
 	}
 	v.conn = conn
 
-	sess, err := adapter.StartSession(0x800000)
-	if err != nil {
-		return fmt.Errorf("session: %w", err)
+	// Сессия уже жива (предыдущий Stop не убил её) — не создаём новую
+	if p.session == nil {
+		sess, err := p.adapter.StartSession(0x800000)
+		if err != nil {
+			return fmt.Errorf("session: %w", err)
+		}
+		p.session = &sess
+	} else {
+		log.Printf("[ROUTE] openTunnel: session already active, reusing")
 	}
-	p.session = &sess
 	closeOnErr = false
 	return nil
 }
@@ -141,7 +149,8 @@ func (p *vpnPlatform) closeTunnel(v *VPN) {
 	}
 
 	if gw != "" {
-		log.Printf("[ROUTE] closeTunnel: restoring default via %s, removing tunnel %s", gw, v.config.InternalIP)
+		log.Printf("[ROUTE] closeTunnel: restoring default via %s (no iface pinning)", gw)
+		// НЕ указываем if= — пусть Windows сама выберет правильный физический интерфейс
 		hide("route", "add", "0.0.0.0", "mask", "0.0.0.0", gw, "metric", "10")
 	} else {
 		log.Printf("[ROUTE] closeTunnel: no gateway detected, skipping route restore")
@@ -150,12 +159,9 @@ func (p *vpnPlatform) closeTunnel(v *VPN) {
 	hide("route", "delete", "0.0.0.0", v.config.InternalIP)
 	hide("netsh", "interface", "ipv6", "delete", "route", "::/0", "name=HastaVaquet")
 
-	// Закрываем сессию, НО НЕ адаптер — он остаётся в Windows для быстрого старта
-	if p.session != nil {
-		p.session.End()
-		p.session = nil
-	}
-	log.Printf("[ROUTE] closeTunnel done (adapter kept alive)")
+	// НЕ закрываем сессию — адаптер и сессия остаются живыми между Stop/Start
+	// (иначе Wintun-драйвер удаляет адаптер из Windows)
+	log.Printf("[ROUTE] closeTunnel done (adapter + session kept alive)")
 }
 
 // destroyTunnel — полное уничтожение Wintun-адаптера (только при выходе из программы).
@@ -168,7 +174,8 @@ func (p *vpnPlatform) destroyTunnel() {
 		p.adapter.Close()
 		p.adapter = nil
 	}
-	log.Printf("[ROUTE] destroyTunnel: adapter destroyed")
+	p.ipSet = false
+	log.Printf("[ROUTE] destroyTunnel: adapter + session destroyed")
 }
 
 func (p *vpnPlatform) readerLoop(v *VPN) {
@@ -270,14 +277,10 @@ func (p *vpnPlatform) deactivateKillSwitch(v *VPN) {
 		log.Printf("[ROUTE] deactivateKillSwitch: no gateway, skipping route restore")
 		return
 	}
-	// ВАЖНО: gateway — всегда p.realGateway, НЕ v.config.InternalIP (10.0.0.x)!
-	if p.ifIndex == "" {
-		log.Printf("[ROUTE] deactivateKillSwitch: restoring default via %s (no ifIndex)", gw)
-		hide("route", "add", "0.0.0.0", "mask", "0.0.0.0", gw, "metric", "1")
-	} else {
-		log.Printf("[ROUTE] deactivateKillSwitch: restoring default via %s if=%s", gw, p.ifIndex)
-		hide("route", "add", "0.0.0.0", "mask", "0.0.0.0", gw, "metric", "1", "if", p.ifIndex)
-	}
+	// ВАЖНО: gateway — всегда p.realGateway (192.168.x.x), НЕ v.config.InternalIP.
+	// if НЕ указываем — пусть Windows сама выберет физический интерфейс.
+	log.Printf("[ROUTE] deactivateKillSwitch: restoring default via %s (no iface pinning)", gw)
+	hide("route", "add", "0.0.0.0", "mask", "0.0.0.0", gw, "metric", "1")
 }
 
 func platformDumpRoutes() {
