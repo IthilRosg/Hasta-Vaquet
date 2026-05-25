@@ -191,21 +191,26 @@ func (v *VPN) persistentPingLoop() {
 
 // ─── Route Monitor ──────────────────────────────────────────────
 
-// routeMonitorLoop — раз в 3s проверяет шлюз ОС.
-// Если шлюз изменился — обновляет route и пересоздаёт сокет.
+// routeMonitorLoop — проверяет шлюз ОС с адаптивным интервалом.
+// Если шлюз недоступен — опрос каждую секунду (WireGuard-style keepalive).
 func (v *VPN) routeMonitorLoop() {
 	for {
-		select {
-		case <-v.stopCh:
-			return
-		case <-time.After(routeCheckInterval):
-		}
 		if v.stopping.Load() || !v.running.Load() {
 			return
 		}
 		v.platformRefreshServerRoute()
 		if v.conn == nil {
 			v.platformReconnectSocket()
+		}
+		// Адаптивный интервал: 1s если шлюза нет, 3s если всё стабильно
+		interval := time.Second
+		if v.conn != nil {
+			interval = routeCheckInterval // 3s
+		}
+		select {
+		case <-v.stopCh:
+			return
+		case <-time.After(interval):
 		}
 	}
 }
