@@ -123,16 +123,11 @@ func (p *vpnPlatform) openTunnel(v *VPN) error {
 	}
 	v.conn = conn
 
-	// Сессия уже жива (предыдущий Stop не убил её) — не создаём новую
-	if p.session == nil {
-		sess, err := p.adapter.StartSession(0x800000)
-		if err != nil {
-			return fmt.Errorf("session: %w", err)
-		}
-		p.session = &sess
-	} else {
-		log.Printf("[ROUTE] openTunnel: session already active, reusing")
+	sess, err := p.adapter.StartSession(0x800000)
+	if err != nil {
+		return fmt.Errorf("session: %w", err)
 	}
+	p.session = &sess
 	closeOnErr = false
 	return nil
 }
@@ -159,9 +154,13 @@ func (p *vpnPlatform) closeTunnel(v *VPN) {
 	hide("route", "delete", "0.0.0.0", v.config.InternalIP)
 	hide("netsh", "interface", "ipv6", "delete", "route", "::/0", "name=HastaVaquet")
 
-	// НЕ закрываем сессию — адаптер и сессия остаются живыми между Stop/Start
-	// (иначе Wintun-драйвер удаляет адаптер из Windows)
-	log.Printf("[ROUTE] closeTunnel done (adapter + session kept alive)")
+	// Сессию закрываем — иначе следующий StartSession не сможет создать новую.
+	// Адаптер НЕ закрываем — он остаётся в Windows.
+	if p.session != nil {
+		p.session.End()
+		p.session = nil
+	}
+	log.Printf("[ROUTE] closeTunnel done (adapter kept, session reset)")
 }
 
 // destroyTunnel — полное уничтожение Wintun-адаптера (только при выходе из программы).
@@ -357,6 +356,23 @@ func (p *vpnPlatform) gatewayIsValid(v *VPN) bool {
 	return true
 }
 
+// reconnectSession — сбрасывает Wintun-сессию (чистит буфер TUN).
+// Вызывается при обнаружении reconnect, чтобы старые пакеты из буфера
+// не уходили в новый сокет как мусор.
+func (p *vpnPlatform) reconnectSession(v *VPN) {
+	if p.session != nil {
+		p.session.End()
+		p.session = nil
+	}
+	sess, err := p.adapter.StartSession(0x800000)
+	if err != nil {
+		log.Printf("[VPN] reconnectSession: StartSession failed: %v", err)
+		return
+	}
+	p.session = &sess
+	log.Printf("[VPN] reconnectSession: session reset")
+}
+
 func (p *vpnPlatform) reconnectSocket(v *VPN) {
 	if v.conn != nil {
 		old := v.conn
@@ -402,6 +418,7 @@ func platformDeactivateKillSwitch(v *VPN)        { plat.deactivateKillSwitch(v) 
 func platformRefreshServerRoute(v *VPN)          { plat.refreshServerRoute(v) }
 func platformGatewayIsValid(v *VPN) bool         { return plat.gatewayIsValid(v) }
 func platformReconnectSocket(v *VPN)             { plat.reconnectSocket(v) }
+func platformReconnectSession(v *VPN)            { plat.reconnectSession(v) }
 
 func getInterfaceIndex(name string) string {
 	cmd := exec.Command("powershell", "-Command",

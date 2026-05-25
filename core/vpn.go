@@ -136,6 +136,7 @@ func (v *VPN) platformActivateKillSwitch()          { platformActivateKillSwitch
 func (v *VPN) platformDeactivateKillSwitch()        { platformDeactivateKillSwitch(v) }
 func (v *VPN) platformRefreshServerRoute()          { platformRefreshServerRoute(v) }
 func (v *VPN) platformReconnectSocket()             { platformReconnectSocket(v) }
+func (v *VPN) platformReconnectSession()            { platformReconnectSession(v) }
 
 // ─── Stateless Persistent Ping ───────────────────────────────────
 
@@ -192,7 +193,7 @@ func (v *VPN) persistentPingLoop() {
 // ─── Route Monitor ──────────────────────────────────────────────
 
 // routeMonitorLoop — проверяет шлюз ОС с адаптивным интервалом.
-// Если шлюз недоступен — опрос каждую секунду (WireGuard-style keepalive).
+// При обнаружении потери связи сбрасывает Wintun-сессию и сокет.
 func (v *VPN) routeMonitorLoop() {
 	for {
 		if v.stopping.Load() || !v.running.Load() {
@@ -200,9 +201,9 @@ func (v *VPN) routeMonitorLoop() {
 		}
 		v.platformRefreshServerRoute()
 		if v.conn == nil {
+			v.platformReconnectSession() // чистим буфер TUN перед новым сокетом
 			v.platformReconnectSocket()
 		}
-		// Адаптивный интервал: 1s если шлюза нет, 3s если всё стабильно
 		interval := time.Second
 		if v.conn != nil {
 			interval = routeCheckInterval // 3s

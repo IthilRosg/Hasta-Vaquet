@@ -211,6 +211,7 @@ func (p *vpnPlatform) reconnectSocket(v *VPN) {
 func platformRefreshServerRoute(v *VPN)          { plat.refreshServerRoute(v) }
 func platformGatewayIsValid(v *VPN) bool         { return plat.gatewayIsValid(v) }
 func platformReconnectSocket(v *VPN)             { plat.reconnectSocket(v) }
+func platformReconnectSession(v *VPN)            { plat.reconnectSession(v) }
 func platformDestroyTunnel(v *VPN)               { plat.destroyTunnel() }
 
 func (p *vpnPlatform) activateKillSwitch(v *VPN)       {}
@@ -218,6 +219,7 @@ func (p *vpnPlatform) deactivateKillSwitch(v *VPN)     {}
 func (p *vpnPlatform) refreshServerRoute(v *VPN)       {}
 func (p *vpnPlatform) gatewayIsValid(v *VPN) bool      { return true }
 func (p *vpnPlatform) reconnectSocket(v *VPN)          {}
+func (p *vpnPlatform) reconnectSession(v *VPN)          {}
 func (p *vpnPlatform) destroyTunnel()                  {}
 
 func platformDumpRoutes() {}
