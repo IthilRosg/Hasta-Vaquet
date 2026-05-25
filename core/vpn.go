@@ -111,6 +111,15 @@ func (v *VPN) IsRunning() bool {
 	return v.running.Load()
 }
 
+// Reconnect — полный Stop + Start для восстановления после обрыва сети.
+// В отличие от reconnectSocket (меняет только сокет), Reconnect делает
+// всё что делает ручной Disconnect+Connect: сброс сессии, маршрутов, горутин.
+func (v *VPN) Reconnect() error {
+	log.Printf("[VPN] Reconnect: full Stop+Start cycle")
+	v.Stop()
+	return v.Start()
+}
+
 // Destroy — полное уничтожение Wintun-адаптера (вызывать только при выходе).
 func (v *VPN) Destroy() {
 	v.Stop()
@@ -170,10 +179,10 @@ func (v *VPN) persistentPingLoop() {
 		if isDead && !wasDead {
 			wasDead = true
 			v.callback("reconnecting", 0, 0, 0, 0, 0, 0)
-			if v.conn != nil {
-				v.conn.Close()
-				v.conn = nil
-			}
+			// Полный Stop+Start — как ручной Disconnect+Connect
+			log.Printf("[VPN] persistentPingLoop: connection lost, triggering full reconnect")
+			v.Reconnect()
+			return // новая горутина persistentPingLoop уже запущена в Start()
 		} else if !isDead && wasDead {
 			wasDead = false
 			v.callback("connected", 0, 0, 0, 0, 0, 0)
@@ -191,22 +200,14 @@ func (v *VPN) persistentPingLoop() {
 
 // ─── Route Monitor ──────────────────────────────────────────────
 
-// routeMonitorLoop — проверяет шлюз ОС с адаптивным интервалом.
-// При обнаружении потери связи сбрасывает Wintun-сессию и сокет.
+// routeMonitorLoop — проверяет шлюз ОС каждые 3s.
 func (v *VPN) routeMonitorLoop() {
 	for {
 		if v.stopping.Load() || !v.running.Load() {
 			return
 		}
 		v.platformRefreshServerRoute()
-		if v.conn == nil {
-			v.platformReconnectSession() // чистим буфер TUN перед новым сокетом
-			v.platformReconnectSocket()
-		}
-		interval := time.Second
-		if v.conn != nil {
-			interval = routeCheckInterval // 3s
-		}
+		interval := routeCheckInterval
 		select {
 		case <-v.stopCh:
 			return
