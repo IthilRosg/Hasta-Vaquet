@@ -55,8 +55,8 @@ func startWebPanel() {
 	mux.HandleFunc(p+"/api/users/", withAuth(handleUserRoute))
 	mux.HandleFunc(p+"/api/reset", withAuth(handleReset))
 
-	addr := fmt.Sprintf(":%d", serverCfg.AdminPort)
-	logger.Printf("[WEB] Панель запущена: http://localhost%s%s/\n", addr, p)
+	addr := fmt.Sprintf("localhost:%d", serverCfg.AdminPort)
+	logger.Printf("[WEB] Панель запущена: https://%s%s/\n", serverCfg.ServerIP, p)
 	if err := http.ListenAndServe(addr, mux); err != nil {
 		logger.Printf("[WEB] Ошибка запуска: %v\n", err)
 	}
