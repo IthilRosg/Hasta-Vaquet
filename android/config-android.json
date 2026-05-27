@@ -1,7 +1,7 @@
 {
   "profile_name": "Android",
-  "server_ip": "31.42.120.154",
-  "port": 9999,
+  "server_ip": "45.134.39.18",
+  "port": 19999,
   "short_id": 13,
   "secret_key": "AndroidSecret9999",
   "routing_salt": "HastaVaquetGlobal",

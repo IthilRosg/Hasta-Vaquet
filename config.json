@@ -1,10 +1,11 @@
 {
-  "server_ip": "31.42.120.154",
+  "server_ip": "45.134.39.18",
   "port": 19999,
-  "short_id": 1,
-  "secret_key": "AliceSecret2026",
+  "short_id": 4,
+  "secret_key": "66619a1f27dfe04dd603404b324f308c7c8488c312e495f5",
   "routing_salt": "HastaVaquetGlobal",
   "internal_ip": "10.0.0.10",
   "gateway_ip": "192.168.100.1",
-  "dns": "1.1.1.1"
+  "dns": "1.1.1.1",
+  "fec": 1
 }

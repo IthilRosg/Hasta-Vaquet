@@ -29,35 +29,53 @@ type StatusListener interface {
 
 // VPN — клиентский VPN-движок.
 type VPN struct {
-	config         Config
-	key            [32]byte
-	conn           *net.UDPConn
-	running        atomic.Bool
-	stopCh         chan struct{}
-	txBytes        atomic.Int64
-	rxBytes        atomic.Int64
-	sessionTotalTx atomic.Uint64
-	sessionTotalRx atomic.Uint64
-	listener       StatusListener
-	killSwitch     KillSwitch
-	reconnecting   atomic.Bool
-	mu             sync.Mutex
-	stopping       atomic.Bool
-	lastAliveMs    atomic.Int64  // unix ms последнего отправленного пакета
-	lastPacketRx   atomic.Int64  // unix ms последнего полученного пакета
-	echoRtt        atomic.Int64  // latest RTT in ms
-	echoRing       [echoWindowSize]echoSlot
-	echoPos        int
-	echoMu         sync.Mutex
+	config             Config
+	key                [32]byte
+	cp                 *CipherPack
+	conn               *net.UDPConn
+	running            atomic.Bool
+	stopCh             chan struct{}
+	txBytes            atomic.Int64
+	rxBytes            atomic.Int64
+	sessionTotalTx     atomic.Uint64
+	sessionTotalRx     atomic.Uint64
+	listener           StatusListener
+	killSwitch         KillSwitch
+	killSwitchEnabled  atomic.Bool
+	reconnecting       atomic.Bool
+	mu                 sync.Mutex
+	stopping           atomic.Bool
+	lastAliveMs        atomic.Int64  // unix ms последнего отправленного пакета
+	lastPacketRx       atomic.Int64  // unix ms последнего полученного пакета
+	echoRtt            atomic.Int64  // latest RTT in ms
+	echoRing           [echoWindowSize]echoSlot
+	echoPos            int
+	echoMu             sync.Mutex
 }
 
 func New(cfg Config, listener StatusListener) *VPN {
-	return &VPN{
+	key := DeriveKey(cfg.SecretKey)
+	cp, err := NewCipherPack(key[:])
+	if err != nil {
+		// fallback: без кеша cipher (не должно случиться)
+		v := &VPN{
+			config:     cfg,
+			key:        key,
+			listener:   listener,
+			killSwitch: newKillSwitch(),
+		}
+		v.killSwitchEnabled.Store(true)
+		return v
+	}
+	v := &VPN{
 		config:     cfg,
-		key:        DeriveKey(cfg.SecretKey),
+		key:        key,
+		cp:         cp,
 		listener:   listener,
 		killSwitch: newKillSwitch(),
 	}
+	v.killSwitchEnabled.Store(true)
+	return v
 }
 
 func (v *VPN) Start() error {
@@ -90,6 +108,10 @@ func (v *VPN) Start() error {
 	return nil
 }
 
+func (v *VPN) SetKillSwitchEnabled(enabled bool) {
+	v.killSwitchEnabled.Store(enabled)
+}
+
 func (v *VPN) Stop() {
 	v.stopping.Store(true)
 	v.mu.Lock()
@@ -101,7 +123,9 @@ func (v *VPN) Stop() {
 	v.running.Store(false)
 	close(v.stopCh)
 	v.platformCloseTunnel()
-	v.killSwitch.Deactivate()
+	if v.killSwitchEnabled.Load() {
+		v.killSwitch.Deactivate()
+	}
 	if v.conn != nil {
 		v.conn.Close()
 		v.conn = nil
@@ -167,11 +191,13 @@ func (v *VPN) persistentPingLoop() {
 		}
 		conn := v.conn
 		if conn != nil {
-			pkt, err := Encrypt([]byte{}, v.key[:], v.config.ShortID, v.config.RoutingSalt)
+			pkt, err := v.cp.Encrypt([]byte{}, v.config.ShortID, v.config.RoutingSalt)
 			if err == nil {
-				n, _ := conn.Write(pkt)
-				if n > 0 {
-					log.Printf("[VPN] persistentPingLoop: sent handshake ping (%d bytes)", n)
+				fec := v.config.FEC
+				if fec < 1 { fec = 1 }
+				if fec > 5 { fec = 5 }
+				for i := 0; i < fec; i++ {
+					conn.Write(pkt)
 				}
 				v.lastAliveMs.Store(time.Now().UnixMilli())
 				v.echoPush()
@@ -184,8 +210,10 @@ func (v *VPN) persistentPingLoop() {
 			wasDead = true
 			v.callback("reconnecting", 0, 0, 0, 0, 0, 0)
 			log.Printf("[VPN] persistentPingLoop: connection lost, activating kill switch + reconnect")
-			if err := v.killSwitch.Activate(v.config.ServerIP, ""); err != nil {
-				log.Printf("[VPN] killSwitch.Activate: %v", err)
+			if v.killSwitchEnabled.Load() {
+				if err := v.killSwitch.Activate(v.config.ServerIP, ""); err != nil {
+					log.Printf("[VPN] killSwitch.Activate: %v", err)
+				}
 			}
 			v.Reconnect()
 			return

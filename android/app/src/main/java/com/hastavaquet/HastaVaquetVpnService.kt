@@ -93,8 +93,8 @@ class HastaVaquetVpnService : VpnService(), Protector {
 
         try {
             val root = org.json.JSONObject(configJson)
-            val srvIp = root.optString("server_ip", "31.42.120.154")
-            val srvPort = root.optInt("port", 9999)
+            val srvIp = root.optString("server_ip", "45.134.39.18")
+            val srvPort = root.optInt("port", 19999)
 
             val builder = Builder()
             builder.setSession("Hasta-Vaquet")

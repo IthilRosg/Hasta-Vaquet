@@ -17,11 +17,12 @@ import (
 
 // platform-специфичные поля VPN
 type vpnPlatform struct {
-	session     *wintun.Session
-	adapter     *wintun.Adapter
-	ifIndex     string // сохранённый индекс интерфейса для восстановления маршрута после закрытия адаптера
-	realGateway string // реальный шлюз, определённый при старте
-	ipSet       bool   // true после первого назначения IP — пропускаем netsh
+	session      *wintun.Session
+	adapter      *wintun.Adapter
+	ifIndex      string
+	realGateway  string
+	ipSet        bool
+	logPerfCount int
 }
 
 func getDefaultGateway() string {
@@ -104,15 +105,25 @@ func (p *vpnPlatform) openTunnel(v *VPN) error {
 		run("netsh", "interface", "ipv4", "set", "subinterface", "name=HastaVaquet", "mtu=1300")
 		run("netsh", "interface", "ip", "set", "dns", "name=HastaVaquet", "static", v.config.DNS)
 		run("netsh", "interface", "ipv6", "add", "route", "::/0", "name=HastaVaquet", v.config.InternalIP, "metric=1")
+		// Set low interface metric so VPN default route beats Ethernet
+		exec.Command("powershell", "-NoProfile", "-Command",
+			fmt.Sprintf("Set-NetIPInterface -InterfaceIndex %s -InterfaceMetric 1 -ErrorAction SilentlyContinue", index)).Run()
 		p.ipSet = true
 	}
+	// Set VPN interface metric to 1, physical interfaces to 1000 — VPN becomes primary
+	exec.Command("powershell", "-NoProfile", "-Command",
+		fmt.Sprintf("Set-NetIPInterface -InterfaceIndex %s -InterfaceMetric 1 -ErrorAction SilentlyContinue", index)).Run()
+	exec.Command("powershell", "-NoProfile", "-Command",
+		"Get-NetIPInterface -InterfaceAlias 'Ethernet' -ErrorAction SilentlyContinue | Set-NetIPInterface -InterfaceMetric 1000").Run()
+	exec.Command("powershell", "-NoProfile", "-Command",
+		"Get-NetIPInterface -InterfaceAlias 'Wi-Fi' -ErrorAction SilentlyContinue | Set-NetIPInterface -InterfaceMetric 1000").Run()
+
 	run("route", "delete", v.config.ServerIP)
 	run("route", "add", v.config.ServerIP, "mask", "255.255.255.255", p.realGateway)
 	if index != "" {
 		run("route", "delete", "0.0.0.0", "mask", "0.0.0.0", "0.0.0.0", "if", index)
 	}
 	run("route", "delete", "0.0.0.0", v.config.InternalIP)
-	// WireGuard-style: gateway 0.0.0.0 (без IP шлюза) — пакеты НЕ заворачиваются обратно в туннель
 	if index != "" {
 		run("route", "add", "0.0.0.0", "mask", "0.0.0.0", "0.0.0.0", "metric", "1", "if", index)
 	}
@@ -126,6 +137,8 @@ func (p *vpnPlatform) openTunnel(v *VPN) error {
 	if err != nil {
 		return fmt.Errorf("dial: %w", err)
 	}
+	conn.SetWriteBuffer(512 * 1024) // 512KB send buffer — prevents Write blocking on RTT
+	conn.SetReadBuffer(512 * 1024)  // 512KB receive buffer
 	v.conn = conn
 
 	sess, err := p.adapter.StartSession(0x800000)
@@ -159,6 +172,11 @@ func (p *vpnPlatform) closeTunnel(v *VPN) {
 		hide("route", "delete", "0.0.0.0", "mask", "0.0.0.0", "0.0.0.0", "if", p.ifIndex)
 	}
 	hide("route", "delete", "0.0.0.0", v.config.InternalIP) // старая запись со шлюзом 10.0.0.x
+	// Restore physical interface metric to auto
+	exec.Command("powershell", "-NoProfile", "-Command",
+		"Get-NetIPInterface -InterfaceAlias 'Ethernet' -ErrorAction SilentlyContinue | Set-NetIPInterface -InterfaceMetric 'auto'").Run()
+	exec.Command("powershell", "-NoProfile", "-Command",
+		"Get-NetIPInterface -InterfaceAlias 'Wi-Fi' -ErrorAction SilentlyContinue | Set-NetIPInterface -InterfaceMetric 'auto'").Run()
 	hide("netsh", "interface", "ipv6", "delete", "route", "::/0", "name=HastaVaquet")
 
 	// Сессию закрываем — иначе следующий StartSession не сможет создать новую.
@@ -217,7 +235,7 @@ func (p *vpnPlatform) readerLoop(v *VPN) {
 		if n < 4+2+12 {
 			continue
 		}
-		decrypted, err := Decrypt(buf[:n], v.key[:])
+		decrypted, err := v.cp.Decrypt(buf[:n])
 		if err != nil {
 			continue
 		}
@@ -269,14 +287,32 @@ func (p *vpnPlatform) writerLoop(v *VPN) {
 			time.Sleep(100 * time.Millisecond)
 			continue
 		}
+		t0 := time.Now()
 		packet, err := sess.ReceivePacket()
+		t1 := time.Now()
 		if err == nil {
 			if len(packet) >= 20 && (packet[0]>>4) == 4 {
-				encrypted, err := Encrypt(packet, v.key[:], v.config.ShortID, v.config.RoutingSalt)
+				encrypted, err := v.cp.Encrypt(packet, v.config.ShortID, v.config.RoutingSalt)
+				t2 := time.Now()
 				if err == nil && v.conn != nil {
-					v.conn.Write(encrypted)
+					fec := v.config.FEC
+					if fec < 1 { fec = 1 }
+					if fec > 5 { fec = 5 }
+					for i := 0; i < fec; i++ {
+						v.conn.Write(encrypted)
+					}
+					t3 := time.Now()
+					rxUs := t1.Sub(t0).Microseconds()
+					encUs := t2.Sub(t1).Microseconds()
+					writeUs := t3.Sub(t2).Microseconds()
+					total := rxUs + encUs + writeUs
 					v.txBytes.Add(int64(len(encrypted)))
 					v.sessionTotalTx.Add(uint64(len(encrypted)))
+					// Force log first 100 packets
+					p.logPerfCount++
+					if p.logPerfCount <= 100 {
+						log.Printf("[PERF] recv=%dµs enc=%dµs write=%dµs total=%dµs (%dB)", rxUs, encUs, writeUs, total, len(packet))
+					}
 				}
 			}
 			sess.ReleaseReceivePacket(packet)
@@ -369,6 +405,8 @@ func (p *vpnPlatform) reconnectSocket(v *VPN) {
 		log.Printf("[VPN] reconnectSocket: dial failed: %v, will retry next cycle", err)
 		return
 	}
+	newConn.SetWriteBuffer(512 * 1024)
+	newConn.SetReadBuffer(512 * 1024)
 	v.conn = newConn
 	log.Printf("[VPN] reconnectSocket: socket recreated (%s:%d)", v.config.ServerIP, v.config.Port)
 

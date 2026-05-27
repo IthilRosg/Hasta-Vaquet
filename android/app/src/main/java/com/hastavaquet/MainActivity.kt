@@ -116,7 +116,7 @@ class MainActivity : ComponentActivity() {
             ProfileInfo(
                 name = name,
                 serverIp = obj.optString("server_ip", "—"),
-                port = obj.optInt("port", 9999),
+                port = obj.optInt("port", 19999),
                 configJson = json
             )
         } catch (_: Exception) { null }

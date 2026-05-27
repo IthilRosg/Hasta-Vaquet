@@ -8,7 +8,6 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
-	"io"
 )
 
 func Fnv1a16(data []byte) uint16 {
@@ -29,34 +28,13 @@ func Fnv1a64(data []byte, seed uint64) uint64 {
 	return hash
 }
 
-func Encrypt(plaintext []byte, secretKey []byte, shortID uint16, routingSalt string) ([]byte, error) {
-	nonce := make([]byte, 12)
-	io.ReadFull(rand.Reader, nonce)
+type CipherPack struct {
+	key  [32]byte
+	gcm  cipher.AEAD
+	rbuf [64]byte
+}
 
-	routeMask := Fnv1a16(append([]byte(routingSalt), nonce...))
-	dynamicID := shortID ^ routeMask
-
-	var padByte [1]byte
-	if _, err := io.ReadFull(rand.Reader, padByte[:]); err != nil {
-		return nil, fmt.Errorf("encrypt: pad rand: %w", err)
-	}
-	padLen := int(padByte[0]) % 41
-	inner := make([]byte, 2+len(plaintext)+padLen)
-	binary.BigEndian.PutUint16(inner[:2], uint16(len(plaintext)))
-	copy(inner[2:], plaintext)
-	if padLen > 0 {
-		io.ReadFull(rand.Reader, inner[2+len(plaintext):])
-	}
-
-	authData := make([]byte, 14)
-	binary.BigEndian.PutUint16(authData[:2], dynamicID)
-	copy(authData[2:], nonce)
-
-	mac := hmac.New(sha256.New, secretKey)
-	mac.Write(authData)
-	marker := mac.Sum(nil)[:4]
-	marker[0] |= 0x40
-
+func NewCipherPack(secretKey []byte) (*CipherPack, error) {
 	block, err := aes.NewCipher(secretKey)
 	if err != nil {
 		return nil, err
@@ -65,7 +43,40 @@ func Encrypt(plaintext []byte, secretKey []byte, shortID uint16, routingSalt str
 	if err != nil {
 		return nil, err
 	}
-	ciphertext := gcm.Seal(nil, nonce, inner, nil)
+	var k [32]byte
+	copy(k[:], secretKey)
+	return &CipherPack{key: k, gcm: gcm}, nil
+}
+
+func (cp *CipherPack) Encrypt(plaintext []byte, shortID uint16, routingSalt string) ([]byte, error) {
+	// Single rand.Read for nonce + padByte + padding data (up to 40 bytes)
+	if _, err := rand.Read(cp.rbuf[:]); err != nil {
+		return nil, fmt.Errorf("encrypt: rand: %w", err)
+	}
+
+	nonce := cp.rbuf[:12]
+	padLen := int(cp.rbuf[12]) % 41
+
+	inner := make([]byte, 2+len(plaintext)+padLen)
+	binary.BigEndian.PutUint16(inner[:2], uint16(len(plaintext)))
+	copy(inner[2:], plaintext)
+	if padLen > 0 {
+		copy(inner[2+len(plaintext):], cp.rbuf[13:13+padLen])
+	}
+
+	routeMask := Fnv1a16(append([]byte(routingSalt), nonce...))
+	dynamicID := shortID ^ routeMask
+
+	authData := make([]byte, 14)
+	binary.BigEndian.PutUint16(authData[:2], dynamicID)
+	copy(authData[2:], nonce)
+
+	mac := hmac.New(sha256.New, cp.key[:])
+	mac.Write(authData)
+	marker := mac.Sum(nil)[:4]
+	marker[0] |= 0x40
+
+	ciphertext := cp.gcm.Seal(nil, nonce, inner, nil)
 
 	buf := make([]byte, 4+2+12+len(ciphertext))
 	copy(buf[:4], marker)
@@ -75,7 +86,7 @@ func Encrypt(plaintext []byte, secretKey []byte, shortID uint16, routingSalt str
 	return buf, nil
 }
 
-func Decrypt(packet []byte, secretKey []byte) ([]byte, error) {
+func (cp *CipherPack) Decrypt(packet []byte) ([]byte, error) {
 	if len(packet) < 4+2+12 {
 		return nil, fmt.Errorf("packet too short")
 	}
@@ -90,7 +101,7 @@ func Decrypt(packet []byte, secretKey []byte) ([]byte, error) {
 	copy(authData[:2], packet[4:6])
 	copy(authData[2:], nonce)
 
-	mac := hmac.New(sha256.New, secretKey)
+	mac := hmac.New(sha256.New, cp.key[:])
 	mac.Write(authData)
 	expected := mac.Sum(nil)[:4]
 	expected[0] &^= 0x40
@@ -98,15 +109,7 @@ func Decrypt(packet []byte, secretKey []byte) ([]byte, error) {
 		return nil, fmt.Errorf("HMAC mismatch")
 	}
 
-	block, err := aes.NewCipher(secretKey)
-	if err != nil {
-		return nil, err
-	}
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return nil, err
-	}
-	plaintext, err := gcm.Open(nil, nonce, ciphertext, nil)
+	plaintext, err := cp.gcm.Open(nil, nonce, ciphertext, nil)
 	if err != nil {
 		return nil, err
 	}

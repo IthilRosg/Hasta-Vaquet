@@ -20,10 +20,11 @@ import (
 var wintunDLL []byte
 
 type App struct {
-	ctx      context.Context
-	vpn      *core.VPN
-	profiles []string
-	logger   *log.Logger
+	ctx                context.Context
+	vpn                *core.VPN
+	profiles           []string
+	logger             *log.Logger
+	killSwitchEnabled  bool
 }
 
 // vpnListener реализует core.StatusListener для отправки событий в UI.
@@ -70,7 +71,9 @@ func (l *vpnListener) OnStatus(status string, txSpeed, rxSpeed int64, totalTx, t
 }
 
 func NewApp() *App {
-	return &App{}
+	return &App{
+		killSwitchEnabled: true,
+	}
 }
 
 func (a *App) shutdown(ctx context.Context) {
@@ -262,6 +265,17 @@ func (a *App) ListProfileItems() []ProfileItem {
 	return items
 }
 
+func (a *App) GetKillSwitchEnabled() bool {
+	return a.killSwitchEnabled
+}
+
+func (a *App) SetKillSwitchEnabled(enable bool) {
+	a.killSwitchEnabled = enable
+	if a.logger != nil {
+		a.logger.Printf("[KILLSWITCH] %v", enable)
+	}
+}
+
 func (a *App) DoConnect(serverIP, secretKey, routingSalt, internalIP, gatewayIP, dns string, port int, shortID uint16) string {
 	if a.vpn != nil && a.vpn.IsRunning() {
 		if a.logger != nil {
@@ -283,6 +297,7 @@ func (a *App) DoConnect(serverIP, secretKey, routingSalt, internalIP, gatewayIP,
 		DNS:         dns,
 	}
 	vpn := core.New(cfg, &vpnListener{ctx: a.ctx, logger: a.logger})
+	vpn.SetKillSwitchEnabled(a.killSwitchEnabled)
 	if err := vpn.Start(); err != nil {
 		if a.logger != nil {
 			a.logger.Printf("DoConnect: Start() error: %v", err)

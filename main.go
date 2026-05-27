@@ -78,8 +78,8 @@ func loadConfig() Config {
 		}
 	}
 
-	if cfg.ServerIP == "" { cfg.ServerIP = "31.42.120.154" }
-	if cfg.Port == 0 { cfg.Port = 9999 }
+	if cfg.ServerIP == "" { cfg.ServerIP = "45.134.39.18" }
+	if cfg.Port == 0 { cfg.Port = 19999 }
 	if cfg.ShortID == 0 { log.Fatal("[ОШИБКА] ShortID не задан") }
 	if cfg.SecretKey == "" { log.Fatal("[ОШИБКА] SecretKey не задан") }
 	if cfg.RoutingSalt == "" { cfg.RoutingSalt = "HastaVaquetGlobal" }
@@ -92,6 +92,10 @@ func loadConfig() Config {
 func main() {
 	cfg := loadConfig()
 	derivedKey := vpncore.DeriveKey(cfg.SecretKey)
+	cp, errC := vpncore.NewCipherPack(derivedKey[:])
+	if errC != nil {
+		log.Fatal(errC)
+	}
 
 	lf, err := os.OpenFile("client.log", os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0666)
 	if err != nil { log.Fatal(err) }
@@ -171,7 +175,7 @@ stopCh := make(chan struct{})
 			case <-stopCh:
 				return
 			case <-time.After(time.Duration(5+mathrand.Intn(11)) * time.Second):
-				keepAlive, err := vpncore.Encrypt([]byte{}, derivedKey[:], cfg.ShortID, cfg.RoutingSalt)
+				keepAlive, err := cp.Encrypt([]byte{}, cfg.ShortID, cfg.RoutingSalt)
 				if err != nil {
 					log.Printf("[ОШИБКА KEEP-ALIVE] %v", err)
 					continue
@@ -205,7 +209,7 @@ stopCh := make(chan struct{})
 				continue
 			}
 			if n < 4+2+12 { continue }
-			decrypted, err := vpncore.Decrypt(buf[:n], derivedKey[:])
+			decrypted, err := cp.Decrypt(buf[:n])
 			if err != nil {
 				log.Printf("[ОШИБКА ДЕШИФРАЦИИ] %v", err)
 				continue
@@ -230,7 +234,7 @@ stopCh := make(chan struct{})
 		packet, err := session.ReceivePacket()
 		if err == nil {
 			if len(packet) >= 20 && (packet[0]>>4) == 4 {
-				encrypted, err := vpncore.Encrypt(packet, derivedKey[:], cfg.ShortID, cfg.RoutingSalt)
+				encrypted, err := cp.Encrypt(packet, cfg.ShortID, cfg.RoutingSalt)
 				if err == nil {
 					conn.Write(encrypted)
 				} else {

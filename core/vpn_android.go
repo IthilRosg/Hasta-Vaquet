@@ -90,7 +90,7 @@ func (p *vpnPlatform) readerLoop(v *VPN) {
 			continue
 		}
 
-		decrypted, err := Decrypt(buf[:n], v.key[:])
+		decrypted, err := v.cp.Decrypt(buf[:n])
 		if err != nil {
 			continue
 		}
@@ -159,9 +159,14 @@ func (p *vpnPlatform) writerLoop(v *VPN) {
 			continue
 		}
 
-		encrypted, err := Encrypt(buf[:n], v.key[:], v.config.ShortID, v.config.RoutingSalt)
+		encrypted, err := v.cp.Encrypt(buf[:n], v.config.ShortID, v.config.RoutingSalt)
 		if err == nil {
-			v.conn.Write(encrypted)
+			fec := v.config.FEC
+			if fec < 1 { fec = 1 }
+			if fec > 5 { fec = 5 }
+			for i := 0; i < fec; i++ {
+				v.conn.Write(encrypted)
+			}
 			v.txBytes.Add(int64(len(encrypted)))
 			v.sessionTotalTx.Add(uint64(len(encrypted)))
 			if pktCount%50 == 0 {

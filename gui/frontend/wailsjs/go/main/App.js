@@ -14,6 +14,10 @@ export function DoDisconnect() {
   return window['go']['main']['App']['DoDisconnect']();
 }
 
+export function GetKillSwitchEnabled() {
+  return window['go']['main']['App']['GetKillSwitchEnabled']();
+}
+
 export function ImportConfig(arg1) {
   return window['go']['main']['App']['ImportConfig'](arg1);
 }
@@ -48,4 +52,8 @@ export function LoadProfile(arg1) {
 
 export function SaveLastProfile(arg1) {
   return window['go']['main']['App']['SaveLastProfile'](arg1);
+}
+
+export function SetKillSwitchEnabled(arg1) {
+  return window['go']['main']['App']['SetKillSwitchEnabled'](arg1);
 }

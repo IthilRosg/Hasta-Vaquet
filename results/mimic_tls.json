@@ -1,0 +1,21 @@
+{
+  "name": "mimic_tls",
+  "start_at": "2026-05-28T00:21:24+03:00",
+  "duration_ms": 0,
+  "loss_pct": 0,
+  "rtt_ms": 0,
+  "down_mbps": 0,
+  "up_mbps": 0,
+  "score": -1,
+  "error": "tunnel unreachable",
+  "genome": {
+    "Name": "mimic_tls",
+    "FEC": 1,
+    "PadTargetSize": 0,
+    "MinDelayMs": 0,
+    "MaxDelayMs": 0,
+    "IdleBps": 0,
+    "Mimic": "tls",
+    "PortOffset": 0
+  }
+}

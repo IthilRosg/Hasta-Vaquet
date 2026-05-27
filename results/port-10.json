@@ -1,0 +1,17 @@
+{
+  "name": "port-10",
+  "genome": {
+    "Name": "port-10",
+    "FEC": 1,
+    "PadTargetSize": 0,
+    "MinDelayMs": 0,
+    "MaxDelayMs": 0,
+    "IdleBps": 0,
+    "Mimic": "",
+    "PortOffset": -10
+  },
+  "start_at": "2026-05-28T00:42:50+03:00",
+  "loss_pct": 0,
+  "best_size": 200,
+  "score": 1000
+}

@@ -1,0 +1,17 @@
+{
+  "name": "x1",
+  "genome": {
+    "Name": "x1",
+    "FEC": 2,
+    "PadTargetSize": 0,
+    "MinDelayMs": 0,
+    "MaxDelayMs": 0,
+    "IdleBps": 0,
+    "Mimic": "",
+    "PortOffset": 0
+  },
+  "start_at": "2026-05-28T00:45:36+03:00",
+  "loss_pct": 0,
+  "best_size": 200,
+  "score": 1000
+}

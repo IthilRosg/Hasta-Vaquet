@@ -15,6 +15,7 @@ type Config struct {
 	InternalIP  string `json:"internal_ip"`
 	GatewayIP   string `json:"gateway_ip"`
 	DNS         string `json:"dns"`
+	FEC         int    `json:"fec"` // packet duplication: 1=off, 2=2x, 3=3x...
 }
 
 func LoadConfig(path string) (Config, error) {
@@ -26,7 +27,7 @@ func LoadConfig(path string) (Config, error) {
 		return cfg, err
 	}
 	if cfg.Port == 0 {
-		cfg.Port = 9999
+		cfg.Port = 19999
 	}
 	if cfg.RoutingSalt == "" {
 		cfg.RoutingSalt = "HastaVaquetGlobal"
@@ -36,6 +37,9 @@ func LoadConfig(path string) (Config, error) {
 	}
 	if cfg.DNS == "" {
 		cfg.DNS = "1.1.1.1"
+	}
+	if cfg.FEC < 1 || cfg.FEC > 5 {
+		cfg.FEC = 1 // default: off
 	}
 	return cfg, nil
 }

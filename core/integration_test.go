@@ -9,7 +9,7 @@ import (
 )
 
 type fakeServer struct {
-	key       [32]byte
+	cp        *CipherPack
 	rxCount   atomic.Int64
 	lastNonce []byte
 	conn      *net.UDPConn
@@ -36,7 +36,7 @@ func (s *fakeServer) start(addr string) error {
 			if err != nil || n < 4+2+12 {
 				continue
 			}
-			decrypted, err := Decrypt(buf[:n], s.key[:])
+			decrypted, err := s.cp.Decrypt(buf[:n])
 			if err != nil {
 				continue
 			}
@@ -44,7 +44,7 @@ func (s *fakeServer) start(addr string) error {
 			s.lastNonce = make([]byte, 12)
 			copy(s.lastNonce, buf[6:18])
 			if len(decrypted) == 0 {
-				enc, _ := Encrypt([]byte{0x01}, s.key[:], 1, "test-salt")
+				enc, _ := s.cp.Encrypt([]byte{0x01}, 1, "test-salt")
 				conn.WriteToUDP(enc, clientAddr)
 			}
 		}
@@ -70,7 +70,8 @@ func dialServer(srv *fakeServer) (*net.UDPConn, error) {
 func TestIntegrationLocalUDP(t *testing.T) {
 	sharedKey := DeriveKey("integration-test-shared")
 
-	srv := &fakeServer{key: sharedKey}
+	cp, _ := NewCipherPack(sharedKey[:])
+	srv := &fakeServer{cp: cp}
 	if err := srv.start("127.0.0.1:0"); err != nil {
 		t.Fatalf("server start: %v", err)
 	}
@@ -83,7 +84,7 @@ func TestIntegrationLocalUDP(t *testing.T) {
 	defer conn.Close()
 
 	payload := []byte("Hello VPN server from integration test!")
-	encrypted, err := Encrypt(payload, sharedKey[:], 1, "test-salt")
+	encrypted, err := cp.Encrypt(payload, 1, "test-salt")
 	if err != nil {
 		t.Fatalf("encrypt: %v", err)
 	}
@@ -95,7 +96,7 @@ func TestIntegrationLocalUDP(t *testing.T) {
 		t.Fatalf("expected 1 packet on server, got %d", n)
 	}
 
-	emptyEnc, _ := Encrypt([]byte{}, sharedKey[:], 1, "test-salt")
+	emptyEnc, _ := cp.Encrypt([]byte{}, 1, "test-salt")
 	conn.Write(emptyEnc)
 
 	buf := make([]byte, 65535)
@@ -104,7 +105,7 @@ func TestIntegrationLocalUDP(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read echo response: %v", err)
 	}
-	echoDecrypted, err := Decrypt(buf[:n], sharedKey[:])
+	echoDecrypted, err := cp.Decrypt(buf[:n])
 	if err != nil {
 		t.Fatalf("decrypt echo: %v", err)
 	}
@@ -113,15 +114,18 @@ func TestIntegrationLocalUDP(t *testing.T) {
 	}
 
 	wrongKey := DeriveKey("wrong-key")
-	wrongKeyEnc, _ := Encrypt(payload, wrongKey[:], 2, "test-salt")
-	_, err = Decrypt(wrongKeyEnc, sharedKey[:])
+	wrongCp, _ := NewCipherPack(wrongKey[:])
+	wrongKeyEnc, _ := wrongCp.Encrypt(payload, 2, "test-salt")
+	_, err = cp.Decrypt(wrongKeyEnc)
 	if err == nil {
 		t.Fatal("expected HMAC mismatch with wrong key")
 	}
 }
 
 func TestIntegrationMultipleKeepAlives(t *testing.T) {
-	srv := &fakeServer{key: DeriveKey("ka-key")}
+	key := DeriveKey("ka-key")
+	cp, _ := NewCipherPack(key[:])
+	srv := &fakeServer{cp: cp}
 	if err := srv.start("127.0.0.1:0"); err != nil {
 		t.Fatalf("server start: %v", err)
 	}
@@ -133,9 +137,8 @@ func TestIntegrationMultipleKeepAlives(t *testing.T) {
 	}
 	defer conn.Close()
 
-	key := DeriveKey("ka-key")
 	for i := 0; i < 15; i++ {
-		enc, _ := Encrypt([]byte{}, key[:], 1, "test-salt")
+		enc, _ := cp.Encrypt([]byte{}, 1, "test-salt")
 		conn.Write(enc)
 		time.Sleep(10 * time.Millisecond)
 	}
@@ -146,7 +149,9 @@ func TestIntegrationMultipleKeepAlives(t *testing.T) {
 }
 
 func TestIntegrationEchoRTT(t *testing.T) {
-	srv := &fakeServer{key: DeriveKey("echo-rtt-key")}
+	key := DeriveKey("echo-rtt-key")
+	cp, _ := NewCipherPack(key[:])
+	srv := &fakeServer{cp: cp}
 	if err := srv.start("127.0.0.1:0"); err != nil {
 		t.Fatalf("start: %v", err)
 	}
@@ -158,9 +163,8 @@ func TestIntegrationEchoRTT(t *testing.T) {
 	}
 	defer conn.Close()
 
-	key := DeriveKey("echo-rtt-key")
 	start := time.Now()
-	enc, _ := Encrypt([]byte{}, key[:], 1, "test-salt")
+	enc, _ := cp.Encrypt([]byte{}, 1, "test-salt")
 	conn.Write(enc)
 
 	buf := make([]byte, 65535)
@@ -170,7 +174,7 @@ func TestIntegrationEchoRTT(t *testing.T) {
 		t.Fatalf("read echo: %v", err)
 	}
 	rtt := time.Since(start)
-	decrypted, _ := Decrypt(buf[:n], key[:])
+	decrypted, _ := cp.Decrypt(buf[:n])
 	if len(decrypted) != 1 || decrypted[0] != 0x01 {
 		t.Fatalf("bad echo: %x", decrypted)
 	}
@@ -181,7 +185,9 @@ func TestIntegrationEchoRTT(t *testing.T) {
 }
 
 func TestIntegrationLargePacket(t *testing.T) {
-	srv := &fakeServer{key: DeriveKey("large-pkt")}
+	key := DeriveKey("large-pkt")
+	cp, _ := NewCipherPack(key[:])
+	srv := &fakeServer{cp: cp}
 	if err := srv.start("127.0.0.1:0"); err != nil {
 		t.Fatalf("start: %v", err)
 	}
@@ -193,10 +199,9 @@ func TestIntegrationLargePacket(t *testing.T) {
 	}
 	defer conn.Close()
 
-	key := DeriveKey("large-pkt")
 	payload := bytes.Repeat([]byte("A"), 1100)
 
-	enc, _ := Encrypt(payload, key[:], 1, "test-salt")
+	enc, _ := cp.Encrypt(payload, 1, "test-salt")
 	conn.Write(enc)
 
 	time.Sleep(100 * time.Millisecond)
@@ -206,7 +211,9 @@ func TestIntegrationLargePacket(t *testing.T) {
 }
 
 func TestIntegrationConcurrentPackets(t *testing.T) {
-	srv := &fakeServer{key: DeriveKey("concurrent")}
+	key := DeriveKey("concurrent")
+	cp, _ := NewCipherPack(key[:])
+	srv := &fakeServer{cp: cp}
 	if err := srv.start("127.0.0.1:0"); err != nil {
 		t.Fatalf("start: %v", err)
 	}
@@ -218,11 +225,10 @@ func TestIntegrationConcurrentPackets(t *testing.T) {
 	}
 	defer conn.Close()
 
-	key := DeriveKey("concurrent")
 	const count = 50
 	for i := 0; i < count; i++ {
 		payload := []byte{byte(i)}
-		enc, _ := Encrypt(payload, key[:], 1, "test-salt")
+		enc, _ := cp.Encrypt(payload, 1, "test-salt")
 		conn.Write(enc)
 	}
 
@@ -282,7 +288,7 @@ func TestPassiveReconnectDetection(t *testing.T) {
 
 func TestKillSwitchHooksNoPanic(t *testing.T) {
 	vpn := New(Config{
-		ServerIP: "31.42.120.154", Port: 9999, ShortID: 1,
+		ServerIP: "45.134.39.18", Port: 19999, ShortID: 1,
 		SecretKey: "ks-route", RoutingSalt: "salt",
 		InternalIP: "10.0.0.1", GatewayIP: "192.168.1.1",
 	}, &testListener{})

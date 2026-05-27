@@ -10,7 +10,7 @@
 |-----------|--------|------------|
 | Windows GUI клиент (Wails + core/) | ✅ Работает | ~90 Mbps, Wails + Svelte |
 | Standalone CLI (`main.go`) | ⚠️ Работает, но дублирует код | НЕ использует core/ — три копии криптографии |
-| Сервер (UDP + TUN + multi-user) | ✅ Работает | Linux VPS 31.42.120.154 |
+| Сервер (UDP + TUN + multi-user) | ✅ Работает | Linux VPS 45.134.39.18 |
 | Web-панель админа | ✅ Работает | https://hasvaq.airydeck.su, CRUD, QR, статистика |
 | Крипто-протокол Phase 6 | ✅ Работает | AES-GCM, HMAC, DynamicID, Bloom |
 | Android клиент (базовый) | ✅ Коннект есть | Статистика в UI не интегрирована, нет kill switch, нет bypass |

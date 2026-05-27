@@ -8,6 +8,8 @@ export function DoConnect(arg1:string,arg2:string,arg3:string,arg4:string,arg5:s
 
 export function DoDisconnect():Promise<string>;
 
+export function GetKillSwitchEnabled():Promise<boolean>;
+
 export function ImportConfig(arg1:string):Promise<main.ConfigResult>;
 
 export function ImportConfigFromDialog():Promise<main.ConfigResult>;
@@ -25,3 +27,5 @@ export function LoadLastProfile():Promise<string>;
 export function LoadProfile(arg1:string):Promise<main.ConfigResult>;
 
 export function SaveLastProfile(arg1:string):Promise<void>;
+
+export function SetKillSwitchEnabled(arg1:boolean):Promise<void>;

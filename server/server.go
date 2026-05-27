@@ -24,6 +24,7 @@ type Peer struct {
 	Name      string
 	KeyRaw    string // оригинальный ключ для генерации клиентских конфигов
 	Key       [32]byte
+	CP        *vpncore.CipherPack
 	Internal  string
 	UDPAddr   *net.UDPAddr
 	udpMu     sync.Mutex
@@ -128,6 +129,7 @@ type Config struct {
 	DNS         string       `json:"dns"`
 	RoutingSalt string       `json:"routing_salt"`
 	LogFile     string       `json:"log_file"`
+	FEC         int          `json:"fec"` // server→client FEC (0/1=off, 2=2x)
 	Users       []ConfigUser `json:"users"`
 }
 
@@ -194,11 +196,17 @@ func main() {
 	peers = make(map[uint16]*Peer)
 	ipToPeer = make(map[string]*Peer)
 	for _, u := range cfg.Users {
+		key := sha256.Sum256([]byte(u.SecretKey))
+		cp, err := vpncore.NewCipherPack(key[:])
+		if err != nil {
+			logger.Fatalf("[ОШИБКА] cipher pack for user %s: %v", u.Name, err)
+		}
 		p := &Peer{
 			ShortID:  u.ShortID,
 			Name:     u.Name,
 			KeyRaw:   u.SecretKey,
-			Key:      sha256.Sum256([]byte(u.SecretKey)),
+			Key:      key,
+			CP:       cp,
 			Internal: u.IP,
 		}
 		if p.ShortID == 0 {
@@ -227,6 +235,7 @@ func main() {
 	exec.Command("ip", "addr", "add", "10.0.0.2/24", "dev", ifce.Name()).Run()
 	exec.Command("ip", "link", "set", "dev", ifce.Name(), "up").Run()
 	exec.Command("ip", "link", "set", "dev", ifce.Name(), "mtu", "1300").Run()
+	exec.Command("ip", "link", "set", "dev", ifce.Name(), "txqueuelen", "10000").Run()
 
 	conn, err := net.ListenUDP("udp", &net.UDPAddr{Port: cfg.Port})
 	if err != nil {
@@ -320,16 +329,21 @@ func main() {
 			if addr == nil {
 				continue
 			}
-			enc, err := vpncore.Encrypt(packet[:n], peer.Key[:], peer.ShortID, routingSalt)
+			enc, err := peer.CP.Encrypt(packet[:n], peer.ShortID, routingSalt)
 			if err != nil {
 				logger.Printf("[ОШИБКА] encrypt: %v", err)
 				continue
 			}
-			if _, err := conn.WriteToUDP(enc, addr); err != nil {
-				logger.Printf("[ОШИБКА] WriteToUDP: %v", err)
+			fec := serverCfg.FEC
+			if fec < 1 { fec = 1 }
+			if fec > 5 { fec = 5 }
+			for i := 0; i < fec; i++ {
+				if _, err := conn.WriteToUDP(enc, addr); err != nil {
+					logger.Printf("[ОШИБКА] WriteToUDP: %v", err)
+				}
 			}
-			peer.ByteOut.Add(int64(n))
-			peer.CumTx.Add(int64(n))
+			peer.ByteOut.Add(int64(n) * int64(fec))
+			peer.CumTx.Add(int64(n) * int64(fec))
 		}
 	}()
 
@@ -362,7 +376,7 @@ func main() {
 			continue
 		}
 
-		decrypted, err := vpncore.Decrypt(buffer[:n], peer.Key[:])
+		decrypted, err := peer.CP.Decrypt(buffer[:n])
 		if err != nil {
 			if strings.Contains(err.Error(), "HMAC") {
 				dropHMAC.Add(1)
@@ -381,12 +395,17 @@ func main() {
 			peer.UDPAddr = addr
 			peer.udpMu.Unlock()
 			// Echo back for tunnel latency measurement
-			enc, err := vpncore.Encrypt([]byte{0x01}, peer.Key[:], peer.ShortID, routingSalt)
+			enc, err := peer.CP.Encrypt([]byte{0x01}, peer.ShortID, routingSalt)
 			if err != nil {
 				logger.Printf("[ОШИБКА] echo encrypt: %v", err)
 				continue
 			}
-			conn.WriteToUDP(enc, addr)
+			fec := serverCfg.FEC
+			if fec < 1 { fec = 1 }
+			if fec > 5 { fec = 5 }
+			for i := 0; i < fec; i++ {
+				conn.WriteToUDP(enc, addr)
+			}
 			continue
 		}
 		peer.udpMu.Lock()

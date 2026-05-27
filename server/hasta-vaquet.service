@@ -1,0 +1,19 @@
+[Unit]
+Description=Hasta-Vaquet VPN Server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/root/hasta-vaquet-server -config /root/server_config.json
+WorkingDirectory=/root
+Restart=always
+RestartSec=5
+LimitNOFILE=65536
+
+# Network hardening
+PrivateNetwork=no
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW
+
+[Install]
+WantedBy=multi-user.target

@@ -11,12 +11,16 @@ func TestEncryptDecrypt(t *testing.T) {
 	salt := "test-salt"
 	plaintext := []byte("Hello, VPN tunnel! This is a test packet.")
 
-	encrypted, err := Encrypt(plaintext, key[:], shortID, salt)
+	cp, err := NewCipherPack(key[:])
+	if err != nil {
+		t.Fatalf("NewCipherPack failed: %v", err)
+	}
+	encrypted, err := cp.Encrypt(plaintext, shortID, salt)
 	if err != nil {
 		t.Fatalf("Encrypt failed: %v", err)
 	}
 
-	decrypted, err := Decrypt(encrypted, key[:])
+	decrypted, err := cp.Decrypt(encrypted)
 	if err != nil {
 		t.Fatalf("Decrypt failed: %v", err)
 	}
@@ -28,7 +32,8 @@ func TestEncryptDecrypt(t *testing.T) {
 
 func TestDecryptTooShort(t *testing.T) {
 	key := DeriveKey("test-secret")
-	_, err := Decrypt([]byte{0x00, 0x01, 0x02}, key[:])
+	cp, _ := NewCipherPack(key[:])
+	_, err := cp.Decrypt([]byte{0x00, 0x01, 0x02})
 	if err == nil {
 		t.Fatal("Expected error for short packet, got nil")
 	}
@@ -40,8 +45,10 @@ func TestHMACMismatch(t *testing.T) {
 	shortID := uint16(1)
 	salt := "salt"
 
-	encrypted, _ := Encrypt([]byte("data"), keyA[:], shortID, salt)
-	_, err := Decrypt(encrypted, keyB[:])
+	cpA, _ := NewCipherPack(keyA[:])
+	cpB, _ := NewCipherPack(keyB[:])
+	encrypted, _ := cpA.Encrypt([]byte("data"), shortID, salt)
+	_, err := cpB.Decrypt(encrypted)
 	if err == nil {
 		t.Fatal("Expected HMAC mismatch, got nil")
 	}
@@ -49,15 +56,16 @@ func TestHMACMismatch(t *testing.T) {
 
 func TestKeepAliveEncryptDecrypt(t *testing.T) {
 	key := DeriveKey("alice-key")
+	cp, _ := NewCipherPack(key[:])
 	shortID := uint16(1)
 	salt := "HastaVaquetGlobal"
 
 	for i := 0; i < 100; i++ {
-		encrypted, err := Encrypt([]byte{}, key[:], shortID, salt)
+		encrypted, err := cp.Encrypt([]byte{}, shortID, salt)
 		if err != nil {
 			t.Fatalf("Encrypt empty payload failed: %v", err)
 		}
-		decrypted, err := Decrypt(encrypted, key[:])
+		decrypted, err := cp.Decrypt(encrypted)
 		if err != nil {
 			t.Fatalf("Decrypt keep-alive failed: %v", err)
 		}
@@ -69,12 +77,13 @@ func TestKeepAliveEncryptDecrypt(t *testing.T) {
 
 func TestEchoResponse(t *testing.T) {
 	key := DeriveKey("echo-key")
+	cp, _ := NewCipherPack(key[:])
 	shortID := uint16(2)
 	salt := "test"
 
 	echo := []byte{0x01}
-	encrypted, _ := Encrypt(echo, key[:], shortID, salt)
-	decrypted, err := Decrypt(encrypted, key[:])
+	encrypted, _ := cp.Encrypt(echo, shortID, salt)
+	decrypted, err := cp.Decrypt(encrypted)
 	if err != nil {
 		t.Fatalf("Decrypt echo failed: %v", err)
 	}
@@ -92,10 +101,11 @@ func TestDynamicIDChanges(t *testing.T) {
 	salt := "salt"
 	payload := []byte("test")
 
+	cp, _ := NewCipherPack(key[:])
 	var prevDynamicID uint16
 	first := true
 	for i := 0; i < 50; i++ {
-		encrypted, err := Encrypt(payload, key[:], shortID, salt)
+		encrypted, err := cp.Encrypt(payload, shortID, salt)
 		if err != nil {
 			t.Fatalf("Encrypt failed: %v", err)
 		}

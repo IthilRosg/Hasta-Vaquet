@@ -2,6 +2,7 @@
   import { fade } from 'svelte/transition'
   import { DoConnect, DoDisconnect, ImportConfigFromDialog, LoadDefaultConfig, LoadProfile, ListProfileItems, SaveLastProfile, LoadLastProfile, DeleteProfile } from '../wailsjs/go/main/App'
   import { EventsOn } from '../wailsjs/runtime/runtime'
+  import Settings from './Settings.svelte'
 
   let connected = false
   let reconnecting = false
@@ -47,8 +48,8 @@
     dns = cfg.dns || dns
   }
 
-  let serverIP = '31.42.120.154'
-  let port = 9999
+  let serverIP = '45.134.39.18'
+  let port = 19999
   let shortID = 1
   let secretKey = ''
   let routingSalt = 'HastaVaquetGlobal'
@@ -168,7 +169,7 @@
       profileName = ''
       statusText = 'Profile deleted'
       // Сбросить настройки подключения
-      serverIP = ''; port = 9999; shortID = 0
+      serverIP = ''; port = 19999; shortID = 0
       secretKey = ''; internalIP = ''; gatewayIP = ''; dns = ''
       // Очистить last_profile.txt чтобы loadDefault не сработал
       await SaveLastProfile('')
@@ -180,6 +181,10 @@
   }
 
   function toggleSettings() { showSettings = !showSettings }
+
+  function onImportProfile() {
+    importProfile()
+  }
 </script>
 
 <div class="app-root">
@@ -290,28 +295,21 @@
   </div>
 </div>
 
-<!-- Settings panel -->
-{#if showSettings}
-<div class="overlay" on:click={toggleSettings}></div>
-<div class="settings">
-  <h2>Settings — {profileName}</h2>
-  <div class="field"><label>Server IP</label><input bind:value={serverIP}/></div>
-  <div class="field-row">
-    <div class="field"><label>Port</label><input bind:value={port} type="number"/></div>
-    <div class="field"><label>Short ID</label><input bind:value={shortID} type="number"/></div>
-  </div>
-  <div class="field"><label>Secret Key</label><input bind:value={secretKey} type="password"/></div>
-  <div class="field-row">
-    <div class="field"><label>Internal IP</label><input bind:value={internalIP}/></div>
-    <div class="field"><label>Gateway IP</label><input bind:value={gatewayIP}/></div>
-  </div>
-  <div class="field-row">
-    <div class="field"><label>DNS</label><input bind:value={dns}/></div>
-    <div class="field"><label>Routing Salt</label><input bind:value={routingSalt}/></div>
-  </div>
-  <button class="import-btn" on:click={importProfile}>Import Profile (.json)</button>
-</div>
-{/if}
+
+
+<Settings
+  show={showSettings}
+  bind:serverIP
+  bind:port
+  bind:shortID
+  bind:secretKey
+  bind:routingSalt
+  bind:internalIP
+  bind:gatewayIP
+  bind:dns
+  onImport={onImportProfile}
+  onClose={toggleSettings}
+/>
 
 <div class="version">v0.2.3</div>
 
@@ -446,17 +444,6 @@
   }
   .add-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-glow); }
 
-  /* ----- Settings ----- */
-  .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100; }
-  .settings { position: fixed; top: 0; right: 0; bottom: 0; width: 320px; background: var(--surface); border-left: 1px solid var(--border); padding: 24px; overflow-y: auto; z-index: 101; display: flex; flex-direction: column; gap: 16px; }
-  .settings h2 { font-size: 18px; font-weight: 600; }
-  .field { display: flex; flex-direction: column; gap: 4px; flex: 1; }
-  .field-row { display: flex; gap: 12px; }
-  .field label { font-size: 12px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; }
-  .field input { background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 8px 12px; border-radius: var(--radius-sm); font-size: 14px; width: 100%; transition: border 0.2s; }
-  .field input:focus { outline: none; border-color: var(--accent); }
-  .import-btn { background: none; border: 1px dashed var(--border); color: var(--accent); padding: 10px; border-radius: var(--radius-sm); cursor: pointer; font-size: 14px; transition: all 0.2s; }
-  .import-btn:hover { border-color: var(--accent); background: var(--accent-glow); }
   .version { position: fixed; bottom: 8px; right: 12px; font-size: 11px; color: var(--text-dim); opacity: 0.5; }
 
   .status.reconnecting { color: var(--yellow); }

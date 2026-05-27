@@ -1,0 +1,21 @@
+{
+  "name": "idle200k",
+  "start_at": "2026-05-28T00:26:56+03:00",
+  "duration_ms": 0,
+  "loss_pct": 0,
+  "rtt_ms": 0,
+  "down_mbps": 0,
+  "up_mbps": 0,
+  "score": -1,
+  "error": "tunnel unreachable",
+  "genome": {
+    "Name": "idle200k",
+    "FEC": 1,
+    "PadTargetSize": 0,
+    "MinDelayMs": 0,
+    "MaxDelayMs": 0,
+    "IdleBps": 200000,
+    "Mimic": "",
+    "PortOffset": 0
+  }
+}

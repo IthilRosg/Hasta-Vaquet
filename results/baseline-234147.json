@@ -1,0 +1,18 @@
+{
+  "genome": {
+    "Name": "baseline",
+    "FEC": 1,
+    "PadTargetSize": 1300,
+    "MinDelayMs": 0,
+    "MaxDelayMs": 0,
+    "IdleBps": 0,
+    "Mimic": "",
+    "PortOffset": 0
+  },
+  "start_at": "2026-05-27T23:41:32+03:00",
+  "duration_ms": 0,
+  "ping_loss_pct": 100,
+  "ping_ms": 0,
+  "tcp_loss_pct": 100,
+  "udp_loss_pct": 0
+}

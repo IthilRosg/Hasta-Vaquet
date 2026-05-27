@@ -10,7 +10,7 @@
 |-----------|--------|------------|
 | Windows GUI клиент (Wails + core/) | ✅ Работает | ~90 Mbps |
 | Windows CLI (`main.go`) | ⚠️ Работает, но ДУБЛИРУЕТ core/ | 335 строк, своя копия криптографии |
-| Сервер (UDP + TUN + multi-user) | ✅ Работает | Linux VPS 31.42.120.154:9999 |
+| Сервер (UDP + TUN + multi-user) | ✅ Работает | Linux VPS 45.134.39.18:9999 |
 | Web-панель админа | ✅ Работает | https://hasvaq.airydeck.su |
 | Крипто-протокол Phase 6 | ✅ Работает | AES-GCM, HMAC, DynamicID, Bloom |
 | Android клиент (базовый) | ✅ Коннект есть | Нет статистики в UI, kill switch, bypass, reconnect |

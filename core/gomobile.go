@@ -40,7 +40,7 @@ func StartVPN(configJSON string, tunFd int, p Protector) string {
 
 	// Устанавливаем дефолты (как в LoadConfig)
 	if cfg.Port == 0 {
-		cfg.Port = 9999
+		cfg.Port = 19999
 	}
 	if cfg.RoutingSalt == "" {
 		cfg.RoutingSalt = "HastaVaquetGlobal"
@@ -53,6 +53,9 @@ func StartVPN(configJSON string, tunFd int, p Protector) string {
 	}
 	if cfg.DNS == "" {
 		cfg.DNS = "1.1.1.1"
+	}
+	if cfg.FEC < 1 || cfg.FEC > 5 {
+		cfg.FEC = 1
 	}
 
 	// Сохраняем протектор и дескриптор туннеля
