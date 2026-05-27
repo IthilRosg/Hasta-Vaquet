@@ -11,13 +11,13 @@
     {
       "short_id": 1,
       "name": "Alice",
-      "secret_key": "CHANGE_ME_ALICE_KEY",
+      "secret_key": "AliceSecret2026",
       "ip": "10.0.0.10"
     },
     {
       "short_id": 2,
       "name": "Bob",
-      "secret_key": "CHANGE_ME_BOB_KEY",
+      "secret_key": "BobSecret2026",
       "ip": "10.0.0.11"
     }
   ]
