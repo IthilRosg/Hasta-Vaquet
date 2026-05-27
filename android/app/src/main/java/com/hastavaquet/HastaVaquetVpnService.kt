@@ -100,6 +100,7 @@ class HastaVaquetVpnService : VpnService(), Protector {
             builder.setSession("Hasta-Vaquet")
             builder.setMtu(1300)
             builder.setBlocking(true)
+            builder.setAlwaysOn(true)
 
             val cfg = parseConfig(configJson)
             builder.addAddress(cfg.internalIp, 24)
