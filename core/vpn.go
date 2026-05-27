@@ -40,6 +40,7 @@ type VPN struct {
 	sessionTotalRx atomic.Uint64
 	listener       StatusListener
 	killSwitch     KillSwitch
+	reconnecting   atomic.Bool
 	mu             sync.Mutex
 	stopping       atomic.Bool
 	lastAliveMs    atomic.Int64  // unix ms последнего отправленного пакета
@@ -105,7 +106,9 @@ func (v *VPN) Stop() {
 		v.conn.Close()
 		v.conn = nil
 	}
-	v.callback("disconnected", 0, 0, 0, 0, 0, 0)
+	if !v.reconnecting.Load() {
+		v.callback("disconnected", 0, 0, 0, 0, 0, 0)
+	}
 	v.stopping.Store(false)
 }
 
@@ -114,11 +117,12 @@ func (v *VPN) IsRunning() bool {
 }
 
 // Reconnect — полный Stop + Start для восстановления после обрыва сети.
-// В отличие от reconnectSocket (меняет только сокет), Reconnect делает
-// всё что делает ручной Disconnect+Connect: сброс сессии, маршрутов, горутин.
+// Пропускает callback "disconnected" — UI не дёргается.
 func (v *VPN) Reconnect() error {
 	log.Printf("[VPN] Reconnect: full Stop+Start cycle")
+	v.reconnecting.Store(true)
 	v.Stop()
+	v.reconnecting.Store(false)
 	return v.Start()
 }
 
