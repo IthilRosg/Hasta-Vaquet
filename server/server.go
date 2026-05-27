@@ -141,7 +141,9 @@ func loadConfig() Config {
 
 	cfg := Config{}
 	if f, err := os.Open(configFile); err == nil {
-		json.NewDecoder(f).Decode(&cfg)
+		if decErr := json.NewDecoder(f).Decode(&cfg); decErr != nil {
+			log.Fatalf("[ОШИБКА] Невалидный JSON в %s: %v", configFile, decErr)
+		}
 		f.Close()
 	}
 

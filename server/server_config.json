@@ -1,8 +1,8 @@
 {
   "port": 9999,
   "admin_port": 9998,
-  "admin_token": "CHANGE_ME_TO_RANDOM_STRING",
-  "server_ip": "YOUR_SERVER_IP",
+  "admin_token": "f517b99e89ac5e283af8d96b",
+  "server_ip": "45.134.39.18",
   "gateway_ip": "192.168.100.1",
   "dns": "1.1.1.1",
   "routing_salt": "HastaVaquetGlobal",

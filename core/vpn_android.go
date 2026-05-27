@@ -218,7 +218,6 @@ func (p *vpnPlatform) activateKillSwitch(v *VPN)       {}
 func (p *vpnPlatform) deactivateKillSwitch(v *VPN)     {}
 func (p *vpnPlatform) refreshServerRoute(v *VPN)       {}
 func (p *vpnPlatform) gatewayIsValid(v *VPN) bool      { return true }
-func (p *vpnPlatform) reconnectSocket(v *VPN)          {}
 func (p *vpnPlatform) reconnectSession(v *VPN)          {}
 func (p *vpnPlatform) destroyTunnel()                  {}
 

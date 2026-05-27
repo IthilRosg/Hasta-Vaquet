@@ -1,0 +1,2333 @@
+﻿<!doctype html>
+<html lang="ru">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Hasta-Vaquet Admin</title>
+        <style>
+            /* тФАтФАтФА CSS Variables тФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФА */
+            :root {
+                --bg: #0d1117;
+                --surface: #161b22;
+                --surface-hover: #1c2128;
+                --border: rgba(255, 255, 255, 0.08);
+                --accent: #58a6ff;
+                --green: #3fb950;
+                --red: #f85149;
+                --yellow: #d29922;
+                --text: #e6edf3;
+                --text-dim: #8b949e;
+                --radius: 10px;
+                --font: system-ui;
+                --font-mono: "Consolas", monospace;
+            }
+
+            /* тФАтФАтФА Reset & Base тФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФА */
+            *,
+            *::before,
+            *::after {
+                box-sizing: border-box;
+                margin: 0;
+                padding: 0;
+            }
+
+            html,
+            body {
+                height: 100%;
+                background: var(--bg);
+                color: var(--text);
+                font-family: var(--font);
+                font-size: 14px;
+                line-height: 1.6;
+                -webkit-font-smoothing: antialiased;
+            }
+
+            a {
+                color: var(--accent);
+                text-decoration: none;
+            }
+            a:hover {
+                text-decoration: underline;
+            }
+
+            ::-webkit-scrollbar {
+                width: 5px;
+                height: 5px;
+            }
+            ::-webkit-scrollbar-track {
+                background: transparent;
+            }
+            ::-webkit-scrollbar-thumb {
+                background: rgba(255, 255, 255, 0.12);
+                border-radius: 3px;
+            }
+            ::-webkit-scrollbar-thumb:hover {
+                background: rgba(255, 255, 255, 0.22);
+            }
+
+            .hidden {
+                display: none !important;
+            }
+            .sr-only {
+                position: absolute;
+                width: 1px;
+                height: 1px;
+                overflow: hidden;
+                clip: rect(0, 0, 0, 0);
+            }
+
+            /* тФАтФАтФА Buttons тФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФА */
+            .btn {
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+                padding: 7px 16px;
+                border-radius: 6px;
+                border: 1px solid var(--border);
+                background: var(--surface-hover);
+                color: var(--text);
+                font-size: 13px;
+                font-family: var(--font);
+                cursor: pointer;
+                user-select: none;
+                transition:
+                    background 0.15s,
+                    border-color 0.15s,
+                    opacity 0.15s;
+            }
+            .btn:hover {
+                background: #2d333b;
+                border-color: rgba(255, 255, 255, 0.16);
+            }
+            .btn:active {
+                opacity: 0.75;
+            }
+
+            .btn-primary {
+                background: var(--accent);
+                border-color: var(--accent);
+                color: #0d1117;
+                font-weight: 600;
+            }
+            .btn-primary:hover {
+                background: #79b8ff;
+                border-color: #79b8ff;
+            }
+
+            .btn-danger {
+                border-color: rgba(248, 81, 73, 0.4);
+                color: var(--red);
+            }
+            .btn-danger:hover {
+                background: rgba(248, 81, 73, 0.12);
+                border-color: var(--red);
+            }
+
+            .btn-ghost {
+                background: transparent;
+                border-color: transparent;
+                padding: 5px 8px;
+                font-size: 15px;
+                color: var(--text-dim);
+            }
+            .btn-ghost:hover {
+                background: var(--surface-hover);
+                color: var(--text);
+                border-color: var(--border);
+            }
+
+            .btn-sm {
+                padding: 4px 10px;
+                font-size: 12px;
+            }
+            .btn:disabled {
+                opacity: 0.4;
+                cursor: not-allowed;
+                pointer-events: none;
+            }
+
+            /* тФАтФАтФА Input тФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФА */
+            .input {
+                width: 100%;
+                padding: 8px 12px;
+                background: var(--bg);
+                border: 1px solid var(--border);
+                border-radius: 6px;
+                color: var(--text);
+                font-size: 13px;
+                font-family: var(--font);
+                transition:
+                    border-color 0.15s,
+                    box-shadow 0.15s;
+                outline: none;
+            }
+            .input:focus {
+                border-color: var(--accent);
+                box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.15);
+            }
+            .input::placeholder {
+                color: var(--text-dim);
+            }
+            .input.error {
+                border-color: var(--red);
+                box-shadow: 0 0 0 3px rgba(248, 81, 73, 0.15);
+            }
+
+            .input-group {
+                display: flex;
+                gap: 6px;
+                align-items: center;
+            }
+            .input-group .input {
+                flex: 1;
+            }
+
+            /* тФАтФАтФА тХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХР тФАтФАтФА */
+            /*              LOGIN SCREEN                        */
+            /* тФАтФАтФА тХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХР тФАтФАтФА */
+            #login-screen {
+                min-height: 100vh;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                background:
+                    radial-gradient(
+                        ellipse at 50% 0%,
+                        rgba(88, 166, 255, 0.07) 0%,
+                        transparent 60%
+                    ),
+                    var(--bg);
+            }
+            .login-card {
+                width: 360px;
+                background: var(--surface);
+                border: 1px solid var(--border);
+                border-radius: var(--radius);
+                padding: 40px 36px;
+                box-shadow: 0 8px 40px rgba(0, 0, 0, 0.5);
+            }
+            .login-logo {
+                text-align: center;
+                margin-bottom: 28px;
+            }
+            .login-logo .logo-icon {
+                display: inline-block;
+                width: 56px;
+                height: 56px;
+                background: linear-gradient(
+                    135deg,
+                    var(--accent) 0%,
+                    #1f6feb 100%
+                );
+                border-radius: 14px;
+                margin-bottom: 12px;
+                position: relative;
+                box-shadow: 0 4px 20px rgba(88, 166, 255, 0.3);
+            }
+            .login-logo .logo-icon svg {
+                position: absolute;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+            }
+            .login-logo h1 {
+                font-size: 20px;
+                font-weight: 700;
+                color: var(--text);
+                letter-spacing: -0.3px;
+            }
+            .login-logo p {
+                font-size: 12px;
+                color: var(--text-dim);
+                margin-top: 2px;
+            }
+            .login-card label {
+                display: block;
+                font-size: 12px;
+                font-weight: 600;
+                color: var(--text-dim);
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+                margin-bottom: 6px;
+            }
+            #login-error {
+                margin-top: 10px;
+                padding: 8px 12px;
+                background: rgba(248, 81, 73, 0.12);
+                border: 1px solid rgba(248, 81, 73, 0.3);
+                border-radius: 6px;
+                color: var(--red);
+                font-size: 12px;
+                text-align: center;
+            }
+            #login-btn {
+                width: 100%;
+                margin-top: 18px;
+                padding: 10px;
+                font-size: 14px;
+                justify-content: center;
+            }
+
+            /* тФАтФАтФА тХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХР тФАтФАтФА */
+            /*              MAIN APP LAYOUT                     */
+            /* тФАтФАтФА тХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХР тФАтФАтФА */
+            #app {
+                display: flex;
+                height: 100vh;
+                overflow: hidden;
+            }
+
+            /* тФАтФА Sidebar тФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФА */
+            .sidebar {
+                width: 180px;
+                flex-shrink: 0;
+                background: var(--surface);
+                border-right: 1px solid var(--border);
+                display: flex;
+                flex-direction: column;
+                overflow-y: auto;
+            }
+            .sidebar-logo {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                height: 56px;
+                flex-shrink: 0;
+                border-bottom: 1px solid var(--border);
+            }
+            .sidebar-logo .hv {
+                width: 36px;
+                height: 36px;
+                background: linear-gradient(
+                    135deg,
+                    var(--accent) 0%,
+                    #1f6feb 100%
+                );
+                border-radius: 9px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 16px;
+                font-weight: 800;
+                color: #fff;
+                box-shadow: 0 2px 12px rgba(88, 166, 255, 0.3);
+                letter-spacing: -0.5px;
+            }
+            .sidebar-nav {
+                flex: 1;
+                padding: 12px 8px;
+                display: flex;
+                flex-direction: column;
+                gap: 2px;
+            }
+            .sidebar-nav .nav-item {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                padding: 9px 12px;
+                border-radius: 7px;
+                color: var(--text-dim);
+                font-size: 13px;
+                font-weight: 500;
+                cursor: pointer;
+                user-select: none;
+                transition:
+                    background 0.12s,
+                    color 0.12s;
+                border: none;
+                background: transparent;
+                font-family: var(--font);
+                text-align: left;
+                width: 100%;
+            }
+            .sidebar-nav .nav-item:hover {
+                background: var(--surface-hover);
+                color: var(--text);
+            }
+            .sidebar-nav .nav-item.active {
+                background: var(--accent);
+                color: #fff;
+                font-weight: 600;
+            }
+            .sidebar-nav .nav-item .nav-icon {
+                font-size: 16px;
+                width: 20px;
+                text-align: center;
+                flex-shrink: 0;
+            }
+
+            .sidebar-footer {
+                padding: 12px;
+                border-top: 1px solid var(--border);
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+            }
+            .sidebar-footer .status-row {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                font-size: 11px;
+                color: var(--text-dim);
+            }
+            .status-dot {
+                width: 6px;
+                height: 6px;
+                border-radius: 50%;
+                background: var(--green);
+                box-shadow: 0 0 5px var(--green);
+                flex-shrink: 0;
+            }
+            .sidebar-footer .refresh-row {
+                display: flex;
+                align-items: center;
+                gap: 5px;
+                font-size: 10px;
+                color: var(--text-dim);
+            }
+            .refresh-spinner {
+                width: 10px;
+                height: 10px;
+                border: 2px solid rgba(255, 255, 255, 0.1);
+                border-top-color: var(--accent);
+                border-radius: 50%;
+                flex-shrink: 0;
+            }
+            .refresh-spinner.spinning {
+                animation: spin 0.7s linear infinite;
+            }
+            @keyframes spin {
+                to {
+                    transform: rotate(360deg);
+                }
+            }
+
+            /* тФАтФА Content тФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФА */
+            .content {
+                flex: 1;
+                overflow-y: auto;
+                overflow-x: hidden;
+                padding: 28px 32px;
+            }
+            .page {
+                display: none;
+            }
+            .page.active {
+                display: block;
+            }
+
+            /* тФАтФАтФА Stats Grid тФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФА */
+            .stats-grid {
+                display: grid;
+                grid-template-columns: repeat(2, 1fr);
+                gap: 14px;
+                margin-bottom: 28px;
+            }
+            @media (min-width: 900px) {
+                .stats-grid.stats-4 {
+                    grid-template-columns: repeat(4, 1fr);
+                }
+            }
+            @media (min-width: 700px) {
+                .stats-grid.stats-3 {
+                    grid-template-columns: repeat(3, 1fr);
+                }
+            }
+
+            .stat-card {
+                background: var(--surface);
+                border: 1px solid var(--border);
+                border-radius: var(--radius);
+                padding: 18px 20px;
+                position: relative;
+                overflow: hidden;
+                transition:
+                    border-color 0.2s,
+                    transform 0.15s;
+            }
+            .stat-card:hover {
+                border-color: rgba(255, 255, 255, 0.15);
+                transform: translateY(-1px);
+            }
+            .stat-card::before {
+                content: "";
+                position: absolute;
+                top: 0;
+                left: 0;
+                right: 0;
+                height: 2px;
+                border-radius: var(--radius) var(--radius) 0 0;
+            }
+            .stat-card.accent::before {
+                background: var(--accent);
+            }
+            .stat-card.green::before {
+                background: var(--green);
+            }
+            .stat-card.yellow::before {
+                background: var(--yellow);
+            }
+            .stat-card.purple::before {
+                background: #bc8cff;
+            }
+            .stat-card.cpu::before {
+                background: #f0883e;
+            }
+            .stat-card.ram::before {
+                background: var(--accent);
+            }
+            .stat-card.disk::before {
+                background: #bc8cff;
+            }
+
+            .stat-label {
+                font-size: 11px;
+                font-weight: 600;
+                color: var(--text-dim);
+                text-transform: uppercase;
+                letter-spacing: 0.6px;
+                margin-bottom: 8px;
+            }
+            .stat-value {
+                font-size: 26px;
+                font-weight: 700;
+                color: var(--text);
+                line-height: 1;
+                letter-spacing: -0.5px;
+            }
+            .stat-sub {
+                font-size: 12px;
+                color: var(--text-dim);
+                margin-top: 6px;
+            }
+            .stat-icon {
+                position: absolute;
+                top: 16px;
+                right: 16px;
+                font-size: 20px;
+                opacity: 0.15;
+                user-select: none;
+            }
+
+            /* тФАтФАтФА Section Header тФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФА */
+            .section-header {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                margin-bottom: 16px;
+                flex-wrap: wrap;
+                gap: 10px;
+            }
+            .section-title {
+                font-size: 16px;
+                font-weight: 700;
+                color: var(--text);
+                display: flex;
+                align-items: center;
+                gap: 8px;
+            }
+            .count-badge {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                min-width: 22px;
+                height: 20px;
+                padding: 0 6px;
+                background: rgba(255, 255, 255, 0.08);
+                border-radius: 20px;
+                font-size: 11px;
+                font-weight: 600;
+                color: var(--text-dim);
+            }
+
+            /* тФАтФАтФА Search тФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФА */
+            .search-wrap {
+                margin-bottom: 14px;
+            }
+            .search-wrap .input {
+                max-width: 360px;
+            }
+
+            /* тФАтФАтФА Table тФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФА */
+            .table-wrap {
+                background: var(--surface);
+                border: 1px solid var(--border);
+                border-radius: var(--radius);
+                overflow: hidden;
+            }
+            table {
+                width: 100%;
+                border-collapse: collapse;
+            }
+            thead tr {
+                background: rgba(255, 255, 255, 0.03);
+                border-bottom: 1px solid var(--border);
+            }
+            th {
+                padding: 10px 16px;
+                text-align: left;
+                font-size: 11px;
+                font-weight: 600;
+                color: var(--text-dim);
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+                white-space: nowrap;
+            }
+            tbody tr {
+                border-bottom: 1px solid var(--border);
+                transition: background 0.12s;
+            }
+            tbody tr:last-child {
+                border-bottom: none;
+            }
+            tbody tr:hover {
+                background: var(--surface-hover);
+            }
+            td {
+                padding: 12px 16px;
+                font-size: 13px;
+                color: var(--text);
+                vertical-align: middle;
+            }
+
+            .id-badge {
+                display: inline-block;
+                padding: 2px 8px;
+                background: rgba(88, 166, 255, 0.1);
+                border: 1px solid rgba(88, 166, 255, 0.2);
+                border-radius: 4px;
+                font-family: var(--font-mono);
+                font-size: 12px;
+                color: var(--accent);
+                font-weight: 500;
+            }
+            code {
+                font-family: var(--font-mono);
+                font-size: 12px;
+                background: rgba(255, 255, 255, 0.06);
+                border: 1px solid var(--border);
+                padding: 2px 7px;
+                border-radius: 4px;
+                color: #a5d6ff;
+            }
+            .peer-status {
+                display: flex;
+                align-items: center;
+                gap: 7px;
+                white-space: nowrap;
+            }
+            .peer-dot {
+                width: 8px;
+                height: 8px;
+                border-radius: 50%;
+                flex-shrink: 0;
+            }
+            .peer-dot.online {
+                background: var(--green);
+                box-shadow: 0 0 6px var(--green);
+            }
+            .peer-dot.offline {
+                background: var(--text-dim);
+            }
+            .peer-status .status-text {
+                font-size: 12px;
+                color: var(--text-dim);
+            }
+            .peer-status.online .status-text {
+                color: var(--green);
+            }
+            .traffic-val {
+                font-family: var(--font-mono);
+                font-size: 12px;
+                color: var(--text-dim);
+            }
+            .actions-cell {
+                display: flex;
+                gap: 4px;
+                align-items: center;
+            }
+            .empty-state {
+                padding: 56px 24px;
+                text-align: center;
+                color: var(--text-dim);
+            }
+            .empty-state .empty-icon {
+                font-size: 40px;
+                opacity: 0.25;
+                margin-bottom: 12px;
+            }
+            .empty-state p {
+                font-size: 14px;
+            }
+
+            /* тФАтФАтФА тХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХР тФАтФАтФА */
+            /*              SETTINGS PAGE                       */
+            /* тФАтФАтФА тХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХР тФАтФАтФА */
+            .settings-card {
+                background: var(--surface);
+                border: 1px solid var(--border);
+                border-radius: var(--radius);
+                padding: 24px;
+                max-width: 560px;
+            }
+            .settings-field {
+                margin-bottom: 18px;
+            }
+            .settings-field:last-child {
+                margin-bottom: 0;
+            }
+            .settings-field label {
+                display: block;
+                font-size: 11px;
+                font-weight: 600;
+                color: var(--text-dim);
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+                margin-bottom: 6px;
+            }
+            .settings-field .field-row {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+            }
+            .settings-field .field-row .input {
+                flex: 1;
+            }
+            .settings-field .field-value {
+                padding: 8px 12px;
+                background: var(--bg);
+                border: 1px solid var(--border);
+                border-radius: 6px;
+                font-family: var(--font-mono);
+                font-size: 12px;
+                color: var(--text-dim);
+                word-break: break-all;
+            }
+            .settings-field .field-hint {
+                font-size: 11px;
+                color: var(--text-dim);
+                margin-top: 5px;
+            }
+
+            /* тФАтФАтФА тХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХР тФАтФАтФА */
+            /*              MODALS                              */
+            /* тФАтФАтФА тХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХР тФАтФАтФА */
+            .modal-overlay {
+                position: fixed;
+                inset: 0;
+                z-index: 200;
+                background: rgba(0, 0, 0, 0.7);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                padding: 20px;
+                backdrop-filter: blur(3px);
+                animation: fadeIn 0.15s ease;
+            }
+            @keyframes fadeIn {
+                from {
+                    opacity: 0;
+                }
+                to {
+                    opacity: 1;
+                }
+            }
+            @keyframes slideUp {
+                from {
+                    opacity: 0;
+                    transform: translateY(16px) scale(0.98);
+                }
+                to {
+                    opacity: 1;
+                    transform: none;
+                }
+            }
+
+            .modal {
+                background: var(--surface);
+                border: 1px solid rgba(255, 255, 255, 0.12);
+                border-radius: var(--radius);
+                width: 100%;
+                max-width: 460px;
+                box-shadow: 0 24px 80px rgba(0, 0, 0, 0.7);
+                animation: slideUp 0.18s ease;
+                overflow: hidden;
+            }
+            .modal-header {
+                padding: 20px 24px 0;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+            }
+            .modal-title {
+                font-size: 16px;
+                font-weight: 700;
+                color: var(--text);
+            }
+            .modal-close {
+                background: transparent;
+                border: none;
+                color: var(--text-dim);
+                font-size: 20px;
+                cursor: pointer;
+                padding: 2px 6px;
+                border-radius: 4px;
+                line-height: 1;
+                transition:
+                    color 0.1s,
+                    background 0.1s;
+            }
+            .modal-close:hover {
+                color: var(--text);
+                background: var(--surface-hover);
+            }
+            .modal-body {
+                padding: 20px 24px;
+            }
+            .modal-footer {
+                padding: 16px 24px;
+                display: flex;
+                justify-content: flex-end;
+                gap: 10px;
+                border-top: 1px solid var(--border);
+                background: rgba(0, 0, 0, 0.1);
+            }
+            .form-field {
+                margin-bottom: 16px;
+            }
+            .form-field:last-child {
+                margin-bottom: 0;
+            }
+            .form-field label {
+                display: block;
+                font-size: 12px;
+                font-weight: 600;
+                color: var(--text-dim);
+                margin-bottom: 6px;
+                text-transform: uppercase;
+                letter-spacing: 0.4px;
+            }
+            .field-hint {
+                font-size: 11px;
+                color: var(--text-dim);
+                margin-top: 5px;
+            }
+            .field-error {
+                font-size: 11px;
+                color: var(--red);
+                margin-top: 5px;
+            }
+            .qr-modal {
+                max-width: 380px;
+            }
+            .qr-container {
+                text-align: center;
+                padding: 10px 0;
+            }
+            .qr-container img {
+                width: 220px;
+                height: 220px;
+                border-radius: 10px;
+                background: #fff;
+                padding: 12px;
+                display: block;
+                margin: 0 auto 14px;
+            }
+            .qr-hint {
+                font-size: 13px;
+                color: var(--text-dim);
+                margin-top: 4px;
+            }
+
+            /* тФАтФАтФА Toasts тФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФА */
+            #toast-container {
+                position: fixed;
+                bottom: 20px;
+                right: 20px;
+                z-index: 500;
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+                pointer-events: none;
+            }
+            .toast {
+                padding: 10px 16px;
+                border-radius: 8px;
+                font-size: 13px;
+                font-weight: 500;
+                border: 1px solid var(--border);
+                background: var(--surface);
+                box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+                animation: toastIn 0.2s ease;
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                max-width: 320px;
+            }
+            .toast.success {
+                border-color: rgba(63, 185, 80, 0.3);
+                color: var(--green);
+            }
+            .toast.error {
+                border-color: rgba(248, 81, 73, 0.3);
+                color: var(--red);
+            }
+            .toast.info {
+                border-color: rgba(88, 166, 255, 0.3);
+                color: var(--accent);
+            }
+            @keyframes toastIn {
+                from {
+                    opacity: 0;
+                    transform: translateY(10px) scale(0.95);
+                }
+                to {
+                    opacity: 1;
+                    transform: none;
+                }
+            }
+
+            /* тФАтФАтФА Responsive тФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФА */
+            @media (max-width: 768px) {
+                .sidebar {
+                    width: 140px;
+                }
+                .sidebar-nav .nav-item {
+                    font-size: 12px;
+                    padding: 8px 10px;
+                    gap: 6px;
+                }
+                .content {
+                    padding: 20px 16px;
+                }
+                .stats-grid.stats-4 {
+                    grid-template-columns: repeat(2, 1fr);
+                }
+            }
+            @media (max-width: 500px) {
+                #app {
+                    flex-direction: column;
+                }
+                .sidebar {
+                    width: 100%;
+                    flex-shrink: 0;
+                    flex-direction: row;
+                    align-items: center;
+                    overflow-x: auto;
+                    padding: 0 8px;
+                    height: 50px;
+                    min-height: 50px;
+                    border-right: none;
+                    border-bottom: 1px solid var(--border);
+                }
+                .sidebar-logo {
+                    height: 50px;
+                    border-bottom: none;
+                    padding: 0 4px;
+                }
+                .sidebar-logo .hv {
+                    width: 30px;
+                    height: 30px;
+                    font-size: 13px;
+                    border-radius: 7px;
+                }
+                .sidebar-nav {
+                    flex-direction: row;
+                    padding: 0;
+                    gap: 0;
+                }
+                .sidebar-nav .nav-item {
+                    font-size: 11px;
+                    padding: 6px 8px;
+                    gap: 4px;
+                    white-space: nowrap;
+                }
+                .sidebar-footer {
+                    display: none;
+                }
+                .content {
+                    padding: 16px 12px;
+                }
+            }
+        </style>
+    </head>
+    <body>
+        <!-- тФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФА -->
+        <!--                     LOGIN SCREEN                          -->
+        <!-- тФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФА -->
+        <div id="login-screen">
+            <div class="login-card">
+                <div class="login-logo">
+                    <div class="logo-icon">
+                        <svg
+                            width="28"
+                            height="28"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                        >
+                            <path
+                                d="M12 2L4 6v6c0 5.25 3.5 10.15 8 11.35C16.5 22.15 20 17.25 20 12V6L12 2z"
+                                fill="rgba(255,255,255,0.9)"
+                            />
+                            <path
+                                d="M10 12l2 2 4-4"
+                                stroke="#0d1117"
+                                stroke-width="2"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                            />
+                        </svg>
+                    </div>
+                    <h1>Hasta-Vaquet Admin</h1>
+                    <p>╨Я╨░╨╜╨╡╨╗╤М ╤Г╨┐╤А╨░╨▓╨╗╨╡╨╜╨╕╤П VPN-╤Б╨╡╤А╨▓╨╡╤А╨╛╨╝</p>
+                </div>
+                <div class="form-field">
+                    <label for="token-input">Admin Token</label>
+                    <input
+                        id="token-input"
+                        class="input"
+                        type="password"
+                        placeholder="╨Т╨▓╨╡╨┤╨╕╤В╨╡ ╤В╨╛╨║╨╡╨╜ ╨░╨┤╨╝╨╕╨╜╨╕╤Б╤В╤А╨░╤В╨╛╤А╨░тАж"
+                        autocomplete="current-password"
+                    />
+                </div>
+                <div id="login-error" class="hidden"></div>
+                <button id="login-btn" class="btn btn-primary">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                        <path
+                            d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                        />
+                    </svg>
+                    ╨Т╨╛╨╣╤В╨╕
+                </button>
+            </div>
+        </div>
+
+        <!-- тФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФА -->
+        <!--                      MAIN APP                             -->
+        <!-- тФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФА -->
+        <div id="app" class="hidden">
+            <!-- Sidebar -->
+            <aside class="sidebar">
+                <div class="sidebar-logo">
+                    <div class="hv">HV</div>
+                </div>
+                <nav class="sidebar-nav">
+                    <button class="nav-item active" data-page="dashboard">
+                        <span class="nav-icon">ЁЯУК</span> Dashboard
+                    </button>
+                    <button class="nav-item" data-page="users">
+                        <span class="nav-icon">ЁЯСе</span> Users
+                    </button>
+                    <button class="nav-item" data-page="settings">
+                        <span class="nav-icon">тЪЩя╕П</span> Settings
+                    </button>
+                </nav>
+                <div class="sidebar-footer">
+                    <div class="status-row">
+                        <div class="status-dot" id="sidebar-status-dot"></div>
+                        <span id="sidebar-status-text">╨б╨╛╨╡╨┤╨╕╨╜╨╡╨╜╨╕╨╡тАж</span>
+                    </div>
+                    <div class="refresh-row">
+                        <div class="refresh-spinner" id="refresh-spinner"></div>
+                        <span id="refresh-text">╨Ю╨▒╨╜╨╛╨▓╨╗╨╡╨╜╨╕╨╡тАж</span>
+                    </div>
+                    <button
+                        class="btn btn-sm"
+                        id="logout-btn"
+                        style="width: 100%; justify-content: center"
+                    >
+                        <svg
+                            width="12"
+                            height="12"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                        >
+                            <path
+                                d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"
+                                stroke="currentColor"
+                                stroke-width="2"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                            />
+                        </svg>
+                        ╨Т╤Л╨╣╤В╨╕
+                    </button>
+                </div>
+            </aside>
+
+            <!-- Content -->
+            <main class="content">
+                <!-- тХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХР DASHBOARD тХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХР -->
+                <div class="page active" id="page-dashboard">
+                    <div class="stats-grid stats-4">
+                        <div class="stat-card accent">
+                            <div class="stat-label">╨Я╨╕╤А╨╛╨▓ Online</div>
+                            <div class="stat-value" id="stat-peers">тАФ</div>
+                            <div class="stat-sub" id="stat-peers-sub">
+                                ╨╕╨╖ тАФ ╨▓╤Б╨╡╨│╨╛
+                            </div>
+                            <div class="stat-icon">ЁЯЦз</div>
+                        </div>
+                        <div class="stat-card green">
+                            <div class="stat-label">Uptime</div>
+                            <div class="stat-value" id="stat-uptime">тАФ</div>
+                            <div class="stat-sub">╨б╨╡╤А╨▓╨╡╤А ╤А╨░╨▒╨╛╤В╨░╨╡╤В</div>
+                            <div class="stat-icon">тП▒</div>
+                        </div>
+                        <div class="stat-card yellow">
+                            <div class="stat-label">╨Ю╤В╨┤╨░╨╜╨╛</div>
+                            <div class="stat-value" id="stat-out">тАФ</div>
+                            <div class="stat-sub" id="stat-out-sub">╤Б╨║╨╛╤А╨╛╤Б╤В╤М</div>
+                            <div class="stat-icon">тмЖ</div>
+                        </div>
+                        <div class="stat-card purple">
+                            <div class="stat-label">╨Я╨╛╨╗╤Г╤З╨╡╨╜╨╛</div>
+                            <div class="stat-value" id="stat-in">тАФ</div>
+                            <div class="stat-sub" id="stat-in-sub">╤Б╨║╨╛╤А╨╛╤Б╤В╤М</div>
+                            <div class="stat-icon">тмЗ</div>
+                        </div>
+                    </div>
+
+                    <div class="section-header">
+                        <div class="section-title">ЁЯЦе Server Load</div>
+                    </div>
+                    <div class="stats-grid stats-3">
+                        <div class="stat-card cpu">
+                            <div class="stat-label">CPU</div>
+                            <div class="stat-value" id="stat-cpu">тАФ</div>
+                            <div class="stat-sub" id="stat-cpu-sub">
+                                ╨Ч╨░╨│╤А╤Г╨╖╨║╨░тАж
+                            </div>
+                            <div class="stat-icon">ЁЯЦе</div>
+                        </div>
+                        <div class="stat-card ram">
+                            <div class="stat-label">RAM</div>
+                            <div class="stat-value" id="stat-ram">тАФ</div>
+                            <div class="stat-sub" id="stat-ram-sub">
+                                ╨Ч╨░╨│╤А╤Г╨╖╨║╨░тАж
+                            </div>
+                            <div class="stat-icon">ЁЯзо</div>
+                        </div>
+                        <div class="stat-card disk">
+                            <div class="stat-label">Disk</div>
+                            <div class="stat-value" id="stat-disk">тАФ</div>
+                            <div class="stat-sub" id="stat-disk-sub">
+                                ╨Ч╨░╨│╤А╤Г╨╖╨║╨░тАж
+                            </div>
+                            <div class="stat-icon">ЁЯТ╛</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- тХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХР USERS тХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХР -->
+                <div class="page" id="page-users">
+                    <div class="section-header">
+                        <div class="section-title">
+                            ╨Я╨╛╨╗╤М╨╖╨╛╨▓╨░╤В╨╡╨╗╨╕
+                            <span class="count-badge" id="users-count">0</span>
+                        </div>
+                        <button class="btn btn-primary" id="add-user-btn">
+                            <svg
+                                width="13"
+                                height="13"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                            >
+                                <path
+                                    d="M12 5v14M5 12h14"
+                                    stroke="currentColor"
+                                    stroke-width="2.5"
+                                    stroke-linecap="round"
+                                />
+                            </svg>
+                            ╨Ф╨╛╨▒╨░╨▓╨╕╤В╤М
+                        </button>
+                    </div>
+                    <div class="search-wrap">
+                        <input
+                            class="input"
+                            id="users-search"
+                            type="text"
+                            placeholder="ЁЯФН  ╨Я╨╛╨╕╤Б╨║ ╨┐╨╛ ╨╕╨╝╨╡╨╜╨╕ ╨╕╨╗╨╕ IPтАж"
+                        />
+                    </div>
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>╨Ш╨╝╤П</th>
+                                    <th>IP-╨░╨┤╤А╨╡╤Б</th>
+                                    <th>╨б╤В╨░╤В╤Г╤Б</th>
+                                    <th>RX</th>
+                                    <th>TX</th>
+                                    <th style="text-align: right">╨Ф╨╡╨╣╤Б╤В╨▓╨╕╤П</th>
+                                </tr>
+                            </thead>
+                            <tbody id="users-tbody">
+                                <tr>
+                                    <td colspan="7">
+                                        <div class="empty-state">
+                                            <div class="empty-icon">тЧМ</div>
+                                            <p>╨Ч╨░╨│╤А╤Г╨╖╨║╨░ ╨┐╨╛╨╗╤М╨╖╨╛╨▓╨░╤В╨╡╨╗╨╡╨╣тАж</p>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- тХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХР SETTINGS тХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХР -->
+                <div class="page" id="page-settings">
+                    <div class="section-header">
+                        <div class="section-title">тЪЩя╕П ╨Э╨░╤Б╤В╤А╨╛╨╣╨║╨╕</div>
+                    </div>
+                    <div class="settings-card">
+                        <div class="settings-field">
+                            <label for="setting-token">Admin Token</label>
+                            <div class="field-row">
+                                <input
+                                    id="setting-token"
+                                    class="input"
+                                    type="password"
+                                    value=""
+                                    readonly
+                                />
+                                <button
+                                    class="btn btn-sm"
+                                    id="toggle-token-btn"
+                                    title="╨Я╨╛╨║╨░╨╖╨░╤В╤М/╤Б╨║╤А╤Л╤В╤М"
+                                >
+                                    ЁЯСБ
+                                </button>
+                            </div>
+                            <div class="field-hint">
+                                ╨в╨╛╨║╨╡╨╜ ╨░╨┤╨╝╨╕╨╜╨╕╤Б╤В╤А╨░╤В╨╛╤А╨░ (╤В╨╛╨╗╤М╨║╨╛ ╤З╤В╨╡╨╜╨╕╨╡)
+                            </div>
+                        </div>
+                        <div class="settings-field">
+                            <label for="setting-path">Panel Path</label>
+                            <input
+                                id="setting-path"
+                                class="input"
+                                type="text"
+                                value=""
+                                readonly
+                            />
+                            <div class="field-hint">
+                                ╨Я╤Г╤В╤М ╨┐╨░╨╜╨╡╨╗╨╕ ╤Г╨┐╤А╨░╨▓╨╗╨╡╨╜╨╕╤П (╤В╨╛╨╗╤М╨║╨╛ ╤З╤В╨╡╨╜╨╕╨╡)
+                            </div>
+                        </div>
+                        <div class="settings-field">
+                            <label for="setting-server">Server IP:Port</label>
+                            <input
+                                id="setting-server"
+                                class="input"
+                                type="text"
+                                value=""
+                                readonly
+                            />
+                            <div class="field-hint">
+                                ╨Р╨┤╤А╨╡╤Б ╤Б╨╡╤А╨▓╨╡╤А╨░ (╤В╨╛╨╗╤М╨║╨╛ ╤З╤В╨╡╨╜╨╕╨╡)
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+
+        <!-- тФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФА -->
+        <!--                  MODAL: ADD USER                          -->
+        <!-- тФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФА -->
+        <div id="modal-add" class="modal-overlay hidden">
+            <div
+                class="modal"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="add-modal-title"
+            >
+                <div class="modal-header">
+                    <span class="modal-title" id="add-modal-title"
+                        >╨Ф╨╛╨▒╨░╨▓╨╕╤В╤М ╨┐╨╛╨╗╤М╨╖╨╛╨▓╨░╤В╨╡╨╗╤П</span
+                    >
+                    <button
+                        class="modal-close"
+                        id="add-modal-close"
+                        title="╨Ч╨░╨║╤А╤Л╤В╤М"
+                    >
+                        тЬХ
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-field">
+                        <label for="field-name">╨Ш╨╝╤П ╨┐╨╛╨╗╤М╨╖╨╛╨▓╨░╤В╨╡╨╗╤П</label>
+                        <input
+                            id="field-name"
+                            class="input"
+                            type="text"
+                            placeholder="╨Э╨░╨┐╤А╨╕╨╝╨╡╤А: alice"
+                        />
+                        <div class="field-error hidden" id="err-name"></div>
+                    </div>
+                    <div class="form-field">
+                        <label for="field-short-id">Short ID</label>
+                        <input
+                            id="field-short-id"
+                            class="input"
+                            type="text"
+                            placeholder="╨Э╨░╨┐╤А╨╕╨╝╨╡╤А: 001"
+                        />
+                        <div class="field-hint">
+                            ╨г╨╜╨╕╨║╨░╨╗╤М╨╜╤Л╨╣ ╨╕╨┤╨╡╨╜╤В╨╕╤Д╨╕╨║╨░╤В╨╛╤А ╨┐╨╕╤А╨░ (╤З╨╕╤Б╨╗╨╛ ╨╕╨╗╨╕ ╤Б╤В╤А╨╛╨║╨░)
+                        </div>
+                        <div class="field-error hidden" id="err-short-id"></div>
+                    </div>
+                    <div class="form-field">
+                        <label for="field-ip">Internal IP</label>
+                        <input
+                            id="field-ip"
+                            class="input"
+                            type="text"
+                            placeholder="10.0.0.2"
+                        />
+                        <div class="field-hint">
+                            ╨Р╨┤╤А╨╡╤Б ╨▓ ╤В╤Г╨╜╨╜╨╡╨╗╤М╨╜╨╛╨╣ ╤Б╨╡╤В╨╕ (10.0.0.X)
+                        </div>
+                        <div class="field-error hidden" id="err-ip"></div>
+                    </div>
+                    <div class="form-field">
+                        <label for="field-secret">Secret Key</label>
+                        <div class="input-group">
+                            <input
+                                id="field-secret"
+                                class="input"
+                                type="text"
+                                placeholder="╨б╨│╨╡╨╜╨╡╤А╨╕╤А╤Г╨╣╤В╨╡ ╨╕╨╗╨╕ ╨▓╨▓╨╡╨┤╨╕╤В╨╡ ╨▓╤А╤Г╤З╨╜╤Г╤О"
+                            />
+                            <button
+                                class="btn"
+                                id="gen-secret-btn"
+                                title="╨б╨│╨╡╨╜╨╡╤А╨╕╤А╨╛╨▓╨░╤В╤М ╤Б╨╗╤Г╤З╨░╨╣╨╜╤Л╨╣ ╨║╨╗╤О╤З"
+                                style="white-space: nowrap"
+                            >
+                                ЁЯО▓ ╨У╨╡╨╜╨╡╤А╨╕╤А╨╛╨▓╨░╤В╤М
+                            </button>
+                        </div>
+                        <div class="field-hint">
+                            ╨б╨╗╤Г╤З╨░╨╣╨╜╨░╤П ╤Б╤В╤А╨╛╨║╨░ ╨┤╨╗╤П ╤И╨╕╤Д╤А╨╛╨▓╨░╨╜╨╕╤П ╤В╤Г╨╜╨╜╨╡╨╗╤П
+                        </div>
+                        <div class="field-error hidden" id="err-secret"></div>
+                    </div>
+                    <div
+                        class="field-error hidden"
+                        id="err-general"
+                        style="margin-top: 4px; font-size: 13px"
+                    ></div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn" id="add-cancel-btn">╨Ю╤В╨╝╨╡╨╜╨░</button>
+                    <button class="btn btn-primary" id="add-submit-btn">
+                        <svg
+                            width="13"
+                            height="13"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                        >
+                            <path
+                                d="M12 5v14M5 12h14"
+                                stroke="currentColor"
+                                stroke-width="2.5"
+                                stroke-linecap="round"
+                            />
+                        </svg>
+                        ╨б╨╛╨╖╨┤╨░╤В╤М
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- тФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФА -->
+        <!--                   MODAL: QR CODE                          -->
+        <!-- тФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФА -->
+        <div id="modal-qr" class="modal-overlay hidden">
+            <div
+                class="modal qr-modal"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="qr-modal-title"
+            >
+                <div class="modal-header">
+                    <span class="modal-title" id="qr-modal-title">QR-╨║╨╛╨┤</span>
+                    <button
+                        class="modal-close"
+                        id="qr-modal-close"
+                        title="╨Ч╨░╨║╤А╤Л╤В╤М"
+                    >
+                        тЬХ
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="qr-container">
+                        <img id="qr-img" src="" alt="QR-╨║╨╛╨┤ ╨║╨╛╨╜╤Д╨╕╨│╤Г╤А╨░╤Ж╨╕╨╕" />
+                        <div
+                            style="
+                                font-size: 13px;
+                                font-weight: 600;
+                                color: var(--text);
+                                margin-top: 4px;
+                            "
+                            id="qr-user-name"
+                        ></div>
+                        <div class="qr-hint">
+                            ╨Ю╤В╤Б╨║╨░╨╜╨╕╤А╤Г╨╣╤В╨╡ ╨▓ ╨╝╨╛╨▒╨╕╨╗╤М╨╜╨╛╨╝ ╨║╨╗╨╕╨╡╨╜╤В╨╡ Hasta-Vaquet
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-primary" id="qr-close-btn">
+                        ╨Ч╨░╨║╤А╤Л╤В╤М
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Toast container -->
+        <div id="toast-container"></div>
+
+        <!-- тФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФА -->
+        <!--                       JAVASCRIPT                          -->
+        <!-- тФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФА -->
+        <script>
+            /* тХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХР
+           STATE
+           тХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХР */
+            const STATE = {
+                token: "",
+                users: [],
+                refreshTimer: null,
+                refreshInterval: 30_000,
+                uptimeSec: 0,
+                uptimeTimer: null,
+                currentPage: "dashboard",
+            };
+
+            /* тХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХР
+           UTILITY HELPERS
+           тХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХР */
+
+            function fmtBytes(b) {
+                if (b == null || isNaN(b)) return "тАФ";
+                if (b >= 1_073_741_824)
+                    return (b / 1_073_741_824).toFixed(1) + " GB";
+                if (b >= 1_048_576) return (b / 1_048_576).toFixed(1) + " MB";
+                if (b >= 1_024) return (b / 1_024).toFixed(0) + " KB";
+                return b + " B";
+            }
+
+            function fmtUptime(sec) {
+            function fmtSpeed(bps) {
+                if (bps == null || isNaN(bps)) return "тАФ";
+                if (bps >= 1000000) return (bps / 1000000).toFixed(1) + " MB/s";
+                if (bps >= 1000) return (bps / 1000).toFixed(0) + " KB/s";
+            }
+                if (sec == null || isNaN(sec)) return "тАФ";
+                const s = Math.floor(sec);
+                const days = Math.floor(s / 86400);
+                const hrs = Math.floor((s % 86400) / 3600);
+                const min = Math.floor((s % 3600) / 60);
+                const rem = s % 60;
+                if (days > 0) return `${days}╨┤ ${hrs}╤З ${min}╨╝`;
+                if (hrs > 0) return `${hrs}╤З ${min}╨╝`;
+                if (min > 0) return `${min}╨╝ ${rem}╤Б`;
+                return `${rem}╤Б`;
+            }
+
+            function timeAgo(unixTs) {
+                if (!unixTs) return "╨╜╨╕╨║╨╛╨│╨┤╨░";
+                const diff = Math.floor(Date.now() / 1000) - unixTs;
+                if (diff < 30) return "╤В╨╛╨╗╤М╨║╨╛ ╤З╤В╨╛";
+                if (diff < 3600) return `${Math.floor(diff / 60)}╨╝ ╨╜╨░╨╖╨░╨┤`;
+                if (diff < 86400) return `${Math.floor(diff / 3600)}╤З ╨╜╨░╨╖╨░╨┤`;
+                return `${Math.floor(diff / 86400)}╨┤ ╨╜╨░╨╖╨░╨┤`;
+            }
+
+            function randomHex(bytes) {
+                bytes = bytes || 24;
+                const arr = new Uint8Array(bytes);
+                crypto.getRandomValues(arr);
+                return Array.from(arr, function (b) {
+                    return b.toString(16).padStart(2, "0");
+                }).join("");
+            }
+
+            function nextShortId(users) {
+                const nums = users
+                    .map(function (u) {
+                        return parseInt(u.short_id, 10);
+                    })
+                    .filter(function (n) {
+                        return !isNaN(n);
+                    });
+                const max = nums.length ? Math.max.apply(null, nums) : 0;
+                return String(max + 1).padStart(3, "0");
+            }
+
+            function nextIP(users) {
+                const octets = users
+                    .map(function (u) {
+                        const parts = (u.ip || "").split(".");
+                        return parseInt(parts[3], 10);
+                    })
+                    .filter(function (n) {
+                        return !isNaN(n) && n > 0;
+                    });
+                const max = octets.length ? Math.max.apply(null, octets) : 1;
+                return "10.0.0." + (max + 1);
+            }
+
+            function escHtml(str) {
+                return String(str)
+                    .replace(/&/g, "&amp;")
+                    .replace(/</g, "&lt;")
+                    .replace(/>/g, "&gt;")
+                    .replace(/"/g, "&quot;");
+            }
+
+            /* тХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХР
+           API
+           тХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХР */
+
+            const API_BASE = "{{API_BASE}}";
+
+            async function apiFetch(path, options) {
+                options = options || {};
+                const headers = {
+                    "Content-Type": "application/json",
+                    "X-Admin-Token": STATE.token,
+                };
+                if (options.headers) {
+                    Object.keys(options.headers).forEach(function (k) {
+                        headers[k] = options.headers[k];
+                    });
+                }
+                const res = await fetch(
+                    API_BASE + path,
+                    Object.assign({}, options, { headers: headers }),
+                );
+                if (res.status === 401)
+                    throw new Error("╨Э╨╡╨▓╨╡╤А╨╜╤Л╨╣ ╤В╨╛╨║╨╡╨╜. ╨Т╨╛╨╣╨┤╨╕╤В╨╡ ╤Б╨╜╨╛╨▓╨░.");
+                if (!res.ok) {
+                    let msg = "HTTP " + res.status;
+                    try {
+                        const d = await res.json();
+                        msg = d.error || d.message || msg;
+                    } catch (e) {}
+                    throw new Error(msg);
+                }
+                const ct = res.headers.get("content-type") || "";
+                if (ct.includes("application/json")) return res.json();
+                return res;
+            }
+
+            async function fetchStats() {
+                return apiFetch("/api/stats");
+            }
+
+            async function fetchHealthDetail() {
+                return apiFetch("/api/health/detail");
+            }
+
+            async function fetchUsers() {
+                const data = await apiFetch("/api/users");
+                return data.users || data || [];
+            }
+
+            async function createUser(payload) {
+                return apiFetch("/api/users", {
+                    method: "POST",
+                    body: JSON.stringify(payload),
+                });
+            }
+
+            async function deleteUser(id) {
+                return apiFetch("/api/users/" + encodeURIComponent(id), {
+                    method: "DELETE",
+                });
+            }
+
+            function configDownloadUrl(id) {
+                return (
+                    API_BASE +
+                    "/api/users/" +
+                    encodeURIComponent(id) +
+                    "/config?token=" +
+                    encodeURIComponent(STATE.token)
+                );
+            }
+
+            function qrUrl(id) {
+                return (
+                    API_BASE +
+                    "/api/users/" +
+                    encodeURIComponent(id) +
+                    "/qr?token=" +
+                    encodeURIComponent(STATE.token)
+                );
+            }
+
+            /* тХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХР
+           TOAST NOTIFICATIONS
+           тХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХР */
+
+            function showToast(message, type, duration) {
+                type = type || "info";
+                duration = duration || 3500;
+                const container = document.getElementById("toast-container");
+                const toast = document.createElement("div");
+                toast.className = "toast " + type;
+                const icons = { success: "тЬУ", error: "тЬХ", info: "тД╣" };
+                toast.innerHTML =
+                    '<span style="font-size:15px;">' +
+                    (icons[type] || "┬╖") +
+                    "</span><span>" +
+                    message +
+                    "</span>";
+                container.appendChild(toast);
+                setTimeout(function () {
+                    toast.style.transition = "opacity 0.3s, transform 0.3s";
+                    toast.style.opacity = "0";
+                    toast.style.transform = "translateY(8px)";
+                    setTimeout(function () {
+                        toast.remove();
+                    }, 350);
+                }, duration);
+            }
+
+            /* тХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХР
+           PAGE SWITCHING
+           тХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХР */
+
+            function switchPage(name) {
+                STATE.currentPage = name;
+                // Update nav items
+                document
+                    .querySelectorAll(".sidebar-nav .nav-item")
+                    .forEach(function (el) {
+                        el.classList.toggle("active", el.dataset.page === name);
+                    });
+                // Update pages
+                document
+                    .querySelectorAll(".content .page")
+                    .forEach(function (el) {
+                        el.classList.toggle("active", el.id === "page-" + name);
+                    });
+            }
+
+            /* тХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХР
+           RENDER
+           тХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХР */
+
+            function renderStats(stats) {
+                STATE.uptimeSec = stats.uptime_sec || 0;
+                document.getElementById("stat-peers").textContent =
+                    stats.peers_online ?? "тАФ";
+                document.getElementById("stat-peers-sub").textContent =
+                    "╨╕╨╖ " + (stats.peers_total ?? "тАФ") + " ╨▓╤Б╨╡╨│╨╛";
+                document.getElementById("stat-uptime").textContent = fmtUptime(
+                    STATE.uptimeSec,
+                );
+                document.getElementById("stat-out").textContent = fmtBytes(
+                    stats.total_out,
+                );
+                document.getElementById("stat-in").textContent = fmtBytes(
+                    stats.total_in,
+                );
+                document.getElementById("stat-out-sub").textContent = fmtSpeed(stats.tx_speed) + " u00b7 " + fmtBytes(stats.total_out);
+                document.getElementById("stat-in-sub").textContent = fmtSpeed(stats.rx_speed) + " u00b7 " + fmtBytes(stats.total_in);
+                document.getElementById("stat-cpu").textContent =
+                    (stats.cpu_pct ?? "тАФ") + "%";
+                document.getElementById("stat-ram").textContent =
+                    (stats.mem_pct ?? "тАФ") + "%";
+                document.getElementById("stat-disk").textContent =
+                    (stats.disk_pct ?? "тАФ") + "%";
+                // Reset subs to default
+                document.getElementById("stat-cpu-sub").textContent =
+                    "╨Ч╨░╨│╤А╤Г╨╖╨║╨░тАж";
+                document.getElementById("stat-ram-sub").textContent =
+                    "╨Ч╨░╨│╤А╤Г╨╖╨║╨░тАж";
+                document.getElementById("stat-disk-sub").textContent =
+                    "╨Ч╨░╨│╤А╤Г╨╖╨║╨░тАж";
+            }
+
+            function renderHealthDetail(detail) {
+                if (!detail) return;
+                if (detail.cpu_cores != null) {
+                    document.getElementById("stat-cpu-sub").textContent =
+                        detail.cpu_cores +
+                        " " +
+                        plural(detail.cpu_cores, "╤П╨┤╤А╨╛", "╤П╨┤╤А╨░", "╤П╨┤╨╡╤А");
+                }
+                if (detail.mem_used_gb != null && detail.mem_total_gb != null) {
+                    document.getElementById("stat-ram-sub").textContent =
+                        detail.mem_used_gb.toFixed(1) +
+                        " / " +
+                        detail.mem_total_gb.toFixed(1) +
+                        " GB";
+                }
+                if (
+                    detail.disk_used_gb != null &&
+                    detail.disk_total_gb != null
+                ) {
+                    document.getElementById("stat-disk-sub").textContent =
+                        detail.disk_used_gb.toFixed(0) +
+                        " / " +
+                        detail.disk_total_gb.toFixed(0) +
+                        " GB";
+                }
+            }
+
+            function plural(n, one, few, many) {
+                const m = Math.abs(n) % 100;
+                const m10 = m % 10;
+                if (m > 10 && m < 20) return many;
+                if (m10 > 1 && m10 < 5) return few;
+                if (m10 === 1) return one;
+                return many;
+            }
+
+            function renderUsers(users) {
+                STATE.users = users;
+                document.getElementById("users-count").textContent =
+                    users.length;
+                applyUserFilter();
+            }
+
+            function applyUserFilter() {
+                const query = (
+                    document.getElementById("users-search").value || ""
+                )
+                    .toLowerCase()
+                    .trim();
+                const users = STATE.users;
+                const tbody = document.getElementById("users-tbody");
+
+                const filtered = query
+                    ? users.filter(function (u) {
+                          return (
+                              (u.name || "").toLowerCase().includes(query) ||
+                              (u.ip || "").toLowerCase().includes(query) ||
+                              String(u.short_id).includes(query)
+                          );
+                      })
+                    : users;
+
+                if (!filtered.length) {
+                    tbody.innerHTML =
+                        '<tr><td colspan="7"><div class="empty-state"><div class="empty-icon">' +
+                        (query ? "ЁЯФН" : "ЁЯСе") +
+                        "</div><p>" +
+                        (query
+                            ? "╨Э╨╕╤З╨╡╨│╨╛ ╨╜╨╡ ╨╜╨░╨╣╨┤╨╡╨╜╨╛ ╨┐╨╛ ╨╖╨░╨┐╤А╨╛╤Б╤Г ┬л" +
+                              escHtml(query) +
+                              "┬╗"
+                            : "╨Э╨╡╤В ╨┐╨╛╨╗╤М╨╖╨╛╨▓╨░╤В╨╡╨╗╨╡╨╣. ╨Ф╨╛╨▒╨░╨▓╤М╤В╨╡ ╨┐╨╡╤А╨▓╨╛╨│╨╛!") +
+                        "</p></div></td></tr>";
+                    return;
+                }
+
+                tbody.innerHTML = filtered
+                    .map(function (u) {
+                        const online = !!u.online;
+                        const statusClass = online ? "online" : "";
+                        const statusLabel = online
+                            ? "Online"
+                            : u.last_seen
+                              ? timeAgo(u.last_seen)
+                              : "Offline";
+                        return (
+                            '<tr data-id="' +
+                            escHtml(String(u.short_id)) +
+                            '">' +
+                            '<td><span class="id-badge">' +
+                            escHtml(String(u.short_id)) +
+                            "</span></td>" +
+                            '<td style="font-weight:500;">' +
+                            escHtml(u.name || "тАФ") +
+                            "</td>" +
+                            "<td><code>" +
+                            escHtml(u.ip || "тАФ") +
+                            "</code></td>" +
+                            '<td><div class="peer-status ' +
+                            statusClass +
+                            '"><span class="peer-dot ' +
+                            statusClass +
+                            '"></span><span class="status-text">' +
+                            statusLabel +
+                            "</span></div></td>" +
+                            '<td class="traffic-val">' +
+                            fmtBytes(u.byte_in) +
+                            "</td>" +
+                            '<td class="traffic-val">' +
+                            fmtBytes(u.byte_out) +
+                            "</td>" +
+                            '<td><div class="actions-cell">' +
+                            '<button class="btn btn-ghost btn-sm" title="╨б╨║╨░╤З╨░╤В╤М config.json" data-action="download" data-id="' +
+                            escHtml(String(u.short_id)) +
+                            '">тмЗ</button>' +
+                            '<button class="btn btn-ghost btn-sm" title="╨Я╨╛╨║╨░╨╖╨░╤В╤М QR-╨║╨╛╨┤" data-action="qr" data-id="' +
+                            escHtml(String(u.short_id)) +
+                            '" data-name="' +
+                            escHtml(u.name || "") +
+                            '">ЁЯУ▒</button>' +
+                            '<button class="btn btn-ghost btn-sm btn-danger" title="╨г╨┤╨░╨╗╨╕╤В╤М ╨┐╨╛╨╗╤М╨╖╨╛╨▓╨░╤В╨╡╨╗╤П" data-action="delete" data-id="' +
+                            escHtml(String(u.short_id)) +
+                            '" data-name="' +
+                            escHtml(u.name || "") +
+                            '">ЁЯЧС</button>' +
+                            "</div></td></tr>"
+                        );
+                    })
+                    .join("");
+            }
+
+            /* тХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХР
+           DATA REFRESH
+           тХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХР */
+
+            let _refreshing = false;
+
+            async function refreshAll(silent) {
+                if (_refreshing) return;
+                _refreshing = true;
+
+                const spinner = document.getElementById("refresh-spinner");
+                const txt = document.getElementById("refresh-text");
+                const dot = document.getElementById("sidebar-status-dot");
+                const hdrTxt = document.getElementById("sidebar-status-text");
+
+                spinner.classList.add("spinning");
+                if (!silent) txt.textContent = "╨Ю╨▒╨╜╨╛╨▓╨╗╨╡╨╜╨╕╨╡тАж";
+
+                try {
+                    const [stats, users] = await Promise.all([
+                        fetchStats(),
+                        fetchUsers(),
+                    ]);
+                    renderStats(stats);
+                    renderUsers(users);
+
+                    // Try to fetch health detail for richer server load display
+                    fetchHealthDetail()
+                        .then(function (detail) {
+                            renderHealthDetail(detail);
+                        })
+                        .catch(function () {
+                            // Fallback: keep default "╨Ч╨░╨│╤А╤Г╨╖╨║╨░тАж" labels from renderStats
+                        });
+
+                    dot.style.background = "var(--green)";
+                    dot.style.boxShadow = "0 0 5px var(--green)";
+                    hdrTxt.textContent = "╨б╨╡╤А╨▓╨╡╤А ╨╛╨╜╨╗╨░╨╣╨╜";
+
+                    const now = new Date();
+                    txt.textContent =
+                        "╨Ю╨▒╨╜╨╛╨▓╨╗╨╡╨╜╨╛ ╨▓ " +
+                        now.toLocaleTimeString("ru-RU", {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                            second: "2-digit",
+                        }) +
+                        " ┬╖ ╨░╨▓╤В╨╛ ╤З╨╡╤А╨╡╨╖ 30╤Б";
+                } catch (err) {
+                    dot.style.background = "var(--red)";
+                    dot.style.boxShadow = "0 0 5px var(--red)";
+                    hdrTxt.textContent = "╨Ю╤И╨╕╨▒╨║╨░ ╤Б╨╛╨╡╨┤╨╕╨╜╨╡╨╜╨╕╤П";
+                    txt.textContent = "╨Э╨╡ ╤Г╨┤╨░╨╗╨╛╤Б╤М ╨╛╨▒╨╜╨╛╨▓╨╕╤В╤М ╨┤╨░╨╜╨╜╤Л╨╡";
+                    if (!silent) showToast(err.message, "error");
+                    if (
+                        err.message.includes("╤В╨╛╨║╨╡╨╜") ||
+                        err.message.includes("401")
+                    )
+                        logout();
+                } finally {
+                    spinner.classList.remove("spinning");
+                    _refreshing = false;
+                }
+            }
+
+            function scheduleRefresh() {
+                clearInterval(STATE.refreshTimer);
+                STATE.refreshTimer = setInterval(function () {
+                    refreshAll(true);
+                }, STATE.refreshInterval);
+            }
+
+            /* тХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХР
+           AUTH
+           тХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХР */
+
+            function login(token) {
+                STATE.token = token.trim();
+                localStorage.setItem("hv_admin_token", STATE.token);
+
+                document.getElementById("login-screen").classList.add("hidden");
+                document.getElementById("app").classList.remove("hidden");
+
+                // Populate settings fields
+                document.getElementById("setting-token").value = STATE.token;
+                document.getElementById("setting-path").value = API_BASE;
+                document.getElementById("setting-server").value =
+                    window.location.hostname +
+                    (window.location.port ? ":" + window.location.port : "");
+
+                switchPage("dashboard");
+                refreshAll();
+                scheduleRefresh();
+
+                clearInterval(STATE.uptimeTimer);
+                STATE.uptimeTimer = setInterval(function () {
+                    STATE.uptimeSec++;
+                    document.getElementById("stat-uptime").textContent =
+                        fmtUptime(STATE.uptimeSec);
+                }, 1000);
+            }
+
+            function logout() {
+                clearInterval(STATE.refreshTimer);
+                clearInterval(STATE.uptimeTimer);
+                STATE.token = "";
+                STATE.uptimeSec = 0;
+                localStorage.removeItem("hv_admin_token");
+
+                document.getElementById("app").classList.add("hidden");
+                document
+                    .getElementById("login-screen")
+                    .classList.remove("hidden");
+                document.getElementById("token-input").value = "";
+                setLoginError("");
+            }
+
+            function setLoginError(msg) {
+                const el = document.getElementById("login-error");
+                if (msg) {
+                    el.textContent = msg;
+                    el.classList.remove("hidden");
+                } else {
+                    el.classList.add("hidden");
+                }
+            }
+
+            async function attemptLogin() {
+                const tokenInput = document.getElementById("token-input");
+                const token = tokenInput.value.trim();
+                if (!token) {
+                    setLoginError("╨Т╨▓╨╡╨┤╨╕╤В╨╡ ╤В╨╛╨║╨╡╨╜ ╨░╨┤╨╝╨╕╨╜╨╕╤Б╤В╤А╨░╤В╨╛╤А╨░.");
+                    tokenInput.classList.add("error");
+                    return;
+                }
+                tokenInput.classList.remove("error");
+
+                const btn = document.getElementById("login-btn");
+                btn.disabled = true;
+                btn.textContent = "╨Я╤А╨╛╨▓╨╡╤А╨║╨░тАж";
+
+                try {
+                    STATE.token = token;
+                    await fetchStats();
+                    login(token);
+                    setLoginError("");
+                } catch (err) {
+                    STATE.token = "";
+                    setLoginError("╨Э╨╡╨▓╨╡╤А╨╜╤Л╨╣ ╤В╨╛╨║╨╡╨╜ ╨╕╨╗╨╕ ╤Б╨╡╤А╨▓╨╡╤А ╨╜╨╡╨┤╨╛╤Б╤В╤Г╨┐╨╡╨╜.");
+                    tokenInput.classList.add("error");
+                } finally {
+                    btn.disabled = false;
+                    btn.innerHTML =
+                        '<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> ╨Т╨╛╨╣╤В╨╕';
+                }
+            }
+
+            /* тХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХР
+           USER ACTIONS
+           тХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХР */
+
+            function downloadConfig(id) {
+                const url = configDownloadUrl(id);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = "config-" + id + ".json";
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                showToast("╨б╨║╨░╤З╨╕╨▓╨░╤О ╨║╨╛╨╜╤Д╨╕╨│ ╨┤╨╗╤П " + id + "тАж", "info");
+            }
+
+            function openQr(id, name) {
+                document.getElementById("qr-modal-title").textContent =
+                    "QR-╨║╨╛╨┤ тАФ " + (name || id);
+                document.getElementById("qr-user-name").textContent =
+                    name || id;
+                const img = document.getElementById("qr-img");
+                img.src = "";
+                img.alt = "╨Ч╨░╨│╤А╤Г╨╖╨║╨░ QRтАж";
+                document.getElementById("modal-qr").classList.remove("hidden");
+                setTimeout(function () {
+                    img.src = qrUrl(id);
+                }, 50);
+                img.onerror = function () {
+                    img.alt = "╨Э╨╡ ╤Г╨┤╨░╨╗╨╛╤Б╤М ╨╖╨░╨│╤А╤Г╨╖╨╕╤В╤М QR-╨║╨╛╨┤";
+                };
+            }
+
+            function closeQr() {
+                document.getElementById("modal-qr").classList.add("hidden");
+                document.getElementById("qr-img").src = "";
+            }
+
+            async function confirmDelete(id, name) {
+                const label = name ? '"' + name + '" (' + id + ")" : id;
+                if (
+                    !confirm(
+                        "╨г╨┤╨░╨╗╨╕╤В╤М ╨┐╨╛╨╗╤М╨╖╨╛╨▓╨░╤В╨╡╨╗╤П " +
+                            label +
+                            "?\n╨Ф╨╡╨╣╤Б╤В╨▓╨╕╨╡ ╨╜╨╡╨╛╨▒╤А╨░╤В╨╕╨╝╨╛.",
+                    )
+                )
+                    return;
+                try {
+                    await deleteUser(id);
+                    showToast("╨Я╨╛╨╗╤М╨╖╨╛╨▓╨░╤В╨╡╨╗╤М " + label + " ╤Г╨┤╨░╨╗╤С╨╜.", "success");
+                    await refreshAll(true);
+                } catch (err) {
+                    showToast("╨Ю╤И╨╕╨▒╨║╨░ ╤Г╨┤╨░╨╗╨╡╨╜╨╕╤П: " + err.message, "error");
+                }
+            }
+
+            /* тХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХР
+           ADD USER MODAL
+           тХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХР */
+
+            function openAddModal() {
+                document.getElementById("field-name").value = "";
+                document.getElementById("field-short-id").value = nextShortId(
+                    STATE.users,
+                );
+                document.getElementById("field-ip").value = nextIP(STATE.users);
+                document.getElementById("field-secret").value = randomHex(24);
+                [
+                    "err-name",
+                    "err-short-id",
+                    "err-ip",
+                    "err-secret",
+                    "err-general",
+                ].forEach(function (id) {
+                    const el = document.getElementById(id);
+                    el.textContent = "";
+                    el.classList.add("hidden");
+                });
+                [
+                    "field-name",
+                    "field-short-id",
+                    "field-ip",
+                    "field-secret",
+                ].forEach(function (id) {
+                    document.getElementById(id).classList.remove("error");
+                });
+                document.getElementById("modal-add").classList.remove("hidden");
+                setTimeout(function () {
+                    document.getElementById("field-name").focus();
+                }, 100);
+            }
+
+            function closeAddModal() {
+                document.getElementById("modal-add").classList.add("hidden");
+            }
+
+            function showFieldError(fieldId, errId, msg) {
+                document.getElementById(fieldId).classList.add("error");
+                const err = document.getElementById(errId);
+                err.textContent = msg;
+                err.classList.remove("hidden");
+            }
+
+            async function submitAddUser() {
+                const name = document.getElementById("field-name").value.trim();
+                const shortId = document
+                    .getElementById("field-short-id")
+                    .value.trim();
+                const ip = document.getElementById("field-ip").value.trim();
+                const secret = document
+                    .getElementById("field-secret")
+                    .value.trim();
+
+                [
+                    "err-name",
+                    "err-short-id",
+                    "err-ip",
+                    "err-secret",
+                    "err-general",
+                ].forEach(function (id) {
+                    const el = document.getElementById(id);
+                    el.textContent = "";
+                    el.classList.add("hidden");
+                });
+                [
+                    "field-name",
+                    "field-short-id",
+                    "field-ip",
+                    "field-secret",
+                ].forEach(function (id) {
+                    document.getElementById(id).classList.remove("error");
+                });
+
+                let hasError = false;
+                if (!name) {
+                    showFieldError(
+                        "field-name",
+                        "err-name",
+                        "╨г╨║╨░╨╢╨╕╤В╨╡ ╨╕╨╝╤П ╨┐╨╛╨╗╤М╨╖╨╛╨▓╨░╤В╨╡╨╗╤П.",
+                    );
+                    hasError = true;
+                }
+                if (!shortId) {
+                    showFieldError(
+                        "field-short-id",
+                        "err-short-id",
+                        "╨г╨║╨░╨╢╨╕╤В╨╡ Short ID.",
+                    );
+                    hasError = true;
+                } else if (
+                    STATE.users.some(function (u) {
+                        return String(u.short_id) === shortId;
+                    })
+                ) {
+                    showFieldError(
+                        "field-short-id",
+                        "err-short-id",
+                        "╨н╤В╨╛╤В Short ID ╤Г╨╢╨╡ ╨╖╨░╨╜╤П╤В.",
+                    );
+                    hasError = true;
+                }
+                if (!ip) {
+                    showFieldError("field-ip", "err-ip", "╨г╨║╨░╨╢╨╕╤В╨╡ IP-╨░╨┤╤А╨╡╤Б.");
+                    hasError = true;
+                } else if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(ip)) {
+                    showFieldError(
+                        "field-ip",
+                        "err-ip",
+                        "╨Э╨╡╨║╨╛╤А╤А╨╡╨║╤В╨╜╤Л╨╣ IP-╨░╨┤╤А╨╡╤Б.",
+                    );
+                    hasError = true;
+                } else if (
+                    STATE.users.some(function (u) {
+                        return u.ip === ip;
+                    })
+                ) {
+                    showFieldError(
+                        "field-ip",
+                        "err-ip",
+                        "╨н╤В╨╛╤В IP ╤Г╨╢╨╡ ╨╕╤Б╨┐╨╛╨╗╤М╨╖╤Г╨╡╤В╤Б╤П.",
+                    );
+                    hasError = true;
+                }
+                if (!secret) {
+                    showFieldError(
+                        "field-secret",
+                        "err-secret",
+                        "╨г╨║╨░╨╢╨╕╤В╨╡ ╨╕╨╗╨╕ ╤Б╨│╨╡╨╜╨╡╤А╨╕╤А╤Г╨╣╤В╨╡ ╨║╨╗╤О╤З.",
+                    );
+                    hasError = true;
+                }
+                if (hasError) return;
+
+                const submitBtn = document.getElementById("add-submit-btn");
+                submitBtn.disabled = true;
+                submitBtn.textContent = "╨б╨╛╨╖╨┤╨░╨╜╨╕╨╡тАж";
+
+                try {
+                    await createUser({
+                        short_id: parseInt(shortId, 10),
+                        name: name,
+                        secret_key: secret,
+                        ip: ip,
+                    });
+                    closeAddModal();
+                    showToast('╨Я╨╛╨╗╤М╨╖╨╛╨▓╨░╤В╨╡╨╗╤М "' + name + '" ╤Б╨╛╨╖╨┤╨░╨╜!', "success");
+                    await refreshAll(true);
+                } catch (err) {
+                    const errEl = document.getElementById("err-general");
+                    errEl.textContent = "╨Ю╤И╨╕╨▒╨║╨░: " + err.message;
+                    errEl.classList.remove("hidden");
+                } finally {
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML =
+                        '<svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg> ╨б╨╛╨╖╨┤╨░╤В╤М';
+                }
+            }
+
+            /* тХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХР
+           EVENT WIRING
+           тХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХР */
+
+            // Sidebar navigation
+            document
+                .querySelectorAll(".sidebar-nav .nav-item")
+                .forEach(function (el) {
+                    el.addEventListener("click", function () {
+                        switchPage(el.dataset.page);
+                    });
+                });
+
+            // User table event delegation
+            document
+                .getElementById("users-tbody")
+                .addEventListener("click", function (e) {
+                    const btn = e.target.closest("button[data-action]");
+                    if (!btn) return;
+                    const action = btn.dataset.action;
+                    const id = btn.dataset.id;
+                    const name = btn.dataset.name || "";
+                    if (action === "download") downloadConfig(id);
+                    if (action === "qr") openQr(id, name);
+                    if (action === "delete") confirmDelete(id, name);
+                });
+
+            // Users search filter
+            document
+                .getElementById("users-search")
+                .addEventListener("input", function () {
+                    applyUserFilter();
+                });
+
+            // Settings: toggle token visibility
+            document
+                .getElementById("toggle-token-btn")
+                .addEventListener("click", function () {
+                    const inp = document.getElementById("setting-token");
+                    if (inp.type === "password") {
+                        inp.type = "text";
+                        this.textContent = "ЁЯЩИ";
+                    } else {
+                        inp.type = "password";
+                        this.textContent = "ЁЯСБ";
+                    }
+                });
+
+            // Login
+            document
+                .getElementById("login-btn")
+                .addEventListener("click", attemptLogin);
+            document
+                .getElementById("token-input")
+                .addEventListener("keydown", function (e) {
+                    if (e.key === "Enter") attemptLogin();
+                    document
+                        .getElementById("token-input")
+                        .classList.remove("error");
+                    setLoginError("");
+                });
+
+            // Logout
+            document
+                .getElementById("logout-btn")
+                .addEventListener("click", logout);
+
+            // Add User modal
+            document
+                .getElementById("add-user-btn")
+                .addEventListener("click", openAddModal);
+            document
+                .getElementById("add-modal-close")
+                .addEventListener("click", closeAddModal);
+            document
+                .getElementById("add-cancel-btn")
+                .addEventListener("click", closeAddModal);
+            document
+                .getElementById("add-submit-btn")
+                .addEventListener("click", submitAddUser);
+
+            // Generate secret
+            document
+                .getElementById("gen-secret-btn")
+                .addEventListener("click", function () {
+                    document.getElementById("field-secret").value =
+                        randomHex(24);
+                    document
+                        .getElementById("field-secret")
+                        .classList.remove("error");
+                    document
+                        .getElementById("err-secret")
+                        .classList.add("hidden");
+                });
+
+            // QR modal close
+            document
+                .getElementById("qr-modal-close")
+                .addEventListener("click", closeQr);
+            document
+                .getElementById("qr-close-btn")
+                .addEventListener("click", closeQr);
+
+            // Enter in add-user form fields submits
+            [
+                "field-name",
+                "field-short-id",
+                "field-ip",
+                "field-secret",
+            ].forEach(function (id) {
+                document
+                    .getElementById(id)
+                    .addEventListener("keydown", function (e) {
+                        if (e.key === "Enter") submitAddUser();
+                    });
+            });
+
+            // Close modals on overlay click
+            document
+                .getElementById("modal-add")
+                .addEventListener("click", function (e) {
+                    if (e.target === e.currentTarget) closeAddModal();
+                });
+            document
+                .getElementById("modal-qr")
+                .addEventListener("click", function (e) {
+                    if (e.target === e.currentTarget) closeQr();
+                });
+
+            // Escape closes modals
+            document.addEventListener("keydown", function (e) {
+                if (e.key === "Escape") {
+                    closeAddModal();
+                    closeQr();
+                }
+            });
+
+            /* тХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХР
+           INIT тАФ AUTO-LOGIN FROM localStorage
+           тХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХРтХР */
+
+            (function init() {
+                const saved = localStorage.getItem("hv_admin_token");
+                if (saved) {
+                    document.getElementById("token-input").value = saved;
+                    STATE.token = saved;
+                    fetchStats()
+                        .then(function () {
+                            login(saved);
+                        })
+                        .catch(function () {
+                            STATE.token = "";
+                            localStorage.removeItem("hv_admin_token");
+                            document.getElementById("token-input").value = "";
+                        });
+                }
+            })();
+        </script>
+    </body>
+</html>

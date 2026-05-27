@@ -1,6 +1,6 @@
 module hasta-vaquet
 
-go 1.26.2
+go 1.22
 
 require (
 	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
@@ -15,3 +15,5 @@ require (
 	golang.org/x/sync v0.20.0 // indirect
 	golang.org/x/tools v0.45.0 // indirect
 )
+
+replace hasta-vaquet/core => ./core

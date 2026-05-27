@@ -418,14 +418,12 @@ func handleReset(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
-	peersMu.RLock()
+	peersMu.Lock()
 	for _, p := range peers {
 		p.ByteIn.Store(0)
 		p.ByteOut.Store(0)
-		p.CumRx.Store(0)
-		p.CumTx.Store(0)
 	}
-	peersMu.RUnlock()
+	peersMu.Unlock()
 	prevBytesIn = 0
 	prevBytesOut = 0
 	json.NewEncoder(w).Encode(map[string]string{"status": "reset"})
