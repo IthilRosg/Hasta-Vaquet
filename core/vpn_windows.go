@@ -250,47 +250,6 @@ func (p *vpnPlatform) readerLoop(v *VPN) {
 	}
 }
 
-func (p *vpnPlatform) activateKillSwitch(v *VPN) {
-	gw := p.realGateway
-	if gw == "" {
-		gw = getDefaultGateway()
-	}
-	if gw == "" {
-		log.Printf("[ROUTE] activateKillSwitch: no gateway, skipping")
-		return
-	}
-	log.Printf("[ROUTE] activateKillSwitch: adding server route %s via %s", v.config.ServerIP, gw)
-	hide := func(cmd string, args ...string) {
-		c := exec.Command(cmd, args...)
-		c.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
-		c.Run()
-	}
-	// 1. Добавляем маршрут до сервера через реальный шлюз — чтобы reconnect мог до него достучаться
-	hide("route", "add", v.config.ServerIP, "mask", "255.255.255.255", gw, "metric", "1")
-	// 2. Удаляем default route — блокируем весь остальной трафик
-	hide("route", "delete", "0.0.0.0", "mask", "0.0.0.0")
-}
-
-func (p *vpnPlatform) deactivateKillSwitch(v *VPN) {
-	gw := p.realGateway
-	if gw == "" {
-		gw = getDefaultGateway()
-	}
-	hide := func(cmd string, args ...string) {
-		c := exec.Command(cmd, args...)
-		c.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
-		c.Run()
-	}
-	if gw == "" {
-		log.Printf("[ROUTE] deactivateKillSwitch: no gateway, skipping route restore")
-		return
-	}
-	// ВАЖНО: gateway — всегда p.realGateway (192.168.x.x), НЕ v.config.InternalIP.
-	// if НЕ указываем — пусть Windows сама выберет физический интерфейс.
-	log.Printf("[ROUTE] deactivateKillSwitch: restoring default via %s (no iface pinning)", gw)
-	hide("route", "add", "0.0.0.0", "mask", "0.0.0.0", gw, "metric", "1")
-}
-
 func platformDumpRoutes() {
 	c := exec.Command("route", "print", "0.0.0.0")
 	c.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
@@ -435,8 +394,6 @@ func platformCloseTunnel(v *VPN)                 { plat.closeTunnel(v) }
 func platformDestroyTunnel(v *VPN)               { plat.destroyTunnel() }
 func platformReaderLoop(v *VPN)                  { plat.readerLoop(v) }
 func platformWriterLoop(v *VPN)                  { plat.writerLoop(v) }
-func platformActivateKillSwitch(v *VPN)          { plat.activateKillSwitch(v) }
-func platformDeactivateKillSwitch(v *VPN)        { plat.deactivateKillSwitch(v) }
 func platformRefreshServerRoute(v *VPN)          { plat.refreshServerRoute(v) }
 func platformGatewayIsValid(v *VPN) bool         { return plat.gatewayIsValid(v) }
 func platformReconnectSocket(v *VPN)             { plat.reconnectSocket(v) }

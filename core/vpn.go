@@ -39,6 +39,7 @@ type VPN struct {
 	sessionTotalTx atomic.Uint64
 	sessionTotalRx atomic.Uint64
 	listener       StatusListener
+	killSwitch     KillSwitch
 	mu             sync.Mutex
 	stopping       atomic.Bool
 	lastAliveMs    atomic.Int64  // unix ms последнего отправленного пакета
@@ -51,9 +52,10 @@ type VPN struct {
 
 func New(cfg Config, listener StatusListener) *VPN {
 	return &VPN{
-		config:   cfg,
-		key:      DeriveKey(cfg.SecretKey),
-		listener: listener,
+		config:     cfg,
+		key:        DeriveKey(cfg.SecretKey),
+		listener:   listener,
+		killSwitch: newKillSwitch(),
 	}
 }
 
@@ -98,7 +100,7 @@ func (v *VPN) Stop() {
 	v.running.Store(false)
 	close(v.stopCh)
 	v.platformCloseTunnel()
-	v.platformDeactivateKillSwitch()
+	v.killSwitch.Deactivate()
 	if v.conn != nil {
 		v.conn.Close()
 		v.conn = nil
@@ -141,8 +143,6 @@ func (v *VPN) platformCloseTunnel()                 { platformCloseTunnel(v) }
 func (v *VPN) platformDestroyTunnel()               { platformDestroyTunnel(v) }
 func (v *VPN) platformReaderLoop()                  { platformReaderLoop(v) }
 func (v *VPN) platformWriterLoop()                  { platformWriterLoop(v) }
-func (v *VPN) platformActivateKillSwitch()          { platformActivateKillSwitch(v) }
-func (v *VPN) platformDeactivateKillSwitch()        { platformDeactivateKillSwitch(v) }
 func (v *VPN) platformRefreshServerRoute()          { platformRefreshServerRoute(v) }
 func (v *VPN) platformReconnectSocket()             { platformReconnectSocket(v) }
 func (v *VPN) platformReconnectSession()            { platformReconnectSession(v) }
@@ -179,10 +179,12 @@ func (v *VPN) persistentPingLoop() {
 		if isDead && !wasDead {
 			wasDead = true
 			v.callback("reconnecting", 0, 0, 0, 0, 0, 0)
-			// Полный Stop+Start — как ручной Disconnect+Connect
-			log.Printf("[VPN] persistentPingLoop: connection lost, triggering full reconnect")
+			log.Printf("[VPN] persistentPingLoop: connection lost, activating kill switch + reconnect")
+			if err := v.killSwitch.Activate(v.config.ServerIP, ""); err != nil {
+				log.Printf("[VPN] killSwitch.Activate: %v", err)
+			}
 			v.Reconnect()
-			return // новая горутина persistentPingLoop уже запущена в Start()
+			return
 		} else if !isDead && wasDead {
 			wasDead = false
 			v.callback("connected", 0, 0, 0, 0, 0, 0)

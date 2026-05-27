@@ -16,8 +16,6 @@ func (p *vpnPlatform) openTunnel(v *VPN) error {
 func (p *vpnPlatform) closeTunnel(v *VPN)      {}
 func (p *vpnPlatform) readerLoop(v *VPN)       {}
 func (p *vpnPlatform) writerLoop(v *VPN)       {}
-func (p *vpnPlatform) activateKillSwitch(v *VPN)   {}
-func (p *vpnPlatform) deactivateKillSwitch(v *VPN) {}
 
 func platformDumpRoutes() {}
 
@@ -27,8 +25,6 @@ func platformOpenTunnel(v *VPN) error            { return plat.openTunnel(v) }
 func platformCloseTunnel(v *VPN)                 { plat.closeTunnel(v) }
 func platformReaderLoop(v *VPN)                  { plat.readerLoop(v) }
 func platformWriterLoop(v *VPN)                  { plat.writerLoop(v) }
-func platformActivateKillSwitch(v *VPN)          { plat.activateKillSwitch(v) }
-func platformDeactivateKillSwitch(v *VPN)        { plat.deactivateKillSwitch(v) }
 func platformRefreshServerRoute(v *VPN)          { plat.refreshServerRoute(v) }
 func platformGatewayIsValid(v *VPN) bool         { return plat.gatewayIsValid(v) }
 func platformReconnectSocket(v *VPN)             { plat.reconnectSocket(v) }

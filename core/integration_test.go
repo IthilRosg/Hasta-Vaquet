@@ -281,34 +281,28 @@ func TestPassiveReconnectDetection(t *testing.T) {
 }
 
 func TestKillSwitchHooksNoPanic(t *testing.T) {
-	// Этот тест проверяет что activateKillSwitch сначала добавляет route до сервера
-	// прежде чем удалить default route. На этой платформе — только проверка вызова
-	// (реальная имплементация в vpn_windows.go)
-
 	vpn := New(Config{
 		ServerIP: "31.42.120.154", Port: 9999, ShortID: 1,
 		SecretKey: "ks-route", RoutingSalt: "salt",
 		InternalIP: "10.0.0.1", GatewayIP: "192.168.1.1",
 	}, &testListener{})
 
-	// Симулируем kill switch через прямой вызов platform-хуков
-	// Это проверит что вызовы не падают
 	func() {
 		defer func() {
 			if r := recover(); r != nil {
-				t.Fatalf("platformActivateKillSwitch panicked: %v", r)
+				t.Fatalf("killSwitch.Activate panicked: %v", r)
 			}
 		}()
-		vpn.platformActivateKillSwitch()
+		_ = vpn.killSwitch.Activate(vpn.config.ServerIP, "192.168.1.1")
 	}()
 
 	func() {
 		defer func() {
 			if r := recover(); r != nil {
-				t.Fatalf("platformDeactivateKillSwitch panicked: %v", r)
+				t.Fatalf("killSwitch.Deactivate panicked: %v", r)
 			}
 		}()
-		vpn.platformDeactivateKillSwitch()
+		_ = vpn.killSwitch.Deactivate()
 	}()
 
 	t.Log("KillSwitch hook calls completed without panic")
