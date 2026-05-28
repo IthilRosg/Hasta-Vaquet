@@ -7,6 +7,7 @@
   "dns": "1.1.1.1",
   "routing_salt": "HastaVaquetGlobal",
   "log_file": "server.log",
+  "fec": 1,
   "users": [
     {
       "short_id": 1,
@@ -19,6 +20,12 @@
       "name": "Bob",
       "secret_key": "BobSecret2026",
       "ip": "10.0.0.11"
+    },
+    {
+      "short_id": 3,
+      "name": "Test PC",
+      "secret_key": "ed2ee4b8aa5a7d79a1bf6c78b21356ddf5f79ab44f7e9873",
+      "ip": "10.0.0.12"
     }
   ]
 }
