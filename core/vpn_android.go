@@ -90,7 +90,7 @@ func (p *vpnPlatform) readerLoop(v *VPN) {
 			continue
 		}
 
-		decrypted, err := v.cp.Decrypt(buf[:n])
+		decrypted, err := v.decCP.Decrypt(buf[:n])
 		if err != nil {
 			continue
 		}
@@ -159,11 +159,15 @@ func (p *vpnPlatform) writerLoop(v *VPN) {
 			continue
 		}
 
-		encrypted, err := v.cp.Encrypt(buf[:n], v.config.ShortID, v.config.RoutingSalt)
+		encrypted, err := v.encCP.Encrypt(buf[:n], v.config.ShortID, v.config.RoutingSalt)
 		if err == nil {
 			fec := v.config.FEC
-			if fec < 1 { fec = 1 }
-			if fec > 5 { fec = 5 }
+			if fec < 1 {
+				fec = 1
+			}
+			if fec > 5 {
+				fec = 5
+			}
 			for i := 0; i < fec; i++ {
 				v.conn.Write(encrypted)
 			}
@@ -180,10 +184,10 @@ func (p *vpnPlatform) writerLoop(v *VPN) {
 
 var plat vpnPlatform
 
-func platformOpenTunnel(v *VPN) error            { return plat.openTunnel(v) }
-func platformCloseTunnel(v *VPN)                 { plat.closeTunnel(v) }
-func platformReaderLoop(v *VPN)                  { plat.readerLoop(v) }
-func platformWriterLoop(v *VPN)                  { plat.writerLoop(v) }
+func platformOpenTunnel(v *VPN) error { return plat.openTunnel(v) }
+func platformCloseTunnel(v *VPN)      { plat.closeTunnel(v) }
+func platformReaderLoop(v *VPN)       { plat.readerLoop(v) }
+func platformWriterLoop(v *VPN)       { plat.writerLoop(v) }
 func (p *vpnPlatform) reconnectSocket(v *VPN) {
 	// Закрываем старый сокет если есть
 	if v.conn != nil {
@@ -211,15 +215,15 @@ func (p *vpnPlatform) reconnectSocket(v *VPN) {
 	log.Printf("[ANDROID] reconnectSocket: socket recreated (%s)", serverAddr)
 }
 
-func platformRefreshServerRoute(v *VPN)          { plat.refreshServerRoute(v) }
-func platformGatewayIsValid(v *VPN) bool         { return plat.gatewayIsValid(v) }
-func platformReconnectSocket(v *VPN)             { plat.reconnectSocket(v) }
-func platformReconnectSession(v *VPN)            { plat.reconnectSession(v) }
-func platformDestroyTunnel(v *VPN)               { plat.destroyTunnel() }
+func platformRefreshServerRoute(v *VPN)  { plat.refreshServerRoute(v) }
+func platformGatewayIsValid(v *VPN) bool { return plat.gatewayIsValid(v) }
+func platformReconnectSocket(v *VPN)     { plat.reconnectSocket(v) }
+func platformReconnectSession(v *VPN)    { plat.reconnectSession(v) }
+func platformDestroyTunnel(v *VPN)       { plat.destroyTunnel() }
 
-func (p *vpnPlatform) refreshServerRoute(v *VPN)       {}
-func (p *vpnPlatform) gatewayIsValid(v *VPN) bool      { return true }
-func (p *vpnPlatform) reconnectSession(v *VPN)          {}
-func (p *vpnPlatform) destroyTunnel()                  {}
+func (p *vpnPlatform) refreshServerRoute(v *VPN)  {}
+func (p *vpnPlatform) gatewayIsValid(v *VPN) bool { return true }
+func (p *vpnPlatform) reconnectSession(v *VPN)    {}
+func (p *vpnPlatform) destroyTunnel()             {}
 
 func platformDumpRoutes() {}

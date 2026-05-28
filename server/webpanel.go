@@ -5,6 +5,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"hasta-vaquet/protocol"
 	"net/http"
 	"os"
 	"sort"
@@ -366,9 +367,9 @@ func saveConfig() error {
 	defer configMu.Unlock()
 
 	peersMu.RLock()
-	users := make([]ConfigUser, 0, len(peers))
+	users := make([]protocol.User, 0, len(peers))
 	for _, p := range peers {
-		users = append(users, ConfigUser{
+		users = append(users, protocol.User{
 			ShortID:   p.ShortID,
 			Name:      p.Name,
 			SecretKey: p.KeyRaw,

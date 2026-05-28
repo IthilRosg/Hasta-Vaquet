@@ -1,0 +1,13 @@
+{
+  "profile_name": "Test PC no encrypt",
+  "server_ip": "45.134.39.18",
+  "port": 19999,
+  "short_id": 3,
+  "secret_key": "ed2ee4b8aa5a7d79a1bf6c78b21356ddf5f79ab44f7e9873",
+  "routing_salt": "HastaVaquetGlobal",
+  "internal_ip": "10.0.0.12",
+  "gateway_ip": "192.168.100.1",
+  "dns": "1.1.1.1",
+  "fec": 1,
+  "no_encrypt": true
+}

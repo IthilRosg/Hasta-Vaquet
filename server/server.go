@@ -3,7 +3,6 @@ package main
 import (
 	"crypto/sha256"
 	"encoding/binary"
-	"encoding/json"
 	"flag"
 	"log"
 	"net"
@@ -15,35 +14,37 @@ import (
 	"time"
 
 	vpncore "hasta-vaquet/core"
+	"hasta-vaquet/protocol"
 
 	"github.com/songgao/water"
 )
 
 type Peer struct {
-	ShortID   uint16
-	Name      string
-	KeyRaw    string // оригинальный ключ для генерации клиентских конфигов
-	Key       [32]byte
-	CP        *vpncore.CipherPack
-	Internal  string
-	UDPAddr   *net.UDPAddr
-	udpMu     sync.Mutex
-	ByteOut   atomic.Int64 // сбрасываемые каждые 30с (для лога)
-	ByteIn    atomic.Int64 // сбрасываемые каждые 30с (для лога)
-	CumTx     atomic.Int64 // кумулятивный TX — никогда не сбрасывается
-	CumRx     atomic.Int64 // кумулятивный RX — никогда не сбрасывается
-	LastSeen  atomic.Int64 // unix timestamp последнего пакета
+	ShortID  uint16
+	Name     string
+	KeyRaw   string // оригинальный ключ для генерации клиентских конфигов
+	Key      [32]byte
+	CP       *vpncore.CipherPack
+	cpMu     sync.Mutex // защита CP.Encrypt/Decrypt от data race (TUN reader + main loop)
+	Internal string
+	UDPAddr  *net.UDPAddr
+	udpMu    sync.Mutex
+	ByteOut  atomic.Int64 // сбрасываемые каждые 30с (для лога)
+	ByteIn   atomic.Int64 // сбрасываемые каждые 30с (для лога)
+	CumTx    atomic.Int64 // кумулятивный TX — никогда не сбрасывается
+	CumRx    atomic.Int64 // кумулятивный RX — никогда не сбрасывается
+	LastSeen atomic.Int64 // unix timestamp последнего пакета
 }
 
 // aggregateStats — счётчики ошибок для агрегированного логирования.
 // Чтобы не спамить лог на каждый пакет, логируем раз в 60 сек.
 var (
-	dropNoPeer      atomic.Int64 // пакеты с неизвестным ShortID
-	dropReplay      atomic.Int64 // bloom-фильтр отклонил (replay)
-	dropHMAC        atomic.Int64 // HMAC mismatch
-	dropDecrypt     atomic.Int64 // ошибка расшифровки
-	lastDropLogAt   time.Time
-	dropLogMu       sync.Mutex
+	dropNoPeer    atomic.Int64 // пакеты с неизвестным ShortID
+	dropReplay    atomic.Int64 // bloom-фильтр отклонил (replay)
+	dropHMAC      atomic.Int64 // HMAC mismatch
+	dropDecrypt   atomic.Int64 // ошибка расшифровки
+	lastDropLogAt time.Time
+	dropLogMu     sync.Mutex
 )
 
 var (
@@ -57,7 +58,7 @@ var (
 	bloomCount      atomic.Int64 // кол-во уникальных записей в bloom
 	configFilePath  string
 	serverStartTime time.Time
-	serverCfg       Config
+	serverCfg       protocol.Config
 	configMu        sync.Mutex // защита saveConfig от concurrent writes
 )
 
@@ -112,28 +113,7 @@ func logDrops() {
 	}
 }
 
-type ConfigUser struct {
-	ShortID   uint16 `json:"short_id"`
-	Name      string `json:"name"`
-	SecretKey string `json:"secret_key"`
-	IP        string `json:"ip"`
-}
-
-type Config struct {
-	Port        int          `json:"port"`
-	AdminPort   int          `json:"admin_port"`
-	AdminToken  string       `json:"admin_token"`
-	AdminPath   string       `json:"admin_path"`
-	ServerIP    string       `json:"server_ip"`
-	GatewayIP   string       `json:"gateway_ip"`
-	DNS         string       `json:"dns"`
-	RoutingSalt string       `json:"routing_salt"`
-	LogFile     string       `json:"log_file"`
-	FEC         int          `json:"fec"` // server→client FEC (0/1=off, 2=2x)
-	Users       []ConfigUser `json:"users"`
-}
-
-func loadConfig() Config {
+func loadConfig() protocol.Config {
 	var port int
 	var configFile string
 
@@ -141,35 +121,14 @@ func loadConfig() Config {
 	flag.StringVar(&configFile, "config", "server_config.json", "Путь к server_config.json")
 	flag.Parse()
 
-	cfg := Config{}
-	if f, err := os.Open(configFile); err == nil {
-		if decErr := json.NewDecoder(f).Decode(&cfg); decErr != nil {
-			log.Fatalf("[ОШИБКА] Невалидный JSON в %s: %v", configFile, decErr)
-		}
-		f.Close()
+	cfg, err := protocol.LoadConfig(configFile)
+	if err != nil {
+		log.Printf("[ОШИБКА] Не удалось загрузить %s: %v — использую defaults", configFile, err)
 	}
-
-	if cfg.Port == 0 {
-		cfg.Port = 9999
+	if port > 0 {
+		cfg.Port = port
 	}
-	if cfg.AdminPort == 0 {
-		cfg.AdminPort = 9998
-	}
-	if cfg.AdminPath == "" {
-		cfg.AdminPath = "/hasta-vaquet"
-	}
-	if cfg.GatewayIP == "" {
-		cfg.GatewayIP = "192.168.100.1"
-	}
-	if cfg.DNS == "" {
-		cfg.DNS = "1.1.1.1"
-	}
-	if cfg.RoutingSalt == "" {
-		cfg.RoutingSalt = "HastaVaquetGlobal"
-	}
-	if cfg.LogFile == "" {
-		cfg.LogFile = "server.log"
-	}
+	cfg.SetDefaults()
 	if len(cfg.Users) == 0 {
 		log.Fatal("[ОШИБКА] Нет пользователей в конфиге")
 	}
@@ -197,9 +156,15 @@ func main() {
 	ipToPeer = make(map[string]*Peer)
 	for _, u := range cfg.Users {
 		key := sha256.Sum256([]byte(u.SecretKey))
-		cp, err := vpncore.NewCipherPack(key[:])
-		if err != nil {
-			logger.Fatalf("[ОШИБКА] cipher pack for user %s: %v", u.Name, err)
+		var cp *vpncore.CipherPack
+		if serverCfg.NoEncrypt {
+			cp = vpncore.NewNoopCipherPack()
+		} else {
+			var err error
+			cp, err = vpncore.NewCipherPack(key[:])
+			if err != nil {
+				logger.Fatalf("[ОШИБКА] cipher pack for user %s: %v", u.Name, err)
+			}
 		}
 		p := &Peer{
 			ShortID:  u.ShortID,
@@ -329,14 +294,20 @@ func main() {
 			if addr == nil {
 				continue
 			}
+			peer.cpMu.Lock()
 			enc, err := peer.CP.Encrypt(packet[:n], peer.ShortID, routingSalt)
+			peer.cpMu.Unlock()
 			if err != nil {
 				logger.Printf("[ОШИБКА] encrypt: %v", err)
 				continue
 			}
 			fec := serverCfg.FEC
-			if fec < 1 { fec = 1 }
-			if fec > 5 { fec = 5 }
+			if fec < 1 {
+				fec = 1
+			}
+			if fec > 5 {
+				fec = 5
+			}
 			for i := 0; i < fec; i++ {
 				if _, err := conn.WriteToUDP(enc, addr); err != nil {
 					logger.Printf("[ОШИБКА] WriteToUDP: %v", err)
@@ -369,15 +340,21 @@ func main() {
 			continue
 		}
 
-		bkey := bloomKey(shortID, nonce)
-		if !bloomCheck(bkey) {
-			dropReplay.Add(1)
-			logDrops()
-			continue
+		var bkey []byte
+		// Без шифрования нет реального nonce — пропускаем bloom check
+		if !serverCfg.NoEncrypt {
+			bkey = bloomKey(shortID, nonce)
+			if !bloomCheck(bkey) {
+				dropReplay.Add(1)
+				logDrops()
+				continue
+			}
 		}
 
+		peer.cpMu.Lock()
 		decrypted, err := peer.CP.Decrypt(buffer[:n])
 		if err != nil {
+			peer.cpMu.Unlock()
 			if strings.Contains(err.Error(), "HMAC") {
 				dropHMAC.Add(1)
 			} else {
@@ -386,28 +363,38 @@ func main() {
 			logDrops()
 			continue
 		}
-		bloomSet(bkey)
-		bloomCount.Add(1)
+		if !serverCfg.NoEncrypt {
+			bloomSet(bkey)
+			bloomCount.Add(1)
+		}
 		peer.LastSeen.Store(time.Now().Unix())
 		if len(decrypted) == 0 {
+			peer.cpMu.Unlock()
 			logger.Printf("[KEEP-ALIVE] ShortID=%d\n", shortID)
 			peer.udpMu.Lock()
 			peer.UDPAddr = addr
 			peer.udpMu.Unlock()
 			// Echo back for tunnel latency measurement
+			peer.cpMu.Lock()
 			enc, err := peer.CP.Encrypt([]byte{0x01}, peer.ShortID, routingSalt)
+			peer.cpMu.Unlock()
 			if err != nil {
 				logger.Printf("[ОШИБКА] echo encrypt: %v", err)
 				continue
 			}
 			fec := serverCfg.FEC
-			if fec < 1 { fec = 1 }
-			if fec > 5 { fec = 5 }
+			if fec < 1 {
+				fec = 1
+			}
+			if fec > 5 {
+				fec = 5
+			}
 			for i := 0; i < fec; i++ {
 				conn.WriteToUDP(enc, addr)
 			}
 			continue
 		}
+		peer.cpMu.Unlock()
 		peer.udpMu.Lock()
 		peer.UDPAddr = addr
 		peer.udpMu.Unlock()

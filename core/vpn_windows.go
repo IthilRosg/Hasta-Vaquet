@@ -106,18 +106,21 @@ func (p *vpnPlatform) openTunnel(v *VPN) error {
 		run("netsh", "interface", "ip", "set", "dns", "name=HastaVaquet", "static", v.config.DNS)
 		run("netsh", "interface", "ipv6", "add", "route", "::/0", "name=HastaVaquet", v.config.InternalIP, "metric=1")
 		// Set low interface metric so VPN default route beats Ethernet
-		exec.Command("powershell", "-NoProfile", "-Command",
-			fmt.Sprintf("Set-NetIPInterface -InterfaceIndex %s -InterfaceMetric 1 -ErrorAction SilentlyContinue", index)).Run()
+		run("powershell", "-NoProfile", "-Command",
+			fmt.Sprintf("Set-NetIPInterface -InterfaceIndex %s -InterfaceMetric 1 -ErrorAction SilentlyContinue", index))
 		p.ipSet = true
 	}
 	// Set VPN interface metric to 1, physical interfaces to 1000 — VPN becomes primary
-	exec.Command("powershell", "-NoProfile", "-Command",
-		fmt.Sprintf("Set-NetIPInterface -InterfaceIndex %s -InterfaceMetric 1 -ErrorAction SilentlyContinue", index)).Run()
-	exec.Command("powershell", "-NoProfile", "-Command",
-		"Get-NetIPInterface -InterfaceAlias 'Ethernet' -ErrorAction SilentlyContinue | Set-NetIPInterface -InterfaceMetric 1000").Run()
-	exec.Command("powershell", "-NoProfile", "-Command",
-		"Get-NetIPInterface -InterfaceAlias 'Wi-Fi' -ErrorAction SilentlyContinue | Set-NetIPInterface -InterfaceMetric 1000").Run()
+	run("powershell", "-NoProfile", "-Command",
+		fmt.Sprintf("Set-NetIPInterface -InterfaceIndex %s -InterfaceMetric 1 -ErrorAction SilentlyContinue", index))
+	run("powershell", "-NoProfile", "-Command",
+		"Get-NetIPInterface -InterfaceAlias 'Ethernet' -ErrorAction SilentlyContinue | Set-NetIPInterface -InterfaceMetric 1000")
+	run("powershell", "-NoProfile", "-Command",
+		"Get-NetIPInterface -InterfaceAlias 'Wi-Fi' -ErrorAction SilentlyContinue | Set-NetIPInterface -InterfaceMetric 1000")
 
+	// Wintun = layer 3 TUN, gateway 0.0.0.0 = on-link (без ARP).
+	// writerLoop фильтрует только IPv4, ARP не обрабатывается.
+	// Используем on-link маршрут, как WireGuard.
 	run("route", "delete", v.config.ServerIP)
 	run("route", "add", v.config.ServerIP, "mask", "255.255.255.255", p.realGateway)
 	if index != "" {
@@ -137,8 +140,8 @@ func (p *vpnPlatform) openTunnel(v *VPN) error {
 	if err != nil {
 		return fmt.Errorf("dial: %w", err)
 	}
-	conn.SetWriteBuffer(512 * 1024) // 512KB send buffer — prevents Write blocking on RTT
-	conn.SetReadBuffer(512 * 1024)  // 512KB receive buffer
+	conn.SetWriteBuffer(2 * 1024 * 1024) // 2MB send buffer
+	conn.SetReadBuffer(2 * 1024 * 1024)  // 2MB receive buffer
 	v.conn = conn
 
 	sess, err := p.adapter.StartSession(0x800000)
@@ -172,11 +175,10 @@ func (p *vpnPlatform) closeTunnel(v *VPN) {
 		hide("route", "delete", "0.0.0.0", "mask", "0.0.0.0", "0.0.0.0", "if", p.ifIndex)
 	}
 	hide("route", "delete", "0.0.0.0", v.config.InternalIP) // старая запись со шлюзом 10.0.0.x
-	// Restore physical interface metric to auto
-	exec.Command("powershell", "-NoProfile", "-Command",
-		"Get-NetIPInterface -InterfaceAlias 'Ethernet' -ErrorAction SilentlyContinue | Set-NetIPInterface -InterfaceMetric 'auto'").Run()
-	exec.Command("powershell", "-NoProfile", "-Command",
-		"Get-NetIPInterface -InterfaceAlias 'Wi-Fi' -ErrorAction SilentlyContinue | Set-NetIPInterface -InterfaceMetric 'auto'").Run()
+	hide("powershell", "-NoProfile", "-Command",
+		"Get-NetIPInterface -InterfaceAlias 'Ethernet' -ErrorAction SilentlyContinue | Set-NetIPInterface -InterfaceMetric 'auto'")
+	hide("powershell", "-NoProfile", "-Command",
+		"Get-NetIPInterface -InterfaceAlias 'Wi-Fi' -ErrorAction SilentlyContinue | Set-NetIPInterface -InterfaceMetric 'auto'")
 	hide("netsh", "interface", "ipv6", "delete", "route", "::/0", "name=HastaVaquet")
 
 	// Сессию закрываем — иначе следующий StartSession не сможет создать новую.
@@ -235,7 +237,7 @@ func (p *vpnPlatform) readerLoop(v *VPN) {
 		if n < 4+2+12 {
 			continue
 		}
-		decrypted, err := v.cp.Decrypt(buf[:n])
+		decrypted, err := v.decCP.Decrypt(buf[:n])
 		if err != nil {
 			continue
 		}
@@ -276,6 +278,8 @@ func platformDumpRoutes() {
 }
 
 func (p *vpnPlatform) writerLoop(v *VPN) {
+	// Один синхронный writerLoop — без параллельных воркеров.
+	// Параллельные воркеры вызывают packet reordering → TCP duplicate ACK → slowdown.
 	for {
 		select {
 		case <-v.stopCh:
@@ -287,32 +291,23 @@ func (p *vpnPlatform) writerLoop(v *VPN) {
 			time.Sleep(100 * time.Millisecond)
 			continue
 		}
-		t0 := time.Now()
 		packet, err := sess.ReceivePacket()
-		t1 := time.Now()
 		if err == nil {
 			if len(packet) >= 20 && (packet[0]>>4) == 4 {
-				encrypted, err := v.cp.Encrypt(packet, v.config.ShortID, v.config.RoutingSalt)
-				t2 := time.Now()
+				encrypted, err := v.encCP.Encrypt(packet, v.config.ShortID, v.config.RoutingSalt)
 				if err == nil && v.conn != nil {
 					fec := v.config.FEC
-					if fec < 1 { fec = 1 }
-					if fec > 5 { fec = 5 }
+					if fec < 1 {
+						fec = 1
+					}
+					if fec > 5 {
+						fec = 5
+					}
 					for i := 0; i < fec; i++ {
 						v.conn.Write(encrypted)
 					}
-					t3 := time.Now()
-					rxUs := t1.Sub(t0).Microseconds()
-					encUs := t2.Sub(t1).Microseconds()
-					writeUs := t3.Sub(t2).Microseconds()
-					total := rxUs + encUs + writeUs
 					v.txBytes.Add(int64(len(encrypted)))
 					v.sessionTotalTx.Add(uint64(len(encrypted)))
-					// Force log first 100 packets
-					p.logPerfCount++
-					if p.logPerfCount <= 100 {
-						log.Printf("[PERF] recv=%dµs enc=%dµs write=%dµs total=%dµs (%dB)", rxUs, encUs, writeUs, total, len(packet))
-					}
 				}
 			}
 			sess.ReleaseReceivePacket(packet)
@@ -364,6 +359,7 @@ func (p *vpnPlatform) gatewayIsValid(v *VPN) bool {
 		log.Printf("[ROUTE] gatewayIsValid: false (gateway=%q)", gw)
 		return false
 	}
+	// Без PowerShell — проверяем кэшированный шлюз
 	return true
 }
 
@@ -427,15 +423,15 @@ func (p *vpnPlatform) reconnectSocket(v *VPN) {
 
 var plat vpnPlatform
 
-func platformOpenTunnel(v *VPN) error            { return plat.openTunnel(v) }
-func platformCloseTunnel(v *VPN)                 { plat.closeTunnel(v) }
-func platformDestroyTunnel(v *VPN)               { plat.destroyTunnel() }
-func platformReaderLoop(v *VPN)                  { plat.readerLoop(v) }
-func platformWriterLoop(v *VPN)                  { plat.writerLoop(v) }
-func platformRefreshServerRoute(v *VPN)          { plat.refreshServerRoute(v) }
-func platformGatewayIsValid(v *VPN) bool         { return plat.gatewayIsValid(v) }
-func platformReconnectSocket(v *VPN)             { plat.reconnectSocket(v) }
-func platformReconnectSession(v *VPN)            { plat.reconnectSession(v) }
+func platformOpenTunnel(v *VPN) error    { return plat.openTunnel(v) }
+func platformCloseTunnel(v *VPN)         { plat.closeTunnel(v) }
+func platformDestroyTunnel(v *VPN)       { plat.destroyTunnel() }
+func platformReaderLoop(v *VPN)          { plat.readerLoop(v) }
+func platformWriterLoop(v *VPN)          { plat.writerLoop(v) }
+func platformRefreshServerRoute(v *VPN)  { plat.refreshServerRoute(v) }
+func platformGatewayIsValid(v *VPN) bool { return plat.gatewayIsValid(v) }
+func platformReconnectSocket(v *VPN)     { plat.reconnectSocket(v) }
+func platformReconnectSession(v *VPN)    { plat.reconnectSession(v) }
 
 func getInterfaceIndex(name string) string {
 	cmd := exec.Command("powershell", "-Command",

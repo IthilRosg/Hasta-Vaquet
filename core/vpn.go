@@ -17,9 +17,9 @@ type echoSlot struct {
 }
 
 const (
-	reconnectTimeout = 6 * time.Second // без ответа 6с → UI "reconnecting"
-	pingInterval     = 3 * time.Second // интервал отправки ping
-	routeCheckInterval = 3 * time.Second // интервал проверки шлюза
+	reconnectTimeout   = 6 * time.Second  // без ответа 6с → UI "reconnecting"
+	pingInterval       = 3 * time.Second  // интервал отправки ping
+	routeCheckInterval = 30 * time.Second // интервал проверки шлюза (без PowerShell)
 )
 
 // StatusListener — интерфейс для колбеков состояния VPN.
@@ -29,48 +29,48 @@ type StatusListener interface {
 
 // VPN — клиентский VPN-движок.
 type VPN struct {
-	config             Config
-	key                [32]byte
-	cp                 *CipherPack
-	conn               *net.UDPConn
-	running            atomic.Bool
-	stopCh             chan struct{}
-	txBytes            atomic.Int64
-	rxBytes            atomic.Int64
-	sessionTotalTx     atomic.Uint64
-	sessionTotalRx     atomic.Uint64
-	listener           StatusListener
-	killSwitch         KillSwitch
-	killSwitchEnabled  atomic.Bool
-	reconnecting       atomic.Bool
-	mu                 sync.Mutex
-	stopping           atomic.Bool
-	lastAliveMs        atomic.Int64  // unix ms последнего отправленного пакета
-	lastPacketRx       atomic.Int64  // unix ms последнего полученного пакета
-	echoRtt            atomic.Int64  // latest RTT in ms
-	echoRing           [echoWindowSize]echoSlot
-	echoPos            int
-	echoMu             sync.Mutex
+	config            Config
+	key               [32]byte
+	encCP             *CipherPack // для Encrypt (writerLoop + ping) — отдельно от decCP
+	decCP             *CipherPack // для Decrypt (readerLoop) — убираем lock contention
+	conn              *net.UDPConn
+	running           atomic.Bool
+	stopCh            chan struct{}
+	txBytes           atomic.Int64
+	rxBytes           atomic.Int64
+	sessionTotalTx    atomic.Uint64
+	sessionTotalRx    atomic.Uint64
+	listener          StatusListener
+	killSwitch        KillSwitch
+	killSwitchEnabled atomic.Bool
+	reconnecting      atomic.Bool
+	mu                sync.Mutex
+	stopping          atomic.Bool
+	lastAliveMs       atomic.Int64 // unix ms последнего отправленного пакета
+	lastPacketRx      atomic.Int64 // unix ms последнего полученного пакета
+	echoRtt           atomic.Int64 // latest RTT in ms
+	echoRing          [echoWindowSize]echoSlot
+	echoPos           int
+	echoMu            sync.Mutex
 }
 
 func New(cfg Config, listener StatusListener) *VPN {
 	key := DeriveKey(cfg.SecretKey)
-	cp, err := NewCipherPack(key[:])
-	if err != nil {
-		// fallback: без кеша cipher (не должно случиться)
-		v := &VPN{
-			config:     cfg,
-			key:        key,
-			listener:   listener,
-			killSwitch: newKillSwitch(),
-		}
-		v.killSwitchEnabled.Store(true)
-		return v
+
+	var encCP, decCP *CipherPack
+	if cfg.NoEncrypt {
+		encCP = NewNoopCipherPack()
+		decCP = NewNoopCipherPack()
+	} else {
+		encCP, _ = NewCipherPack(key[:])
+		decCP, _ = NewCipherPack(key[:])
 	}
+
 	v := &VPN{
 		config:     cfg,
 		key:        key,
-		cp:         cp,
+		encCP:      encCP,
+		decCP:      decCP,
 		listener:   listener,
 		killSwitch: newKillSwitch(),
 	}
@@ -166,14 +166,14 @@ func (v *VPN) callback(status string, txSpeed, rxSpeed int64, totalTx, totalRx u
 
 // ─── Платформозависимые хуки ─────────────────────────────────────
 
-func (v *VPN) platformOpenTunnel() error            { return platformOpenTunnel(v) }
-func (v *VPN) platformCloseTunnel()                 { platformCloseTunnel(v) }
-func (v *VPN) platformDestroyTunnel()               { platformDestroyTunnel(v) }
-func (v *VPN) platformReaderLoop()                  { platformReaderLoop(v) }
-func (v *VPN) platformWriterLoop()                  { platformWriterLoop(v) }
-func (v *VPN) platformRefreshServerRoute()          { platformRefreshServerRoute(v) }
-func (v *VPN) platformReconnectSocket()             { platformReconnectSocket(v) }
-func (v *VPN) platformReconnectSession()            { platformReconnectSession(v) }
+func (v *VPN) platformOpenTunnel() error   { return platformOpenTunnel(v) }
+func (v *VPN) platformCloseTunnel()        { platformCloseTunnel(v) }
+func (v *VPN) platformDestroyTunnel()      { platformDestroyTunnel(v) }
+func (v *VPN) platformReaderLoop()         { platformReaderLoop(v) }
+func (v *VPN) platformWriterLoop()         { platformWriterLoop(v) }
+func (v *VPN) platformRefreshServerRoute() { platformRefreshServerRoute(v) }
+func (v *VPN) platformReconnectSocket()    { platformReconnectSocket(v) }
+func (v *VPN) platformReconnectSession()   { platformReconnectSession(v) }
 
 // ─── Stateless Persistent Ping ───────────────────────────────────
 
@@ -191,11 +191,15 @@ func (v *VPN) persistentPingLoop() {
 		}
 		conn := v.conn
 		if conn != nil {
-			pkt, err := v.cp.Encrypt([]byte{}, v.config.ShortID, v.config.RoutingSalt)
+			pkt, err := v.encCP.Encrypt([]byte{}, v.config.ShortID, v.config.RoutingSalt)
 			if err == nil {
 				fec := v.config.FEC
-				if fec < 1 { fec = 1 }
-				if fec > 5 { fec = 5 }
+				if fec < 1 {
+					fec = 1
+				}
+				if fec > 5 {
+					fec = 5
+				}
 				for i := 0; i < fec; i++ {
 					conn.Write(pkt)
 				}
