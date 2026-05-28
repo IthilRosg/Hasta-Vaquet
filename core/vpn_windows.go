@@ -3,6 +3,7 @@
 package core
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net"
@@ -48,6 +49,17 @@ func getDefaultGateway() string {
 
 func (p *vpnPlatform) openTunnel(v *VPN) error {
 	log.Printf("[ROUTE] openTunnel: detecting default gateway")
+
+	// Transport dial must happen BEFORE route setup so we know the
+	// server IP is resolvable and the connection is established.
+	ctx := context.Background()
+	conn, transportType, err := v.transport.Dial(ctx)
+	if err != nil {
+		return fmt.Errorf("transport dial: %w", err)
+	}
+	v.conn = conn
+	v.transportType = transportType
+	log.Printf("[TRANSPORT] Connected via %s", transportType)
 	for i := 0; i < 3; i++ {
 		p.realGateway = getDefaultGateway()
 		if p.realGateway != "" {
@@ -133,17 +145,6 @@ func (p *vpnPlatform) openTunnel(v *VPN) error {
 	log.Printf("[ROUTE] openTunnel done: ifIndex=%s, internal=%s, gateway=%s, server=%s",
 		p.ifIndex, v.config.InternalIP, p.realGateway, v.config.ServerIP)
 
-	conn, err := net.DialUDP("udp", nil, &net.UDPAddr{
-		IP:   net.ParseIP(v.config.ServerIP),
-		Port: v.config.Port,
-	})
-	if err != nil {
-		return fmt.Errorf("dial: %w", err)
-	}
-	conn.SetWriteBuffer(2 * 1024 * 1024) // 2MB send buffer
-	conn.SetReadBuffer(2 * 1024 * 1024)  // 2MB receive buffer
-	v.conn = conn
-
 	sess, err := p.adapter.StartSession(0x800000)
 	if err != nil {
 		return fmt.Errorf("session: %w", err)
@@ -204,69 +205,75 @@ func (p *vpnPlatform) destroyTunnel() {
 	log.Printf("[ROUTE] destroyTunnel: adapter + session destroyed")
 }
 
-func (p *vpnPlatform) readerLoop(v *VPN) {
-	buf := make([]byte, 65535)
-	for {
-		select {
-		case <-v.stopCh:
-			return
-		default:
-		}
+type readResult struct {
+	n   int
+	err error
+}
 
-		// Локальная копия — защита от гонки с persistentPingLoop (может обнулить v.conn)
+func (p *vpnPlatform) readerLoop(v *VPN) {
+	ch := make(chan readResult, 5)
+
+	for {
 		conn := v.conn
 		if conn == nil {
 			time.Sleep(100 * time.Millisecond)
 			continue
 		}
-		conn.SetReadDeadline(time.Now().Add(10 * time.Second))
 
-		n, err := conn.Read(buf)
-		if err != nil {
-			if v.stopping.Load() {
-				return
-			}
-			if strings.Contains(err.Error(), "use of closed") {
+		buf := make([]byte, 65535) // fresh buffer per iteration — no race
+		go func() {
+			n, err := conn.Read(buf)
+			ch <- readResult{n, err}
+		}()
+
+		select {
+		case <-v.stopCh:
+			return
+		case r := <-ch:
+			if r.err != nil {
+				if v.stopping.Load() {
+					return
+				}
 				continue
 			}
-			continue
-		}
-		// Любой успешный пакет = сервер жив
-		v.lastPacketRx.Store(time.Now().UnixMilli())
+			v.lastPacketRx.Store(time.Now().UnixMilli())
 
-		if n < 4+2+12 {
-			continue
-		}
-		decrypted, err := v.decCP.Decrypt(buf[:n])
-		if err != nil {
-			continue
-		}
-		if len(decrypted) == 0 {
-			continue
-		}
-		// Server echo response (1-byte marker for RTT measurement)
-		if len(decrypted) == 1 && decrypted[0] == 0x01 {
-			v.echoAck()
-			last := v.lastAliveMs.Load()
-			if last > 0 {
-				rtt := time.Now().UnixMilli() - last
-				if rtt > 0 && rtt < 10000 {
-					v.echoRtt.Store(rtt)
-				}
+			if r.n < 4+2+12 {
+				continue
 			}
+			decrypted, err := v.decCP.Decrypt(buf[:r.n])
+			if err != nil {
+				continue
+			}
+			if len(decrypted) == 0 {
+				continue
+			}
+			if len(decrypted) == 1 && decrypted[0] == 0x01 {
+				v.echoAck()
+				last := v.lastAliveMs.Load()
+				if last > 0 {
+					rtt := time.Now().UnixMilli() - last
+					if rtt > 0 && rtt < 10000 {
+						v.echoRtt.Store(rtt)
+					}
+				}
+				continue
+			}
+			if v.stopping.Load() || p.session == nil {
+				return
+			}
+			packet, err := p.session.AllocateSendPacket(len(decrypted))
+			if err != nil {
+				continue
+			}
+			copy(packet, decrypted)
+			p.session.SendPacket(packet)
+			v.rxBytes.Add(int64(len(decrypted)))
+			v.sessionTotalRx.Add(uint64(len(decrypted)))
+
+		case <-time.After(10 * time.Second):
 			continue
 		}
-		if v.stopping.Load() || p.session == nil {
-			return
-		}
-		packet, err := p.session.AllocateSendPacket(len(decrypted))
-		if err != nil {
-			continue
-		}
-		copy(packet, decrypted)
-		p.session.SendPacket(packet)
-		v.rxBytes.Add(int64(len(decrypted)))
-		v.sessionTotalRx.Add(uint64(len(decrypted)))
 	}
 }
 
@@ -393,18 +400,15 @@ func (p *vpnPlatform) reconnectSocket(v *VPN) {
 		old.Close()
 	}
 
-	newConn, err := net.DialUDP("udp", nil, &net.UDPAddr{
-		IP:   net.ParseIP(v.config.ServerIP),
-		Port: v.config.Port,
-	})
+	ctx := context.Background()
+	newConn, transportType, err := v.transport.Dial(ctx)
 	if err != nil {
-		log.Printf("[VPN] reconnectSocket: dial failed: %v, will retry next cycle", err)
+		log.Printf("[VPN] reconnectSocket: all transports failed: %v, will retry next cycle", err)
 		return
 	}
-	newConn.SetWriteBuffer(512 * 1024)
-	newConn.SetReadBuffer(512 * 1024)
 	v.conn = newConn
-	log.Printf("[VPN] reconnectSocket: socket recreated (%s:%d)", v.config.ServerIP, v.config.Port)
+	v.transportType = transportType
+	log.Printf("[VPN] reconnectSocket: reconnected via %s (%s:%d)", transportType, v.config.ServerIP, v.config.Port)
 
 	// Маршрут до сервера мог пропасть при переподключении сети — передобавляем
 	gw := strings.TrimSpace(p.realGateway)

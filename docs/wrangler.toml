@@ -1,0 +1,8 @@
+name = "hasta-vaquet-doh"
+main = "doh-worker.js"
+compatibility_date = "2026-05-28"
+workers_dev = false
+
+routes = [
+  { pattern = "doh.pybyse.airydeck.su/*", zone_name = "airydeck.su" }
+]

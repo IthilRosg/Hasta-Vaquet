@@ -5,6 +5,13 @@ import (
 	"os"
 )
 
+// Transport type constants — strings for JSON config.
+const (
+	TransportUDP  = "udp"
+	TransportWSS  = "wss"
+	TransportQUIC = "quic" // future
+)
+
 // Config — единая конфигурация для клиента и сервера.
 // Все поля вычитываются из JSON, хардкод-дефолтов в коде нет.
 type Config struct {
@@ -25,6 +32,13 @@ type Config struct {
 	NoEncrypt   bool   `json:"no_encrypt,omitempty"` // true = отключить шифрование (тесты)
 	LogFile     string `json:"log_file,omitempty"`
 	Users       []User `json:"users,omitempty"`
+
+	// Transport layer settings.
+	Transport         string   `json:"transport"`                    // "auto" | "wss" | "quic" | "udp"
+	CDNDomain         string   `json:"cdn_domain,omitempty"`         // WSS CDN fronting domain
+	TLSCertFile       string   `json:"tls_cert,omitempty"`           // server TLS cert path
+	TLSKeyFile        string   `json:"tls_key,omitempty"`            // server TLS key path
+	TransportPriority []string `json:"transport_priority,omitempty"` // e.g. ["wss","quic","udp"]
 }
 
 type User struct {
@@ -74,6 +88,12 @@ func (c *Config) SetDefaults() {
 	}
 	if c.LogFile == "" {
 		c.LogFile = "server.log"
+	}
+	if c.Transport == "" {
+		c.Transport = "auto"
+	}
+	if len(c.TransportPriority) == 0 {
+		c.TransportPriority = []string{"wss", "udp"}
 	}
 }
 

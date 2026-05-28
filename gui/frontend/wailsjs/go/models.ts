@@ -10,6 +10,8 @@ export namespace main {
 	    routing_salt: string;
 	    gateway_ip: string;
 	    dns: string;
+	    transport: string;
+	    cdn_domain: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new ConfigResult(source);
@@ -26,6 +28,8 @@ export namespace main {
 	        this.routing_salt = source["routing_salt"];
 	        this.gateway_ip = source["gateway_ip"];
 	        this.dns = source["dns"];
+	        this.transport = source["transport"];
+	        this.cdn_domain = source["cdn_domain"];
 	    }
 	}
 	export class ProfileItem {

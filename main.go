@@ -3,6 +3,8 @@
 package main
 
 import (
+	"context"
+	"crypto/tls"
 	_ "embed"
 	"encoding/json"
 	"flag"
@@ -28,7 +30,6 @@ import (
 //go:embed wintun.dll
 var wintunDLL []byte
 
-
 func getInterfaceIndex(name string) string {
 	cmd := exec.Command("powershell", "-Command", fmt.Sprintf("Get-NetAdapter -Name '%s' | Select-Object -ExpandProperty InterfaceIndex", name))
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
@@ -48,6 +49,8 @@ type Config struct {
 	InternalIP  string `json:"internal_ip"`
 	GatewayIP   string `json:"gateway_ip"`
 	DNS         string `json:"dns"`
+	Transport   string `json:"transport"`            // "auto" | "wss" | "quic" | "udp"
+	CDNDomain   string `json:"cdn_domain,omitempty"` // CDN domain for WSS
 }
 
 func loadConfig() Config {
@@ -78,15 +81,66 @@ func loadConfig() Config {
 		}
 	}
 
-	if cfg.ServerIP == "" { cfg.ServerIP = "45.134.39.18" }
-	if cfg.Port == 0 { cfg.Port = 19999 }
-	if cfg.ShortID == 0 { log.Fatal("[ОШИБКА] ShortID не задан") }
-	if cfg.SecretKey == "" { log.Fatal("[ОШИБКА] SecretKey не задан") }
-	if cfg.RoutingSalt == "" { cfg.RoutingSalt = "HastaVaquetGlobal" }
-	if cfg.GatewayIP == "" { cfg.GatewayIP = "192.168.100.1" }
-	if cfg.DNS == "" { cfg.DNS = "1.1.1.1" }
+	if cfg.ServerIP == "" {
+		cfg.ServerIP = "45.134.39.18"
+	}
+	if cfg.Port == 0 {
+		cfg.Port = 19999
+	}
+	if cfg.ShortID == 0 {
+		log.Fatal("[ОШИБКА] ShortID не задан")
+	}
+	if cfg.SecretKey == "" {
+		log.Fatal("[ОШИБКА] SecretKey не задан")
+	}
+	if cfg.RoutingSalt == "" {
+		cfg.RoutingSalt = "HastaVaquetGlobal"
+	}
+	if cfg.GatewayIP == "" {
+		cfg.GatewayIP = "192.168.100.1"
+	}
+	if cfg.DNS == "" {
+		cfg.DNS = "1.1.1.1"
+	}
 
 	return cfg
+}
+
+func dialServer(cfg Config) (net.Conn, error) {
+	ctx := context.Background()
+
+	switch cfg.Transport {
+	case "wss":
+		server := cfg.ServerIP
+		port := cfg.Port
+		if cfg.CDNDomain != "" {
+			server = cfg.CDNDomain
+			port = 443
+		}
+		tlsCfg := &tls.Config{ServerName: server}
+		conn, err := vpncore.DialWSS(ctx, server, port, tlsCfg)
+		if err != nil {
+			return nil, fmt.Errorf("wss dial: %w", err)
+		}
+		log.Printf("[ТРАНСПОРТ] Подключение через WSS (%s:%d)", server, port)
+		return conn, nil
+
+	case "quic":
+		conn, err := vpncore.DialQUICUDP(ctx, cfg.ServerIP, cfg.Port, cfg.ShortID, cfg.SecretKey)
+		if err != nil {
+			return nil, fmt.Errorf("quic-udp dial: %w", err)
+		}
+		log.Printf("[ТРАНСПОРТ] Подключение через QUIC-header UDP (%s:%d)", cfg.ServerIP, cfg.Port)
+		return conn, nil
+
+	default: // "auto", "udp", or empty — backward-compat
+		conn, err := vpncore.DialRawUDP(ctx, cfg.ServerIP, cfg.Port)
+		if err != nil {
+			return nil, fmt.Errorf("udp dial: %w", err)
+		}
+		log.Printf("[ТРАНСПОРТ] Подключение через UDP (%s:%d)", cfg.ServerIP, cfg.Port)
+		return conn, nil
+	}
 }
 
 func main() {
@@ -98,7 +152,9 @@ func main() {
 	}
 
 	lf, err := os.OpenFile("client.log", os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0666)
-	if err != nil { log.Fatal(err) }
+	if err != nil {
+		log.Fatal(err)
+	}
 	defer lf.Close()
 	log.SetOutput(io.MultiWriter(lf, os.Stdout))
 	log.SetFlags(log.LstdFlags)
@@ -114,7 +170,9 @@ func main() {
 	}
 
 	adapter, err := wintun.CreateAdapter("HastaVaquet", "HastaVaquet", nil)
-	if err != nil { log.Fatal(err) }
+	if err != nil {
+		log.Fatal(err)
+	}
 	defer adapter.Close()
 	log.Printf("[АДАПТЕР] Wintun создан")
 
@@ -142,7 +200,7 @@ func main() {
 	run("netsh", "interface", "ipv6", "add", "route", "::/0", "name=HastaVaquet", cfg.InternalIP, "metric=1")
 	log.Printf("[МАРШРУТ] Правила добавлены")
 
-stopCh := make(chan struct{})
+	stopCh := make(chan struct{})
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt)
 	go func() {
@@ -156,7 +214,7 @@ stopCh := make(chan struct{})
 		os.Exit(0)
 	}()
 
-	conn, err := net.Dial("udp", net.JoinHostPort(cfg.ServerIP, fmt.Sprintf("%d", cfg.Port)))
+	conn, err := dialServer(cfg)
 	if err != nil {
 		log.Fatalf("[ОШИБКА] Не удалось подключиться к серверу: %v", err)
 	}
@@ -208,7 +266,9 @@ stopCh := make(chan struct{})
 				log.Printf("[ОШИБКА ЧТЕНИЯ] %v", err)
 				continue
 			}
-			if n < 4+2+12 { continue }
+			if n < 4+2+12 {
+				continue
+			}
 			decrypted, err := cp.Decrypt(buf[:n])
 			if err != nil {
 				log.Printf("[ОШИБКА ДЕШИФРАЦИИ] %v", err)

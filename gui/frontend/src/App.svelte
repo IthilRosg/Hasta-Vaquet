@@ -46,6 +46,8 @@
     internalIP = cfg.internal_ip || internalIP
     gatewayIP = cfg.gateway_ip || gatewayIP
     dns = cfg.dns || dns
+    transport = cfg.transport || 'auto'
+    cdnDomain = cfg.cdn_domain || ''
   }
 
   let serverIP = '45.134.39.18'
@@ -56,6 +58,8 @@
   let internalIP = '10.0.0.10'
   let gatewayIP = '192.168.100.1'
   let dns = '1.1.1.1'
+  let transport = 'auto'
+  let cdnDomain = ''
 
   function formatSpeed(bps: number): string {
     if (bps >= 1_000_000) return (bps / 1_000_000).toFixed(1) + ' MB/s'
@@ -136,7 +140,7 @@
   async function connect() {
     if (!serverIP) { statusText = 'No profile selected'; return }
     animating = true; statusText = 'Connecting...'
-    const res = await DoConnect(serverIP, secretKey, routingSalt, internalIP, gatewayIP, dns, port, shortID)
+    const res = await DoConnect(serverIP, secretKey, routingSalt, internalIP, gatewayIP, dns, transport, cdnDomain, port, shortID)
     if (res !== 'connected') { statusText = res }
     animating = false
   }
@@ -307,6 +311,8 @@
   bind:internalIP
   bind:gatewayIP
   bind:dns
+  bind:transport
+  bind:cdnDomain
   onImport={onImportProfile}
   onClose={toggleSettings}
 />

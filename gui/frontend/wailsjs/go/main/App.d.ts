@@ -4,7 +4,7 @@ import {main} from '../models';
 
 export function DeleteProfile(arg1:string):Promise<string>;
 
-export function DoConnect(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:string,arg7:number,arg8:number):Promise<string>;
+export function DoConnect(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:string,arg7:string,arg8:string,arg9:number,arg10:number):Promise<string>;
 
 export function DoDisconnect():Promise<string>;
 

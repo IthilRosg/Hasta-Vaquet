@@ -33,7 +33,9 @@ type VPN struct {
 	key               [32]byte
 	encCP             *CipherPack // для Encrypt (writerLoop + ping) — отдельно от decCP
 	decCP             *CipherPack // для Decrypt (readerLoop) — убираем lock contention
-	conn              *net.UDPConn
+	conn              net.Conn
+	transport         *TransportManager
+	transportType     string // "wss" | "quic" | "udp"
 	running           atomic.Bool
 	stopCh            chan struct{}
 	txBytes           atomic.Int64
@@ -73,6 +75,7 @@ func New(cfg Config, listener StatusListener) *VPN {
 		decCP:      decCP,
 		listener:   listener,
 		killSwitch: newKillSwitch(),
+		transport:  NewTransportManager(&cfg),
 	}
 	v.killSwitchEnabled.Store(true)
 	return v
@@ -201,11 +204,17 @@ func (v *VPN) persistentPingLoop() {
 					fec = 5
 				}
 				for i := 0; i < fec; i++ {
-					conn.Write(pkt)
+					if _, err := conn.Write(pkt); err != nil {
+						log.Printf("[VPN] ping write error: %v", err)
+					}
 				}
 				v.lastAliveMs.Store(time.Now().UnixMilli())
 				v.echoPush()
+			} else {
+				log.Printf("[VPN] ping encrypt error: %v", err)
 			}
+		} else {
+			log.Printf("[VPN] ping: conn is nil")
 		}
 		// Passive reconnect: если пакетов нет 6+ секунд — шлём UI и закрываем сокет,
 		// чтобы routeMonitorLoop пересоздал его через reconnectSocket().

@@ -15,6 +15,12 @@ import (
 	"time"
 )
 
+// Cipher modes for packet format selection.
+const (
+	CipherModeStandard = iota // current format: HMAC(4) + DynamicID(2) + Nonce(12) + AES-GCM
+	CipherModeQUIC            // QUIC Short Header v1 format
+)
+
 func Fnv1a16(data []byte) uint16 {
 	h := uint64(14695981039346656037)
 	for _, b := range data {
@@ -39,9 +45,11 @@ type CipherPack struct {
 	key       [32]byte
 	gcm       cipher.AEAD
 	mu        sync.Mutex    // защита gcm.Seal/Open (AEAD не thread-safe)
-	nonce     atomic.Uint64 // monotonic counter
+	nonce     atomic.Uint64 // monotonic counter (standard mode)
+	quicNonce atomic.Uint64 // monotonic counter for QUIC mode
 	prng      *rand.Rand    // быстрый PRNG для padding
 	noEncrypt bool          // true = Encrypt/Decrypt без крипты (для замера накладных расходов)
+	Mode      int           // CipherModeStandard или CipherModeQUIC
 }
 
 func NewCipherPack(secretKey []byte) (*CipherPack, error) {
@@ -70,13 +78,30 @@ func NewNoopCipherPack() *CipherPack {
 	return &CipherPack{noEncrypt: true}
 }
 
+// quicNonceFromPacket derives a 12-byte AES-GCM nonce deterministically from
+// the shared key and packet number. Both encrypt and decrypt sides compute
+// the same nonce without transmitting it.
+func quicNonceFromPacket(key [32]byte, packetNum uint32) [12]byte {
+	var buf [2 + 4]byte
+	buf[0] = byte(len(key))
+	buf[1] = byte(packetNum >> 24)
+	binary.BigEndian.PutUint32(buf[2:], packetNum)
+	h := sha256.Sum256(append(key[:], buf[:]...))
+	var nonce [12]byte
+	copy(nonce[:], h[:12])
+	return nonce
+}
+
 func (cp *CipherPack) Encrypt(plaintext []byte, shortID uint16, routingSalt string) ([]byte, error) {
 	if cp.noEncrypt {
-		// Без шифрования: только 2 байта длины + plaintext
 		buf := make([]byte, 2+len(plaintext))
 		binary.BigEndian.PutUint16(buf[:2], uint16(len(plaintext)))
 		copy(buf[2:], plaintext)
 		return buf, nil
+	}
+
+	if cp.Mode == CipherModeQUIC {
+		return cp.encryptQUIC(plaintext, shortID, routingSalt)
 	}
 
 	n := cp.nonce.Add(1)
@@ -117,6 +142,27 @@ func (cp *CipherPack) Encrypt(plaintext []byte, shortID uint16, routingSalt stri
 	return buf, nil
 }
 
+func (cp *CipherPack) encryptQUIC(plaintext []byte, shortID uint16, routingSalt string) ([]byte, error) {
+	n := cp.quicNonce.Add(1)
+	packetNum := uint32(n & 0xFFFF)
+
+	padLen := int(cp.prng.Int31n(41))
+	inner := make([]byte, 2+len(plaintext)+padLen)
+	binary.BigEndian.PutUint16(inner[:2], uint16(len(plaintext)))
+	copy(inner[2:], plaintext)
+	if padLen > 0 {
+		cp.prng.Read(inner[2+len(plaintext):])
+	}
+
+	nonce := quicNonceFromPacket(cp.key, packetNum)
+
+	cp.mu.Lock()
+	ciphertext := cp.gcm.Seal(nil, nonce[:], inner, nil)
+	cp.mu.Unlock()
+
+	return EncodeQUICHeader(ciphertext, shortID, packetNum, cp.key, routingSalt), nil
+}
+
 func (cp *CipherPack) Decrypt(packet []byte) ([]byte, error) {
 	if cp.noEncrypt {
 		if len(packet) < 2 {
@@ -127,6 +173,10 @@ func (cp *CipherPack) Decrypt(packet []byte) ([]byte, error) {
 			return nil, fmt.Errorf("invalid length")
 		}
 		return packet[2 : 2+realLen], nil
+	}
+
+	if cp.Mode == CipherModeQUIC {
+		return cp.decryptQUIC(packet)
 	}
 
 	if len(packet) < 4+2+12 {
@@ -156,6 +206,30 @@ func (cp *CipherPack) Decrypt(packet []byte) ([]byte, error) {
 	cp.mu.Unlock()
 	if err != nil {
 		return nil, err
+	}
+	if len(plaintext) < 2 {
+		return nil, fmt.Errorf("payload too short")
+	}
+	realLen := binary.BigEndian.Uint16(plaintext[:2])
+	if int(realLen)+2 > len(plaintext) {
+		return nil, fmt.Errorf("invalid length")
+	}
+	return plaintext[2 : 2+realLen], nil
+}
+
+func (cp *CipherPack) decryptQUIC(packet []byte) ([]byte, error) {
+	inner, packetNum, err := DecodeQUICHeader(packet, cp.key)
+	if err != nil {
+		return nil, fmt.Errorf("QUIC header decode: %w", err)
+	}
+
+	nonce := quicNonceFromPacket(cp.key, packetNum)
+
+	cp.mu.Lock()
+	plaintext, err := cp.gcm.Open(nil, nonce[:], inner, nil)
+	cp.mu.Unlock()
+	if err != nil {
+		return nil, fmt.Errorf("GCM decrypt failed: %w", err)
 	}
 	if len(plaintext) < 2 {
 		return nil, fmt.Errorf("payload too short")

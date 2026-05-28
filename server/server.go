@@ -19,6 +19,51 @@ import (
 	"github.com/songgao/water"
 )
 
+// ─── Transport-agnostic writer interface ─────────────────────────
+
+type PacketWriter interface {
+	WritePacket(data []byte, fec int) error
+	TransportType() string // "udp" | "wss"
+}
+
+// ─── UDP writer (existing transport) ─────────────────────────────
+
+type UDPWriter struct {
+	addr *net.UDPAddr
+	conn *net.UDPConn
+	mu   sync.Mutex
+}
+
+func (w *UDPWriter) WritePacket(data []byte, fec int) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if fec < 1 {
+		fec = 1
+	}
+	if fec > 5 {
+		fec = 5
+	}
+	for i := 0; i < fec; i++ {
+		if _, err := w.conn.WriteToUDP(data, w.addr); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (w *UDPWriter) TransportType() string { return "udp" }
+
+// ─── Incoming packet from any transport ──────────────────────────
+
+type IncomingPacket struct {
+	Data    []byte
+	Writer  PacketWriter // write responses back through this
+	ShortID uint16       // extracted DynamicID
+	IsQUIC  bool         // true if packet is QUIC Short Header format
+}
+
+// ─── Peer ────────────────────────────────────────────────────────
+
 type Peer struct {
 	ShortID  uint16
 	Name     string
@@ -29,6 +74,7 @@ type Peer struct {
 	Internal string
 	UDPAddr  *net.UDPAddr
 	udpMu    sync.Mutex
+	Writer   PacketWriter // transport-agnostic response writer
 	ByteOut  atomic.Int64 // сбрасываемые каждые 30с (для лога)
 	ByteIn   atomic.Int64 // сбрасываемые каждые 30с (для лога)
 	CumTx    atomic.Int64 // кумулятивный TX — никогда не сбрасывается
@@ -137,6 +183,119 @@ func loadConfig() protocol.Config {
 	return cfg
 }
 
+// processPacket — декрипт, replay-защита, keep-alive, TUN write.
+// Вызывается из основного цикла для пакетов любого транспорта.
+func processPacket(pkt IncomingPacket, ifce *water.Interface) {
+	peersMu.RLock()
+	peer := peers[pkt.ShortID]
+	peersMu.RUnlock()
+	if peer == nil {
+		dropNoPeer.Add(1)
+		logDrops()
+		return
+	}
+
+	// Устанавливаем Writer для этого пира (транспорт, через который отвечать)
+	// Делаем это до блокировки cpMu, чтобы TUN writer мог отправить ответ
+	if pkt.Writer != nil {
+		peer.udpMu.Lock()
+		peer.Writer = pkt.Writer
+		// Для UDP также сохраняем addr для совместимости со старым кодом
+		if uw, ok := pkt.Writer.(*UDPWriter); ok {
+			peer.UDPAddr = uw.addr
+		}
+		peer.udpMu.Unlock()
+	}
+
+	var bkey []byte
+	shortID := pkt.ShortID
+	packet := pkt.Data
+
+	peer.cpMu.Lock()
+	var decrypted []byte
+	var err error
+
+	if pkt.IsQUIC {
+		// QUIC режим: временно переключаем CipherPack для декрипта
+		oldMode := peer.CP.Mode
+		peer.CP.Mode = protocol.CipherModeQUIC
+		decrypted, err = peer.CP.Decrypt(packet)
+		peer.CP.Mode = oldMode
+	} else {
+		// Standard режим: bloom-проверка + декрипт
+		if len(packet) >= 4+2+12 && !serverCfg.NoEncrypt {
+			nonce := packet[6:18]
+			bkey = bloomKey(shortID, nonce)
+			if !bloomCheck(bkey) {
+				peer.cpMu.Unlock()
+				dropReplay.Add(1)
+				logDrops()
+				return
+			}
+		}
+		decrypted, err = peer.CP.Decrypt(packet)
+	}
+
+	if err != nil {
+		peer.cpMu.Unlock()
+		if strings.Contains(err.Error(), "HMAC") {
+			dropHMAC.Add(1)
+		} else {
+			dropDecrypt.Add(1)
+		}
+		logDrops()
+		return
+	}
+
+	// Bloom set (только standard-пакеты — QUIC имеет встроенную replay-защиту)
+	if !pkt.IsQUIC && !serverCfg.NoEncrypt && bkey != nil {
+		bloomSet(bkey)
+		bloomCount.Add(1)
+	}
+	peer.LastSeen.Store(time.Now().Unix())
+
+	// Keep-alive (пустой payload)
+	if len(decrypted) == 0 {
+		peer.cpMu.Unlock()
+		logger.Printf("[KEEP-ALIVE] ShortID=%d\n", shortID)
+
+		peer.cpMu.Lock()
+		var enc []byte
+		var encErr error
+		if pkt.IsQUIC {
+			oldMode := peer.CP.Mode
+			peer.CP.Mode = protocol.CipherModeQUIC
+			enc, encErr = peer.CP.Encrypt([]byte{0x01}, peer.ShortID, routingSalt)
+			peer.CP.Mode = oldMode
+		} else {
+			enc, encErr = peer.CP.Encrypt([]byte{0x01}, peer.ShortID, routingSalt)
+		}
+		peer.cpMu.Unlock()
+
+		if encErr != nil {
+			logger.Printf("[ОШИБКА] echo encrypt: %v", encErr)
+			return
+		}
+		if peer.Writer != nil {
+			go func(w PacketWriter, data []byte) {
+				if err := w.WritePacket(data, serverCfg.FEC); err != nil {
+					logger.Printf("[ОШИБКА] echo write: %v", err)
+				}
+			}(peer.Writer, enc)
+		}
+		return
+	}
+	peer.cpMu.Unlock()
+
+	// Пишем в TUN
+	if _, err := ifce.Write(decrypted); err != nil {
+		logger.Printf("[ОШИБКА] TUN Write: %v", err)
+		return
+	}
+	peer.ByteIn.Add(int64(len(decrypted)))
+	peer.CumRx.Add(int64(len(decrypted)))
+}
+
 func main() {
 	cfg := loadConfig()
 	serverCfg = cfg
@@ -202,12 +361,167 @@ func main() {
 	exec.Command("ip", "link", "set", "dev", ifce.Name(), "mtu", "1300").Run()
 	exec.Command("ip", "link", "set", "dev", ifce.Name(), "txqueuelen", "10000").Run()
 
+	// ─── Единый канал входящих пакетов от всех транспортов ─────
+	incomingCh := make(chan IncomingPacket, 1000)
+
+	// ─── WSS сервер (TLS) ──────────────────────────────────────
+	if cfg.TLSCertFile != "" && cfg.TLSKeyFile != "" {
+		wssServer, err := NewWSSServer(cfg, logger)
+		if err != nil {
+			logger.Fatalf("[ОШИБКА] WSS сервер: %v", err)
+		}
+		go wssServer.Start()
+		logger.Printf("[WSS] WebSocket Secure сервер запущен на :443%s\n", cfg.AdminPath+"/ws")
+
+		// Горутина: принимаем новые WSS-соединения → читаем пакеты → incomingCh
+		go func() {
+			for peerConn := range wssServer.AcceptCh() {
+				go func(pc *WSSPeerConn) {
+					defer func() {
+						if r := recover(); r != nil {
+							logger.Printf("[RECOVER] WSS reader: %v", r)
+						}
+					}()
+					var firstPacket = true
+					for {
+						_, msg, err := pc.ReadMessage()
+						if err != nil {
+							logger.Printf("[WSS] ShortID=%d read error: %v", pc.ShortID, err)
+							return
+						}
+						if len(msg) < 4+2+12 {
+							continue
+						}
+						dynamicID := binary.BigEndian.Uint16(msg[4:6])
+						nonce := msg[6:18]
+						routeMask := vpncore.Fnv1a16(append([]byte(routingSalt), nonce...))
+						shortID := dynamicID ^ routeMask
+
+						if firstPacket {
+							firstPacket = false
+							pc.ShortID = shortID
+							logger.Printf("[WSS] ShortID=%d соединён", shortID)
+						}
+
+						incomingCh <- IncomingPacket{
+							Data:    msg,
+							Writer:  pc,
+							ShortID: shortID,
+						}
+					}
+				}(peerConn)
+			}
+		}()
+	} else {
+		logger.Printf("[WSS] TLS не настроен — WSS сервер отключён\n")
+	}
+
+	// ─── Plain WS сервер (за Caddy/nginx) — всегда включён ─────
+	wsPlain := NewPlainWSServer(19998, cfg, logger)
+	go wsPlain.StartPlain()
+	logger.Printf("[WS] Plain WebSocket сервер запущен на :19998%s\n", cfg.AdminPath+"/ws")
+
+	// Горутина: читаем plain WS → incomingCh
+	go func() {
+		for peerConn := range wsPlain.AcceptCh() {
+			go func(pc *WSSPeerConn) {
+				defer func() {
+					if r := recover(); r != nil {
+						logger.Printf("[RECOVER] Plain WS reader: %v", r)
+					}
+				}()
+				var firstPacket = true
+				for {
+					_, msg, err := pc.ReadMessage()
+					if err != nil {
+						logger.Printf("[WS] ShortID=%d read error: %v", pc.ShortID, err)
+						return
+					}
+					if len(msg) < 4+2+12 {
+						continue
+					}
+					dynamicID := binary.BigEndian.Uint16(msg[4:6])
+					nonce := msg[6:18]
+					routeMask := vpncore.Fnv1a16(append([]byte(routingSalt), nonce...))
+					shortID := dynamicID ^ routeMask
+
+					if firstPacket {
+						firstPacket = false
+						pc.ShortID = shortID
+						logger.Printf("[WS] ShortID=%d соединён", shortID)
+					}
+
+					incomingCh <- IncomingPacket{
+						Data:    msg,
+						Writer:  pc,
+						ShortID: shortID,
+					}
+				}
+			}(peerConn)
+		}
+	}()
+
+	// ─── UDP слушатель ─────────────────────────────────────────
 	conn, err := net.ListenUDP("udp", &net.UDPAddr{Port: cfg.Port})
 	if err != nil {
 		logger.Fatalf("[ОШИБКА] Не удалось открыть UDP порт %d: %v", cfg.Port, err)
 	}
-	logger.Printf("[СЕТЬ] Слушаем порт %d\n", cfg.Port)
+	logger.Printf("[СЕТЬ] Слушаем UDP порт %d\n", cfg.Port)
 
+	// Горутина: читаем UDP → incomingCh
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				logger.Printf("[RECOVER] UDP reader: %v", r)
+			}
+		}()
+		buffer := make([]byte, 65535)
+		for {
+			n, addr, err := conn.ReadFromUDP(buffer)
+			if err != nil {
+				continue
+			}
+
+			// QUIC Short Header detection: Byte0 & 0xC0 == 0x40
+			if n >= 7+4+2+12 && (buffer[0]&0xC0 == 0x40) && buffer[1] == 0 && buffer[2] == 0 {
+				pkt := make([]byte, n)
+				copy(pkt, buffer[:n])
+
+				// Extract shortID from QUIC header (bytes 3-4, plain, not XOR'd)
+				shortID := binary.BigEndian.Uint16(pkt[3:5])
+
+				// Strip 7-byte QUIC header → inner standard format
+				inner := pkt[7:]
+
+				incomingCh <- IncomingPacket{
+					Data:    inner,
+					Writer:  &UDPWriter{addr: addr, conn: conn},
+					ShortID: shortID,
+				}
+				continue
+			}
+
+			// Standard format
+			if n < 4+2+12 {
+				continue
+			}
+			pkt := make([]byte, n)
+			copy(pkt, buffer[:n])
+
+			dynamicID := binary.BigEndian.Uint16(pkt[4:6])
+			nonce := pkt[6:18]
+			routeMask := vpncore.Fnv1a16(append([]byte(routingSalt), nonce...))
+			shortID := dynamicID ^ routeMask
+
+			incomingCh <- IncomingPacket{
+				Data:    pkt,
+				Writer:  &UDPWriter{addr: addr, conn: conn},
+				ShortID: shortID,
+			}
+		}
+	}()
+
+	// ─── Статистика (каждые 30с) ────────────────────────────────
 	go func() {
 		var prevOut, prevIn int64
 		for {
@@ -230,10 +544,8 @@ func main() {
 		}
 	}()
 
+	// ─── Bloom filter reset ──────────────────────────────────────
 	go func() {
-		// Сброс bloom filter: каждые 60 сек ИЛИ при заполнении >70%.
-		// 8192 слов * 64 бита = 524288 бит; при 3 хешах ёмкость ~121000 записей.
-		// 70% от 121000 ≈ 85000 — безопасный порог до роста ложных срабатываний.
 		const bloomCapacity int64 = 85000
 		ticker := time.NewTicker(60 * time.Second)
 		checkTicker := time.NewTicker(5 * time.Second)
@@ -262,6 +574,7 @@ func main() {
 		}
 	}()
 
+	// ─── TUN reader → encrypt → transport write ─────────────────
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
@@ -288,12 +601,15 @@ func main() {
 			if peer == nil {
 				continue
 			}
+
+			// Получаем Writer (транспорт-нейтральный)
 			peer.udpMu.Lock()
-			addr := peer.UDPAddr
+			writer := peer.Writer
 			peer.udpMu.Unlock()
-			if addr == nil {
+			if writer == nil {
 				continue
 			}
+
 			peer.cpMu.Lock()
 			enc, err := peer.CP.Encrypt(packet[:n], peer.ShortID, routingSalt)
 			peer.cpMu.Unlock()
@@ -308,101 +624,17 @@ func main() {
 			if fec > 5 {
 				fec = 5
 			}
-			for i := 0; i < fec; i++ {
-				if _, err := conn.WriteToUDP(enc, addr); err != nil {
-					logger.Printf("[ОШИБКА] WriteToUDP: %v", err)
-				}
+			if err := writer.WritePacket(enc, fec); err != nil {
+				logger.Printf("[ОШИБКА] WritePacket: %v", err)
 			}
 			peer.ByteOut.Add(int64(n) * int64(fec))
 			peer.CumTx.Add(int64(n) * int64(fec))
 		}
 	}()
 
+	// ─── Основной цикл обработки пакетов ────────────────────────
 	logger.Printf("[ГОТОВ] Ожидание клиентов\n")
-	buffer := make([]byte, 65535)
-	for {
-		n, addr, err := conn.ReadFromUDP(buffer)
-		if err != nil || n < 4+2+12 {
-			continue
-		}
-
-		dynamicID := binary.BigEndian.Uint16(buffer[4:6])
-		nonce := buffer[6:18]
-		routeMask := vpncore.Fnv1a16(append([]byte(routingSalt), nonce...))
-		shortID := dynamicID ^ routeMask
-
-		peersMu.RLock()
-		peer := peers[shortID]
-		peersMu.RUnlock()
-		if peer == nil {
-			dropNoPeer.Add(1)
-			logDrops()
-			continue
-		}
-
-		var bkey []byte
-		// Без шифрования нет реального nonce — пропускаем bloom check
-		if !serverCfg.NoEncrypt {
-			bkey = bloomKey(shortID, nonce)
-			if !bloomCheck(bkey) {
-				dropReplay.Add(1)
-				logDrops()
-				continue
-			}
-		}
-
-		peer.cpMu.Lock()
-		decrypted, err := peer.CP.Decrypt(buffer[:n])
-		if err != nil {
-			peer.cpMu.Unlock()
-			if strings.Contains(err.Error(), "HMAC") {
-				dropHMAC.Add(1)
-			} else {
-				dropDecrypt.Add(1)
-			}
-			logDrops()
-			continue
-		}
-		if !serverCfg.NoEncrypt {
-			bloomSet(bkey)
-			bloomCount.Add(1)
-		}
-		peer.LastSeen.Store(time.Now().Unix())
-		if len(decrypted) == 0 {
-			peer.cpMu.Unlock()
-			logger.Printf("[KEEP-ALIVE] ShortID=%d\n", shortID)
-			peer.udpMu.Lock()
-			peer.UDPAddr = addr
-			peer.udpMu.Unlock()
-			// Echo back for tunnel latency measurement
-			peer.cpMu.Lock()
-			enc, err := peer.CP.Encrypt([]byte{0x01}, peer.ShortID, routingSalt)
-			peer.cpMu.Unlock()
-			if err != nil {
-				logger.Printf("[ОШИБКА] echo encrypt: %v", err)
-				continue
-			}
-			fec := serverCfg.FEC
-			if fec < 1 {
-				fec = 1
-			}
-			if fec > 5 {
-				fec = 5
-			}
-			for i := 0; i < fec; i++ {
-				conn.WriteToUDP(enc, addr)
-			}
-			continue
-		}
-		peer.cpMu.Unlock()
-		peer.udpMu.Lock()
-		peer.UDPAddr = addr
-		peer.udpMu.Unlock()
-		if _, err := ifce.Write(decrypted); err != nil {
-			logger.Printf("[ОШИБКА] TUN Write: %v", err)
-			continue
-		}
-		peer.ByteIn.Add(int64(len(decrypted)))
-		peer.CumRx.Add(int64(len(decrypted)))
+	for pkt := range incomingCh {
+		processPacket(pkt, ifce)
 	}
 }

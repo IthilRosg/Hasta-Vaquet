@@ -20,11 +20,11 @@ import (
 var wintunDLL []byte
 
 type App struct {
-	ctx                context.Context
-	vpn                *core.VPN
-	profiles           []string
-	logger             *log.Logger
-	killSwitchEnabled  bool
+	ctx               context.Context
+	vpn               *core.VPN
+	profiles          []string
+	logger            *log.Logger
+	killSwitchEnabled bool
 }
 
 // vpnListener реализует core.StatusListener для отправки событий в UI.
@@ -48,14 +48,14 @@ func (l *vpnListener) OnStatus(status string, txSpeed, rxSpeed int64, totalTx, t
 			txSpeed, rxSpeed, pingMs, lossPct, totalTx, totalRx)
 	}
 	runtime.EventsEmit(l.ctx, "status", map[string]interface{}{
-		"status":      status,
-		"attempt":     txSpeed,
-		"tx_speed":    txSpeed,
-		"rx_speed":    rxSpeed,
-		"total_tx":    totalTx,
-		"total_rx":    totalRx,
-		"ping_ms":     pingMs,
-		"loss_pct":    lossPct,
+		"status":   status,
+		"attempt":  txSpeed,
+		"tx_speed": txSpeed,
+		"rx_speed": rxSpeed,
+		"total_tx": totalTx,
+		"total_rx": totalRx,
+		"ping_ms":  pingMs,
+		"loss_pct": lossPct,
 	})
 	switch status {
 	case "reconnecting", "connected", "disconnected":
@@ -111,6 +111,8 @@ type ConfigResult struct {
 	RoutingSalt string `json:"routing_salt"`
 	GatewayIP   string `json:"gateway_ip"`
 	DNS         string `json:"dns"`
+	Transport   string `json:"transport"`
+	CDNDomain   string `json:"cdn_domain"`
 }
 
 func (a *App) LoadDefaultConfig() *ConfigResult {
@@ -196,6 +198,7 @@ func importToProfiles(path string) *ConfigResult {
 	if name == "" {
 		name = fmt.Sprintf("profile-%d", cfg.ShortID)
 	}
+	cfg.ProfileName = name // сохраняем имя в конфиг перед toResult
 	dst := filepath.Join(profilesDir, name+".json")
 	data, _ := json.MarshalIndent(cfg, "", "  ")
 	os.WriteFile(dst, data, 0644)
@@ -214,9 +217,6 @@ func (a *App) DeleteProfile(name string) string {
 
 func toResult(cfg core.Config) *ConfigResult {
 	name := cfg.ProfileName
-	/*if name == "" {
-		name = "Default"
-	}*/
 	return &ConfigResult{
 		ProfileName: name,
 		ServerIP:    cfg.ServerIP,
@@ -227,6 +227,8 @@ func toResult(cfg core.Config) *ConfigResult {
 		RoutingSalt: cfg.RoutingSalt,
 		GatewayIP:   cfg.GatewayIP,
 		DNS:         cfg.DNS,
+		Transport:   cfg.Transport,
+		CDNDomain:   cfg.CDNDomain,
 	}
 }
 
@@ -276,7 +278,7 @@ func (a *App) SetKillSwitchEnabled(enable bool) {
 	}
 }
 
-func (a *App) DoConnect(serverIP, secretKey, routingSalt, internalIP, gatewayIP, dns string, port int, shortID uint16) string {
+func (a *App) DoConnect(serverIP, secretKey, routingSalt, internalIP, gatewayIP, dns, transport, cdnDomain string, port int, shortID uint16) string {
 	if a.vpn != nil && a.vpn.IsRunning() {
 		if a.logger != nil {
 			a.logger.Println("DoConnect: already running, returning 'already connected'")
@@ -284,7 +286,7 @@ func (a *App) DoConnect(serverIP, secretKey, routingSalt, internalIP, gatewayIP,
 		return "already connected"
 	}
 	if a.logger != nil {
-		a.logger.Printf("DoConnect: server=%s:%d shortID=%d", serverIP, port, shortID)
+		a.logger.Printf("DoConnect: server=%s:%d shortID=%d transport=%s cdn=%s", serverIP, port, shortID, transport, cdnDomain)
 	}
 	cfg := core.Config{
 		ServerIP:    serverIP,
@@ -295,6 +297,8 @@ func (a *App) DoConnect(serverIP, secretKey, routingSalt, internalIP, gatewayIP,
 		InternalIP:  internalIP,
 		GatewayIP:   gatewayIP,
 		DNS:         dns,
+		Transport:   transport,
+		CDNDomain:   cdnDomain,
 	}
 	vpn := core.New(cfg, &vpnListener{ctx: a.ctx, logger: a.logger})
 	vpn.SetKillSwitchEnabled(a.killSwitchEnabled)

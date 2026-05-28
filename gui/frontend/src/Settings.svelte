@@ -11,11 +11,13 @@
   export let internalIP: string
   export let gatewayIP: string
   export let dns: string
+  export let transport: string
+  export let cdnDomain: string
 
   export let onImport: () => void
   export let onClose: () => void
 
-  const tabs = ['Connection', 'Kill Switch', 'Advanced']
+  const tabs = ['Connection', 'Kill Switch', 'Transport', 'Advanced']
   let activeTab = 'Connection'
   let killSwitchOn = true
 
@@ -93,6 +95,32 @@
         </div>
       </div>
 
+      {:else if activeTab === 'Transport'}
+      <h3>Transport</h3>
+      <div class="section">
+        <div class="field">
+          <label>Transport Mode</label>
+          <select class="transport-select" bind:value={transport}>
+            <option value="auto">Auto (WSS → UDP)</option>
+            <option value="wss">WSS (TLS + CDN, best DPI bypass)</option>
+            <option value="ws">WS (plain, direct to server)</option>
+            <option value="quic">QUIC-header UDP (fast + masked)</option>
+            <option value="udp">Raw UDP (legacy)</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>CDN Domain (for WSS)</label>
+          <input bind:value={cdnDomain} placeholder="your-vpn.domain.com"/>
+          <div class="field-hint">Set when using Cloudflare CDN. WSS will connect via this domain.</div>
+        </div>
+        <div class="transport-info">
+          <div class="info-row"><strong>WSS</strong> <span>— 443, TLS + uTLS Chrome, CDN-ready</span></div>
+          <div class="info-row"><strong>WS</strong> <span>— 19998, plain WebSocket, no TLS, no Cloudflare</span></div>
+          <div class="info-row"><strong>QUIC</strong> <span>— 19999, QUIC Short Header mutation, fastest</span></div>
+          <div class="info-row"><strong>UDP</strong> <span>— 19999, raw format, backward compat</span></div>
+        </div>
+      </div>
+
       {:else if activeTab === 'Advanced'}
       <h3>Advanced</h3>
       <div class="section">
@@ -110,6 +138,31 @@
 {/if}
 
 <style>
+  .transport-select {
+    background: var(--bg); border: 1px solid var(--border);
+    color: var(--text); padding: 8px 12px;
+    border-radius: 8px; font-size: 14px; width: 100%;
+    cursor: pointer; transition: border 0.2s;
+  }
+  .transport-select:focus { outline: none; border-color: var(--accent); }
+  .transport-select option { background: var(--surface); color: var(--text); }
+
+  .field-hint {
+    font-size: 11px; color: var(--text-dim);
+    margin-top: 4px; line-height: 1.4;
+  }
+
+  .transport-info {
+    padding: 12px; background: rgba(255,255,255,0.03);
+    border: 1px solid var(--border); border-radius: 8px;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .info-row {
+    display: flex; gap: 8px;
+    font-size: 13px; color: var(--text-dim);
+  }
+  .info-row strong { color: var(--text); min-width: 48px; }
+
   .settings-overlay {
     position: fixed; inset: 0;
     background: rgba(0, 0, 0, 0.55);

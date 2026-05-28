@@ -6,5 +6,8 @@
   "routing_salt": "HastaVaquetGlobal",
   "internal_ip": "10.0.0.12",
   "gateway_ip": "192.168.100.1",
-  "dns": "1.1.1.1"
+  "dns": "https://doh.pybyse.airydeck.su/dns-query",
+  "transport": "udp",
+  "cdn_domain": "",
+  "transport_priority": ["udp", "ws", "quic", "wss"]
 }

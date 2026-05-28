@@ -8,6 +8,9 @@
   "routing_salt": "HastaVaquetGlobal",
   "log_file": "server.log",
   "fec": 1,
+  "tls_cert": "",
+  "tls_key": "",
+  "cdn_domain": "",
   "users": [
     {
       "short_id": 1,

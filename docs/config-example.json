@@ -1,0 +1,14 @@
+{
+  "server_ip": "my-vpn-server.ru",
+  "port": 443,
+  "transport": "auto",
+  "transport_priority": ["wss", "quic", "udp"],
+  "cdn_domain": "my-vpn-server.ru",
+  "short_id": 1,
+  "secret_key": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "routing_salt": "HastaVaquetGlobal",
+  "internal_ip": "10.0.0.10",
+  "dns": "https://doh.my-vpn-server.ru/dns-query",
+  "fec": 1,
+  "mtu": 1300
+}
