@@ -1,0 +1,44 @@
+{
+  "log": {
+    "loglevel": "warning"
+  },
+  "inbounds": [
+    {
+      "port": 1080,
+      "protocol": "socks",
+      "settings": {
+        "udp": true
+      }
+    }
+  ],
+  "outbounds": [
+    {
+      "protocol": "vless",
+      "settings": {
+        "vnext": [
+          {
+            "address": "45.134.39.18",
+            "port": 443,
+            "users": [
+              {
+                "id": "a72cda52-caa6-4642-a32c-8b40e9c98632",
+                "encryption": "none",
+                "flow": "xtls-rprx-vision"
+              }
+            ]
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "tcp",
+        "security": "reality",
+        "realitySettings": {
+          "fingerprint": "chrome",
+          "serverName": "www.microsoft.com",
+          "publicKey": "GVD5f2lVPEiIKGxn0ZjWIaNu43OUuQIzpmGMw7XYbQs",
+          "shortId": "6ba85179e30d4fc2"
+        }
+      }
+    }
+  ]
+}

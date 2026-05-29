@@ -98,27 +98,30 @@
       {:else if activeTab === 'Transport'}
       <h3>Transport</h3>
       <div class="section">
-        <div class="field">
-          <label>Transport Mode</label>
-          <select class="transport-select" bind:value={transport}>
-            <option value="auto">Auto (WSS → UDP)</option>
-            <option value="wss">WSS (TLS + CDN, best DPI bypass)</option>
-            <option value="ws">WS (plain, direct to server)</option>
-            <option value="quic">QUIC-header UDP (fast + masked)</option>
-            <option value="udp">Raw UDP (legacy)</option>
-          </select>
+        <div class="toggle-group">
+          {#each [
+            {val: 'auto', label: 'Auto', desc: 'WSS → WS → QUIC → UDP, best effort'},
+            {val: 'wss', label: 'WSS', desc: '443, TLS + uTLS Chrome, CDN-ready'},
+            {val: 'ws', label: 'WS', desc: '19998, plain WebSocket, no TLS'},
+            {val: 'quic', label: 'QUIC', desc: '19999, QUIC Short Header, masked'},
+            {val: 'udp', label: 'UDP', desc: '19999, raw format, legacy'},
+          ] as t}
+          <button
+            class="transport-toggle"
+            class:active={transport === t.val}
+            on:click={() => transport = t.val}
+          >
+            <div class="toggle-name">{t.label}</div>
+            <div class="toggle-desc">{t.desc}</div>
+          </button>
+          {/each}
         </div>
         <div class="field">
           <label>CDN Domain (for WSS)</label>
           <input bind:value={cdnDomain} placeholder="your-vpn.domain.com"/>
           <div class="field-hint">Set when using Cloudflare CDN. WSS will connect via this domain.</div>
         </div>
-        <div class="transport-info">
-          <div class="info-row"><strong>WSS</strong> <span>— 443, TLS + uTLS Chrome, CDN-ready</span></div>
-          <div class="info-row"><strong>WS</strong> <span>— 19998, plain WebSocket, no TLS, no Cloudflare</span></div>
-          <div class="info-row"><strong>QUIC</strong> <span>— 19999, QUIC Short Header mutation, fastest</span></div>
-          <div class="info-row"><strong>UDP</strong> <span>— 19999, raw format, backward compat</span></div>
-        </div>
+        <div class="note">Reality (Xray) — SOCKS5 proxy on 127.0.0.1:1080, connect via WS transport through it.</div>
       </div>
 
       {:else if activeTab === 'Advanced'}
@@ -138,30 +141,36 @@
 {/if}
 
 <style>
-  .transport-select {
-    background: var(--bg); border: 1px solid var(--border);
-    color: var(--text); padding: 8px 12px;
-    border-radius: 8px; font-size: 14px; width: 100%;
-    cursor: pointer; transition: border 0.2s;
+  .toggle-group {
+    display: flex; flex-direction: column; gap: 6px;
   }
-  .transport-select:focus { outline: none; border-color: var(--accent); }
-  .transport-select option { background: var(--surface); color: var(--text); }
+  .transport-toggle {
+    display: flex; flex-direction: column; gap: 2px;
+    width: 100%; padding: 10px 14px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text); cursor: pointer;
+    text-align: left;
+    transition: all 0.15s;
+  }
+  .transport-toggle:hover { background: rgba(255,255,255,0.06); border-color: var(--accent); }
+  .transport-toggle.active {
+    background: rgba(63,185,80,0.08);
+    border-color: var(--accent);
+  }
+  .transport-toggle .toggle-name {
+    font-size: 14px; font-weight: 600;
+  }
+  .transport-toggle.active .toggle-name { color: var(--accent); }
+  .transport-toggle .toggle-desc {
+    font-size: 11px; color: var(--text-dim);
+  }
 
   .field-hint {
     font-size: 11px; color: var(--text-dim);
     margin-top: 4px; line-height: 1.4;
   }
-
-  .transport-info {
-    padding: 12px; background: rgba(255,255,255,0.03);
-    border: 1px solid var(--border); border-radius: 8px;
-    display: flex; flex-direction: column; gap: 8px;
-  }
-  .info-row {
-    display: flex; gap: 8px;
-    font-size: 13px; color: var(--text-dim);
-  }
-  .info-row strong { color: var(--text); min-width: 48px; }
 
   .settings-overlay {
     position: fixed; inset: 0;
