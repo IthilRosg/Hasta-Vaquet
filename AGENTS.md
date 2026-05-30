@@ -1,3 +1,52 @@
+<!-- TOKEN_EFFICIENCY_START -->
+## Server
+
+| Параметр | Значение |
+|---|---|
+| IP | 45.134.39.18 |
+| SSH | Ключи установлены |
+| UDP | :4433 |
+| WS | :4434 |
+| Reality | :443 (Xray VLESS+XTLS+Vision) |
+| DoH | doh.pybyse.airydeck.su |
+| Web Panel | hasvaq.airydeck.su |
+
+## Token Efficiency
+
+Global rules to minimize token waste without losing technical quality.
+
+### Communication
+
+- **Direct opening.** No greetings, no "I'll help you with that", no fluff. State result immediately.
+- **Table over prose.** Use tables for comparisons, statuses, multi-option analysis. Bullet lists for 3+ items.
+- **Omit meta-narration.** Don't say "I found X by reading Y". Just state X. Don't explain what you're about to do — do it.
+- **No redundant context.** If user just saw the code, don't restate it. Reference line numbers only.
+- **Summary line first.** Lead with the answer/result. Details follow only if needed.
+
+### Code Changes
+
+- **Minimal diff.** Never rewrite entire files. Edit only the changed lines/functions.
+- **Batch parallel edits.** Group independent file edits into one message.
+- **Skip confirmation prompts.** Don't ask "Shall I proceed?" — just execute and report.
+- **Omit trivial comments.** Don't add `// this function does X` comments stating the obvious.
+
+### Tool Usage
+
+- **One trip per file.** Read a file once. If you need specific sections, use `start_line`/`end_line`.
+- **Prefer grep over ls.** Searching by content is faster than listing + reading.
+- **Cache results.** If you grep'd for a symbol 5 turns ago, don't re-grep — reference from memory.
+- **Parallel independent calls.** No reason to wait for grep A before grep B if neither depends on the other.
+
+### Problem Solving
+
+- **Root cause first.** State the root cause in the first sentence. Symptoms and background after.
+- **One actionable recommendation.** Don't offer 3 options unless user asked. Recommend the best one.
+- **Error messages: exact.** Quote the exact error. Don't paraphrase — paraphrases lose signal.
+- **Validation: one command.** Run one targeted test/check. If it passes, done. Don't run the full suite unless relevant.
+
+> Agents that ignore these rules waste tokens. This is a resource-constrained project — every token counts.
+<!-- TOKEN_EFFICIENCY_END -->
+
 <!-- CODEGRAPH_START -->
 ## CodeGraph
 

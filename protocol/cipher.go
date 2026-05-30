@@ -25,11 +25,13 @@ var bufPool = sync.Pool{
 	New: func() any { return make([]byte, 65535) },
 }
 
-// padBufPool предоставляет буферы со случайными байтами для padding'а.
-// Буферы одноразовые: берём, копируем сколько нужно, возвращаем.
+// padBufPool предоставляет буферы для padding'а.
+// Размер 65535 покроет любой PadMax.
 var padBufPool = sync.Pool{
 	New: func() any {
-		return make([]byte, 256)
+		b := make([]byte, 65535)
+		rand.Read(b)
+		return b
 	},
 }
 

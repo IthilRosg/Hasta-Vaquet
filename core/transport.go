@@ -1,12 +1,16 @@
+// Transport abstraction — UDP, QUIC-header, WS, XHTTP.
 package core
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"encoding/binary"
 	"fmt"
+	"io"
 	"log"
 	"net"
+	"net/http"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -17,16 +21,16 @@ import (
 )
 
 const (
-	TransportAuto = "auto"
-	TransportWSS  = "wss"
-	TransportWS   = "ws"
-	TransportQUIC = "quic"
-	TransportUDP  = "udp"
+	TransportAuto  = "auto"
+	TransportWSS   = "wss"
+	TransportWS    = "ws"
+	TransportQUIC  = "quic"
+	TransportUDP   = "udp"
+	TransportXHTTP = "xhttp"
 )
 
 var defaultTransportPriority = []string{TransportWSS, TransportQUIC, TransportUDP}
 
-// wsBufPool — reusable буферы для WebSocket/QUIC фреймов.
 var wsBufPool = sync.Pool{
 	New: func() any { return make([]byte, 65535+14) },
 }
@@ -51,7 +55,6 @@ func (tm *TransportManager) ActiveTransport() string {
 func (tm *TransportManager) Dial(ctx context.Context) (net.Conn, string, error) {
 	tm.mu.Lock()
 	defer tm.mu.Unlock()
-
 	priorities := tm.resolvePriorities()
 	var lastErr error
 	for _, t := range priorities {
@@ -71,7 +74,6 @@ func (tm *TransportManager) Dial(ctx context.Context) (net.Conn, string, error) 
 func (tm *TransportManager) Fallback(ctx context.Context) (net.Conn, string, error) {
 	tm.mu.Lock()
 	defer tm.mu.Unlock()
-
 	priorities := tm.resolvePriorities()
 	start := 0
 	for i, t := range priorities {
@@ -80,7 +82,6 @@ func (tm *TransportManager) Fallback(ctx context.Context) (net.Conn, string, err
 			break
 		}
 	}
-
 	var lastErr error
 	for i := 0; i < len(priorities); i++ {
 		t := priorities[(start+i)%len(priorities)]
@@ -130,12 +131,14 @@ func (tm *TransportManager) dialTransport(ctx context.Context, transport string)
 		return DialQUICUDP(ctx, cfg.ServerIP, cfg.Port, cfg.ShortID, cfg.SecretKey)
 	case TransportUDP:
 		return DialRawUDP(ctx, cfg.ServerIP, cfg.Port)
+	case TransportXHTTP:
+		return DialXHTTP(ctx, cfg.ServerIP, cfg.WSPort+1)
 	default:
 		return nil, fmt.Errorf("unknown transport: %s", transport)
 	}
 }
 
-// ─── WSS/WS Transport via gorilla/websocket ───────────────────────
+// ─── WSS/WS Transport ───────────────────────────────────────────
 
 type wsConn struct {
 	ws   *websocket.Conn
@@ -169,53 +172,44 @@ func (c *wsConn) LocalAddr() net.Addr {
 	return c.addr
 }
 
-// DialWSS connects via WSS using gorilla/websocket with NextProtos=http/1.1.
-// Goes through Cloudflare (TLS).
 func DialWSS(ctx context.Context, server string, port int, tlsConfig *tls.Config) (net.Conn, error) {
 	if tlsConfig == nil {
 		tlsConfig = &tls.Config{ServerName: server}
 	}
 	tlsConfig.NextProtos = []string{"http/1.1"}
-
 	url := fmt.Sprintf("wss://%s:%d/hasta-vaquet/ws", server, port)
 	dialer := &websocket.Dialer{
 		HandshakeTimeout: 12 * time.Second,
 		TLSClientConfig:  tlsConfig,
 		WriteBufferSize:  65535 + 14,
 	}
-
 	ws, resp, err := dialer.DialContext(ctx, url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("wss dial %s: %w", url, err)
 	}
 	resp.Body.Close()
-
 	addr, _ := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:%d", server, port))
 	log.Printf("[WSS] Connected via %s -> %s", ws.UnderlyingConn().LocalAddr(), ws.UnderlyingConn().RemoteAddr())
 	return &wsConn{ws: ws, addr: addr}, nil
 }
 
-// DialWS connects via plain WS (no TLS) directly to the server.
-// Bypasses Cloudflare. Use when DPI evasion is not needed.
 func DialWS(ctx context.Context, server string, port int) (net.Conn, error) {
 	url := fmt.Sprintf("ws://%s:%d/hasta-vaquet/ws", server, port)
 	dialer := &websocket.Dialer{
 		HandshakeTimeout: 10 * time.Second,
 		WriteBufferSize:  65535 + 14,
 	}
-
 	ws, resp, err := dialer.DialContext(ctx, url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("ws dial %s: %w", url, err)
 	}
 	resp.Body.Close()
-
 	addr, _ := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:%d", server, port))
 	log.Printf("[WS] Connected via %s -> %s", ws.UnderlyingConn().LocalAddr(), ws.UnderlyingConn().RemoteAddr())
 	return &wsConn{ws: ws, addr: addr}, nil
 }
 
-// ─── QUIC-header UDP Transport ────────────────────────────────────
+// ─── QUIC-header UDP Transport ──────────────────────────────────
 
 type quicUDPConn struct {
 	*net.UDPConn
@@ -227,12 +221,11 @@ type quicUDPConn struct {
 
 func (c *quicUDPConn) Write(b []byte) (int, error) {
 	pn := uint32(c.packetNum.Add(1) - 1)
-	// Pre-allocate single buffer from pool for QUIC frame
 	frame := wsBufPool.Get().([]byte)[:7+len(b)]
-	frame[0] = 0x40 | byte(pn&0x07)                    // QUIC Short Header + spin bit
-	binary.BigEndian.PutUint16(frame[1:3], 0)          // connID[0:2] = 0
-	binary.BigEndian.PutUint16(frame[3:5], c.shortID)  // connID[2:4] = shortID (plain)
-	binary.BigEndian.PutUint16(frame[5:7], uint16(pn)) // packet number
+	frame[0] = 0x40 | byte(pn&0x07)
+	binary.BigEndian.PutUint16(frame[1:3], 0)
+	binary.BigEndian.PutUint16(frame[3:5], c.shortID)
+	binary.BigEndian.PutUint16(frame[5:7], uint16(pn))
 	copy(frame[7:], b)
 	n, err := c.UDPConn.Write(frame)
 	wsBufPool.Put(frame[:cap(frame)])
@@ -243,7 +236,6 @@ func (c *quicUDPConn) Write(b []byte) (int, error) {
 }
 
 func (c *quicUDPConn) Read(b []byte) (int, error) {
-	// Server responds in standard format (no QUIC header on responses)
 	return c.UDPConn.Read(b)
 }
 
@@ -255,15 +247,147 @@ func DialQUICUDP(ctx context.Context, server string, port int, shortID uint16, s
 	}
 	conn.SetWriteBuffer(2 * 1024 * 1024)
 	conn.SetReadBuffer(2 * 1024 * 1024)
-	// QUIC header key = DeriveKey(secretKey) = peer.Key on server
 	quicKey := DeriveKey(secretKey)
 	return &quicUDPConn{
-		UDPConn:     conn,
-		key:         quicKey,
-		shortID:     shortID,
-		routingSalt: "",
+		UDPConn: conn, key: quicKey,
+		shortID: shortID, routingSalt: "",
 	}, nil
 }
+
+// ─── XHTTP Transport (batched POST) ──────────────────────────
+
+// DialXHTTP returns a net.Conn that batches packets and flushes as HTTP POST.
+// Batch size: every 5ms or 1000 packets, whichever comes first.
+func DialXHTTP(ctx context.Context, server string, port int) (net.Conn, error) {
+	c := &xhttpConn{
+		server:  server,
+		port:    port,
+		client:  &http.Client{Timeout: 0},
+		closeCh: make(chan struct{}),
+		batchCh: make(chan struct{}, 1),
+	}
+	// Background flusher: every 5ms, flush the batch
+	go func() {
+		ticker := time.NewTicker(5 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-c.closeCh:
+				c.flush()
+				return
+			case <-ticker.C:
+				c.flush()
+			}
+		}
+	}()
+	return c, nil
+}
+
+type xhttpConn struct {
+	server  string
+	port    int
+	client  *http.Client
+	closeCh chan struct{}
+	once    sync.Once
+	batchMu sync.Mutex
+	batch   []byte
+	batchN  int
+	batchCh chan struct{}
+	readBuf []byte
+	readIdx int
+	readMu  sync.Mutex
+}
+
+func (c *xhttpConn) Write(b []byte) (int, error) {
+	select {
+	case <-c.closeCh:
+		return 0, fmt.Errorf("closed")
+	default:
+	}
+	c.batchMu.Lock()
+	// Frame: [4-byte len][data]
+	var hdr [4]byte
+	binary.BigEndian.PutUint32(hdr[:], uint32(len(b)))
+	c.batch = append(c.batch, hdr[:]...)
+	c.batch = append(c.batch, b...)
+	c.batchN++
+	// Auto-flush at 500 packets
+	if c.batchN >= 500 {
+		c.batchMu.Unlock()
+		c.flush()
+		return len(b), nil
+	}
+	c.batchMu.Unlock()
+	return len(b), nil
+}
+
+func (c *xhttpConn) flush() {
+	c.batchMu.Lock()
+	if c.batchN == 0 {
+		c.batchMu.Unlock()
+		return
+	}
+	// Build batch: [count(4)][framed packets...]
+	var cnt [4]byte
+	binary.BigEndian.PutUint32(cnt[:], uint32(c.batchN))
+	body := append(cnt[:], c.batch...)
+	c.batch = c.batch[:0]
+	c.batchN = 0
+	c.batchMu.Unlock()
+
+	url := fmt.Sprintf("http://%s:%d/hasta-vaquet/xhttp", c.server, c.port)
+	resp, err := c.client.Post(url, "application/octet-stream", bytes.NewReader(body))
+	if err != nil {
+		return
+	}
+	defer resp.Body.Close()
+	readBody, _ := io.ReadAll(resp.Body)
+	if len(readBody) > 0 {
+		c.readMu.Lock()
+		c.readBuf = readBody
+		c.readIdx = 0
+		c.readMu.Unlock()
+	}
+}
+
+func (c *xhttpConn) Read(b []byte) (int, error) {
+	c.readMu.Lock()
+	// If no data and we have pending batch, flush now
+	if c.readIdx >= len(c.readBuf) {
+		c.readMu.Unlock()
+		c.flush()
+		c.readMu.Lock()
+	}
+	if c.readIdx >= len(c.readBuf) {
+		c.readMu.Unlock()
+		return 0, fmt.Errorf("no data")
+	}
+	n := copy(b, c.readBuf[c.readIdx:])
+	c.readIdx += n
+	c.readMu.Unlock()
+	return n, nil
+}
+
+func (c *xhttpConn) Close() error {
+	c.once.Do(func() { close(c.closeCh) })
+	return nil
+}
+
+func (c *xhttpConn) LocalAddr() net.Addr { return &addrInfo{"", "tcp"} }
+func (c *xhttpConn) RemoteAddr() net.Addr {
+	return &addrInfo{fmt.Sprintf("%s:%d", c.server, c.port), "tcp"}
+}
+func (c *xhttpConn) SetDeadline(t time.Time) error      { return nil }
+func (c *xhttpConn) SetReadDeadline(t time.Time) error  { return nil }
+func (c *xhttpConn) SetWriteDeadline(t time.Time) error { return nil }
+
+type addrInfo struct {
+	addr string
+	net  string
+}
+
+func (a *addrInfo) Network() string { return a.net }
+func (a *addrInfo) String() string  { return a.addr }
 
 // ─── Raw UDP Transport ────────────────────────────────────────────
 

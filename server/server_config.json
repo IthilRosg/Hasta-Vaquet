@@ -1,5 +1,6 @@
 {
-  "port": 19999,
+  "port": 4433,
+  "ws_port": 4434,
   "admin_port": 9998,
   "admin_token": "f517b99e89ac5e283af8d96b",
   "server_ip": "45.134.39.18",

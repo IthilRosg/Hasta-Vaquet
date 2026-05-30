@@ -1,110 +1,142 @@
-# Phase 8: Android Client — журнал разработки
+# Phase 9: Multi-Transport & Hardening (Май 2026)
 
 > Живой документ. Обновляется каждый шаг.
 
-## Текущее состояние (2026-05-17 12:15) — Phase 8 БАЗОВАЯ РАБОТОСПОСОБНОСТЬ ДОСТИГНУТА
+## Текущее состояние (2026-05-30)
 
-**Билд:** ✅  
-**Сервер:** ✅ 45.134.39.18:9999  
-**QR-сканер:** ✅ камера работает (PreviewView + ImageAnalysis + ML Kit)  
-**Профили:** ✅ CRUD SharedPreferences, дропдаун  
-**Disconnect:** ✅ останавливает Core + сервис, значок VPN исчезает (fix: `tunFd.close()`)  
-**UDP-сокет:** ✅ Go-managed + Protector (fix: Android 15 reflection block)  
-**protect():** ✅ работает через callback из Go в Kotlin  
-**TUN:** ✅ устанавливается, IPv6 Blackhole добавлен (fix: routing leak)  
-**Трафик:** ✅ подтверждён логами (writerLoop/readerLoop active)
+**Билд:** ✅ Windows GUI (Wails2 + Svelte)  
+**Сервер:** ✅ 45.134.39.18:4433 (UDP), :4434 (WS)  
+**Xray Reality:** ✅ :443 (VLESS + XTLS + Vision)  
+**DoH:** ✅ doh.pybyse.airydeck.su  
+**GitHub:** ✅ github.com/IthilRosg/Hasta-Vaquet
 
-**Все критические баги закрыты. Статистика ✅ Uptime ✅ Статус ✅ VPN ✅ Сканер ✅
-- [ ] Phase 8.1: Интеграция реальной статистики в UI (Poll GetStats)
-- [ ] Phase 8.2: Реализация "Kill Switch" на уровне Android
+---
 
-## Найденные и исправленные баги
+## Транспорты
 
-| Баг | Симптом | Причина | Исправление |
-|---|---|---|---|
-| `EAGAIN` спам | writerLoop: TUN read error | fd в non-blocking режиме, syscall.Read не ждёт | `os.File.Read()` через runtime poller |
-| `NetworkOnMainThreadException` | UDP socket ERROR: null | `DatagramSocket.connect()` на main thread | `Thread{...}.start()` |
-| `fromDatagramSocket() → null` | ERROR: NullPointerException | API возвращает null на Xiaomi | Reflection: `impl.fd` → `ParcelFileDescriptor.dup()` → `detachFd()` |
-| `protect()` не работал | UDP через TUN → петля | Сокет не защищён от VPN-маршрутизации | `protect(udpSocket)` + `protect(int fd)` |
-| PreviewView GONE | Камера не включалась | GONE убирает View из layout → surface provider мёртв | Full-screen PreviewView (стандартная схема) |
-| `onclick` с JSON.stringify | Кнопки не работали в web-панели | Двойные кавычки ломали HTML-парсер | Data-атрибуты + event delegation |
-| `short_id` как строка | "invalid json" | JS отправлял "003", Go ждал uint16 | `parseInt(shortId, 10)` |
-| Профиль удалялся — коннект оставался | Фантомное подключение | `loadConfig()` → `LoadDefaultConfig()` восстанавливал настройки | `SaveLastProfile('')` + без `loadConfig()` |
-| Uptime не обновлялся | 00:00 навсегда | Обновление только при трафике | `setInterval` каждую секунду |
+| Транспорт | Порт | Статус | Скорость | DPI |
+|---|---|---|---|---|
+| **Raw UDP** | 4433 | ✅ | **880 Mbps** | ❌ |
+| **QUIC-header UDP** | 4433 | ✅ | **819 Mbps** | ✅ QUIC Short Header |
+| **WS (plain)** | 4434 | ✅ | 221 Mbps | ⚠️ |
+| **UDP + Large Padding** | 4433 | ✅ | 784 Mbps | ⚠️ Случайный размер |
+| WSS (Cloudflare) | — | ❌ Удалён | — | Cloudflare лимиты |
+| WS+Mux (yamux) | — | ❌ Нужен сервер | — | — |
+| XHTTP (chunked) | — | ❌ Не реализован | — | — |
 
-## Архитектура Android-клиента
+## Протокол
 
+**Wire Format (Phase 6):**
 ```
-┌─ MainActivity ──────────────────────────────────────────┐
-│  SharedPreferences: профили (CRUD)                       │
-│  onConnect → startVpn(config)                            │
-│    ↓                                                     │
-│  VpnService.prepare() → разрешение пользователя          │
-│    ↓                                                     │
-│  startForegroundService(VpnService, config)              │
-└──────────────────────────────────────────────────────────┘
-                         ↓
-┌─ HastaVaquetVpnService ─────────────────────────────────┐
-│  1. Builder.setMtu(1300).addRoute("0.0.0.0",0)          │
-│  2. addDisallowedApplication(pkg) — Smart Bypass        │
-│  3. establish() → detachFd() → TUN fd                   │
-│  4. Thread:                                              │
-│     - DatagramSocket().connect(server)                   │
-│     - protect(socket)                                    │
-│     - reflection: impl.fd → dup → detach → UDP fd       │
-│     - Core.startVPN(configJson, tunFd, udpFd)            │
-│  5. onRevoke/doStop → Core.stopVPN() + stopForeground   │
-└──────────────────────────────────────────────────────────┘
-                         ↓
-┌─ core (Go, gomobile) ───────────────────────────────────┐
-│  gomobile.go: StartVPN(config, tunFd, udpFd)            │
-│    plat.tunFile = os.NewFile(tunFd, "tun")               │
-│    plat.protectedConn = os.NewFile(udpFd, "udp")         │
-│    vpn.Start() →                                          │
-│      openTunnel: net.FileConn(protectedConn) → UDPConn   │
-│      keepAliveLoop, readerLoop, writerLoop, statsLoop    │
-│                                                          │
-│  vpn_android.go:                                         │
-│    openTunnel: net.FileConn → защищённый UDP             │
-│    readerLoop: UDP Read → Decrypt → TUN Write            │
-│    writerLoop: TUN Read → Encrypt → UDP Write            │
-│    closeTunnel: закрыть оба fd                           │
-└──────────────────────────────────────────────────────────┘
+[HMAC(4)] [DynamicID(2)] [Nonce(12)] [AES-256-GCM(inner)]
 ```
 
-## Ключевые пути
-
+**QUIC-header поверх:**
 ```
-android/app/src/main/java/com/hastavaquet/
-├── MainActivity.kt            — точка входа, профили, лаунчеры
-├── HastaVaquetVpnService.kt   — VpnService, TUN + UDP socket
-├── ScannerActivity.kt         — CameraX + ML Kit QR
-├── AppLogger.kt               — логгер в файл + logcat
-└── ui/
-    ├── ConnectScreen.kt       — Compose UI (кнопка, карточки, профили)
-    └── Theme.kt               — тёмная тема
-
-core/
-├── vpn.go                     — общая логика (StatusListener, циклы)
-├── vpn_windows.go             — Windows: Wintun + netsh
-├── vpn_android.go             — Android: os.File TUN + protected UDP
-├── gomobile.go                — StartVPN/StopVPN/GetStats
-├── crypto.go                  — AES-GCM, HMAC, DynamicID
-└── config.go                  — Config, LoadConfig
+[0x40|spin(1)] [connID(4)] [packetNum(2)] [standard-packet]
 ```
+
+**Шифрование:** AES-256-GCM, per-user ключи  
+**Padding:** 0-40 (стандарт), 0-200 (Large Padding)  
+**FEC:** 1-5x (1=off, 2-5 избыточность)  
+**MTU:** 1300  
+
+## Оптимизации (май 2026)
+
+| Что | Было | Стало |
+|---|---|---|
+| Mutex в CipherPack | sync.Mutex | Per-goroutine (отдельные enc/dec/ping CP) |
+| PRNG | math/rand (блокировки) | fastPRNG (xorshift64*, 10x быстрее) |
+| Буферы | make([]byte,N) на пакет | sync.Pool (0 аллокаций) |
+| authData/marker | heap alloc | stack alloc |
+| QUIC header | 3 аллокации | 1 аллокация |
+| ReaderLoop | SetReadDeadline (SChannel баг) | goroutine-based, без deadline |
+| Echo writes | sync (блокировал main loop) | async goroutine |
+
+## Сервер
+
+**Характеристики:** Intel Xeon Gold 6150, 4 ядра, 15GB RAM, 350 Mbps аплинк  
+**Сервисы:** hasta-vaquet (UDP :4433, WS :4434), Xray Reality (:443), Caddy (:4443)
+
+**Xray Config:**
+```json
+{
+  "dest": "www.microsoft.com:443",
+  "serverNames": ["www.microsoft.com", "www.bing.com", "www.cloudflare.com", "www.github.com"],
+  "flow": "xtls-rprx-vision"
+}
+```
+
+## GUI (Windows)
+
+**Фреймворк:** Wails v2.12.0 + Svelte + TypeScript  
+**Окно:** 480x700, тёмная тема  
+**Транспорты в настройках:** Auto / WSS / WS / QUIC / UDP  
+**Профили:** импорт/экспорт JSON, список, авто-загрузка  
+**Статус:** connection state, TX/RX speed, ping, loss, uptime
+
+## DoH
+
+**URL:** https://doh.pybyse.airydeck.su/dns-query  
+**Бэкенд:** Cloudflare Worker  
+**Rate limit:** 200 req/min per IP  
+**Fallback:** 1.1.1.1 → 8.8.8.8
+
+---
+
+## Ближайшие задачи
+
+### Phase 9a: XHTTP transport
+- HTTP chunked transport (каждый чанк = POST запрос)
+- Серверный handler на :4435
+- Ожидаемая скорость: ~150 Mbps, макс DPI evasion
+
+### Phase 9b: Mux на сервере
+- yamux server-side для WS
+- Мультиплексирование потоков
+- Тест многопоточности
+
+### Phase 9c: Chimera Final
+- Adaptive переключение между UDP/QUIC/WS
+- Авто FEC при потерях
+- Protocol rotation каждые N минут
+
+### Phase 9d: Production
+- Rate limiting на сервере
+- expires_at + quota_bytes
+- Windows Installer (Inno Setup)
+- Systemd unit update
+
+---
+
+## Документация
+
+| Файл | Описание |
+|---|---|
+| `00_MASTER_PLAN.md` | Стратегический план |
+| `12_POSTMORTEM.md` | Послесловие: что сделано, что нет |
+| `docs/transport-strategy.md` | Стратегия транспортов |
+| `docs/chimera-analysis.md` | 7 вариаций Chimera |
+| `docs/state-of-art-2026.md` | Современные транспорты (quic-go, Hysteria) |
+| `docs/reality-dest-analysis.md` | Анализ Reality destinations |
+| `docs/bench-mutations-results.md` | Результаты тестов мутаций |
+| `docs/transports-2026.md` | XHTTP, Mux, SplitHTTP, gRPC, MASQUE |
+| `docs/cdn-deploy.md` | Развёртывание за Cloudflare |
+| `docs/doh-worker.js` | Cloudflare Worker DoH |
+| `docs/performance-tuning.md` | Настройка скорости |
 
 ## Команды
 
 ```sh
-# Сборка AAR
-cd core && gomobile bind -target android -androidapi 35 -o ../android/app/libs/core.aar hasta-vaquet/core
+# Сборка сервера (Linux)
+GOOS=linux GOARCH=amd64 go build -o server/hasta-vaquet-server -ldflags="-s -w" ./server/...
 
-# Логи с устройства
-cd android/logs && capture_logs.bat     # весь logcat → hastavaquet_live.txt
+# Сборка GUI (Windows)
+cd gui && wails build -o Hasta-Vaquet-new.exe
 
-# Ядерная очистка кеша
-cd android && clean_build.bat
+# Запуск тестов
+go test ./... -v
 
-# Логи Go в logcat
-adb logcat -s GoLog:V
+# Вет
+go vet ./...
 ```

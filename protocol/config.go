@@ -5,40 +5,37 @@ import (
 	"os"
 )
 
-// Transport type constants — strings for JSON config.
 const (
 	TransportUDP  = "udp"
 	TransportWSS  = "wss"
-	TransportQUIC = "quic" // future
+	TransportQUIC = "quic"
 )
 
-// Config — единая конфигурация для клиента и сервера.
-// Все поля вычитываются из JSON, хардкод-дефолтов в коде нет.
 type Config struct {
 	ProfileName string `json:"profile_name,omitempty"`
 	ServerIP    string `json:"server_ip"`
 	Port        int    `json:"port"`
+	WSPort      int    `json:"ws_port,omitempty"`
 	ShortID     uint16 `json:"short_id"`
 	SecretKey   string `json:"secret_key"`
 	RoutingSalt string `json:"routing_salt,omitempty"`
 	InternalIP  string `json:"internal_ip,omitempty"`
 	GatewayIP   string `json:"gateway_ip,omitempty"`
 	DNS         string `json:"dns,omitempty"`
-	FEC         int    `json:"fec,omitempty"` // 1=off
+	FEC         int    `json:"fec,omitempty"`
 	MTU         int    `json:"mtu,omitempty"`
 	AdminPort   int    `json:"admin_port,omitempty"`
 	AdminToken  string `json:"admin_token,omitempty"`
 	AdminPath   string `json:"admin_path,omitempty"`
-	NoEncrypt   bool   `json:"no_encrypt,omitempty"` // true = отключить шифрование (тесты)
+	NoEncrypt   bool   `json:"no_encrypt,omitempty"`
 	LogFile     string `json:"log_file,omitempty"`
 	Users       []User `json:"users,omitempty"`
 
-	// Transport layer settings.
-	Transport         string   `json:"transport"`                    // "auto" | "wss" | "quic" | "udp"
-	CDNDomain         string   `json:"cdn_domain,omitempty"`         // WSS CDN fronting domain
-	TLSCertFile       string   `json:"tls_cert,omitempty"`           // server TLS cert path
-	TLSKeyFile        string   `json:"tls_key,omitempty"`            // server TLS key path
-	TransportPriority []string `json:"transport_priority,omitempty"` // e.g. ["wss","quic","udp"]
+	Transport         string   `json:"transport"`
+	CDNDomain         string   `json:"cdn_domain,omitempty"`
+	TLSCertFile       string   `json:"tls_cert,omitempty"`
+	TLSKeyFile        string   `json:"tls_key,omitempty"`
+	TransportPriority []string `json:"transport_priority,omitempty"`
 }
 
 type User struct {
@@ -48,7 +45,6 @@ type User struct {
 	IP        string `json:"ip"`
 }
 
-// SetDefaults заполняет пропущенные поля разумными значениями.
 func LoadConfig(path string) (Config, error) {
 	cfg := Config{}
 	if f, err := os.Open(path); err == nil {
@@ -64,6 +60,9 @@ func LoadConfig(path string) (Config, error) {
 func (c *Config) SetDefaults() {
 	if c.Port == 0 {
 		c.Port = 19999
+	}
+	if c.WSPort == 0 {
+		c.WSPort = 19998
 	}
 	if c.RoutingSalt == "" {
 		c.RoutingSalt = "HastaVaquetGlobal"
@@ -97,7 +96,6 @@ func (c *Config) SetDefaults() {
 	}
 }
 
-// CipherSuite — выбор шифрования.
 type CipherSuite int
 
 const (
@@ -105,10 +103,9 @@ const (
 	CipherChaCha20Poly1305
 )
 
-// ProtocolConfig — настройки протокола (могут согласовываться при handshake).
 type ProtocolConfig struct {
 	Cipher    CipherSuite
-	MimicType string // "" / "tls" / "http2" / "quic"
+	MimicType string
 	MinPad    int
 	MaxPad    int
 	FEC       int

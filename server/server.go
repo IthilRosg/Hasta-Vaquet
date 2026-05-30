@@ -1,11 +1,15 @@
 package main
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/binary"
 	"flag"
+	"fmt"
+	"io"
 	"log"
 	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"strings"
@@ -296,6 +300,118 @@ func processPacket(pkt IncomingPacket, ifce *water.Interface) {
 	peer.CumRx.Add(int64(len(decrypted)))
 }
 
+// ─── XHTTP Server (POST-per-packet) ─────────────────────────
+
+func startXHTTPServer(port int, cfg protocol.Config, logger *log.Logger, ifce *water.Interface) {
+	mux := http.NewServeMux()
+	mux.HandleFunc(cfg.AdminPath+"/xhttp", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			http.Error(w, "POST only", 405)
+			return
+		}
+		body, err := io.ReadAll(r.Body)
+		r.Body.Close()
+		if err != nil || len(body) < 4 {
+			return
+		}
+
+		// Batch format: [count(4)][(len(4)+data)*count]
+		// count=0 → single packet body
+		// count>0 → batch
+		count := int(binary.BigEndian.Uint32(body[:4]))
+		off := 4
+
+		if count == 0 {
+			// Single POST = single packet (backward compat)
+			if len(body) < 4+2+12 {
+				return
+			}
+			xhttpProcessPacket(body[4:], w, nil, ifce, logger)
+			return
+		}
+
+		// Batch mode: process all packets, collect echoes
+		echoBuf := &bytes.Buffer{}
+		for i := 0; i < count && off+6 <= len(body); i++ {
+			if off+4 > len(body) {
+				break
+			}
+			pktLen := int(binary.BigEndian.Uint32(body[off:]))
+			off += 4
+			if off+pktLen > len(body) || pktLen < 4+2+12 {
+				break
+			}
+			xhttpProcessPacket(body[off:off+pktLen], echoBuf, nil, ifce, logger)
+			off += pktLen
+		}
+		if echoBuf.Len() > 0 {
+			w.Write(echoBuf.Bytes())
+		}
+	})
+
+	server := &http.Server{
+		Addr:    fmt.Sprintf(":%d", port),
+		Handler: mux,
+	}
+	logger.Printf("[XHTTP] HTTP на :%d", port)
+	if err := server.ListenAndServe(); err != nil {
+		logger.Printf("[XHTTP] Ошибка: %v", err)
+	}
+}
+
+func xhttpProcessPacket(pkt []byte, w io.Writer, _ interface{}, ifce *water.Interface, logger *log.Logger) {
+	if len(pkt) < 4+2+12 {
+		return
+	}
+
+	dynamicID := binary.BigEndian.Uint16(pkt[4:6])
+	nonce := pkt[6:18]
+	routeMask := vpncore.Fnv1a16(append([]byte(routingSalt), nonce...))
+	shortID := dynamicID ^ routeMask
+
+	peersMu.RLock()
+	peer := peers[shortID]
+	peersMu.RUnlock()
+	if peer == nil {
+		return
+	}
+
+	if !serverCfg.NoEncrypt {
+		bkey := bloomKey(shortID, nonce)
+		if !bloomCheck(bkey) {
+			return
+		}
+		bloomSet(bkey)
+		bloomCount.Add(1)
+	}
+
+	peer.cpMu.Lock()
+	decrypted, decErr := peer.CP.Decrypt(pkt)
+	peer.cpMu.Unlock()
+	if decErr != nil {
+		return
+	}
+
+	if len(decrypted) == 0 {
+		if w != nil {
+			peer.cpMu.Lock()
+			enc, encErr := peer.CP.Encrypt([]byte{0x01}, peer.ShortID, routingSalt)
+			peer.cpMu.Unlock()
+			if encErr != nil {
+				return
+			}
+			w.Write(enc)
+		}
+		return
+	}
+
+	if _, err := ifce.Write(decrypted); err != nil {
+		logger.Printf("[XHTTP] TUN Write: %v", err)
+	}
+	peer.ByteIn.Add(int64(len(decrypted)))
+	peer.CumRx.Add(int64(len(decrypted)))
+}
+
 func main() {
 	cfg := loadConfig()
 	serverCfg = cfg
@@ -417,9 +533,9 @@ func main() {
 	}
 
 	// ─── Plain WS сервер (за Caddy/nginx) — всегда включён ─────
-	wsPlain := NewPlainWSServer(19998, cfg, logger)
+	wsPlain := NewPlainWSServer(cfg.WSPort, cfg, logger)
 	go wsPlain.StartPlain()
-	logger.Printf("[WS] Plain WebSocket сервер запущен на :19998%s\n", cfg.AdminPath+"/ws")
+	logger.Printf("[WS] Plain WebSocket сервер запущен на :%d%s\n", cfg.WSPort, cfg.AdminPath+"/ws")
 
 	// Горутина: читаем plain WS → incomingCh
 	go func() {
@@ -520,6 +636,14 @@ func main() {
 			}
 		}
 	}()
+
+	// ─── XHTTP сервер (HTTP chunked streaming) ────────────────
+	xhttpPort := cfg.WSPort + 1 // 4435 or 19999
+	if xhttpPort == 0 {
+		xhttpPort = 19997
+	}
+	go startXHTTPServer(xhttpPort, cfg, logger, ifce)
+	logger.Printf("[XHTTP] Сервер запущен на :%d%s\n", xhttpPort, cfg.AdminPath+"/xhttp")
 
 	// ─── Статистика (каждые 30с) ────────────────────────────────
 	go func() {
