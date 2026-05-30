@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"hasta-vaquet/core"
 
@@ -27,6 +29,7 @@ type App struct {
 	killSwitchEnabled bool
 	bypassMode        string
 	bypassCIDRs       []string
+	vpnCIDRs          []string
 }
 
 // vpnListener реализует core.StatusListener для отправки событий в UI.
@@ -307,6 +310,7 @@ func (a *App) DoConnect(serverIP, secretKey, routingSalt, internalIP, gatewayIP,
 		CDNDomain:   cdnDomain,
 		BypassMode:  a.bypassMode,
 		BypassCIDRs: a.bypassCIDRs,
+		VPNCIDRs:    a.vpnCIDRs,
 	}
 	vpn := core.New(cfg, &vpnListener{ctx: a.ctx, logger: a.logger})
 	vpn.SetKillSwitchEnabled(a.killSwitchEnabled)
@@ -434,4 +438,82 @@ var RussianBankCIDRs = []string{
 
 func (a *App) GetRussianBankPreset() []string {
 	return RussianBankCIDRs
+}
+
+// ─── VPN CIDRs (for vpn_only mode) ───────────────────────────
+
+func (a *App) GetVPNCIDRs() []string {
+	return a.vpnCIDRs
+}
+
+func (a *App) SetVPNCIDRs(cidrs []string) {
+	a.vpnCIDRs = cidrs
+	if a.logger != nil {
+		a.logger.Printf("[VPNCIDR] %d CIDR(s): %v", len(cidrs), cidrs)
+	}
+}
+
+// Game presets: servers that detect/block VPN connections
+// Should be added to bypass list when playing these games
+var GameAntiVPNPreset = []string{
+	"104.16.0.0/12",  // Cloudflare (many games use CF for matchmaking)
+	"151.101.0.0/16", // Fastly CDN (Riot Games, Discord)
+	"3.112.0.0/14",   // AWS Tokyo (Valorant servers)
+	"52.84.0.0/15",   // AWS US East (CS:GO/CS2)
+	"54.192.0.0/12",  // AWS US West
+	"13.32.0.0/15",   // AWS EU
+	"162.159.0.0/16", // Cloudflare Gaming
+}
+
+func (a *App) GetGameAntiVPNPreset() []string {
+	return GameAntiVPNPreset
+}
+
+// Anti-filter downloader — only for informational display.
+// Full list is 51k CIDRs. Use at your own risk.
+// Source: https://antifilter.download/list/allyouneed.lst
+func (a *App) DownloadAntiFilter() ([]string, error) {
+	if a.logger != nil {
+		a.logger.Println("[ANTIFILTER] downloading...")
+	}
+	resp, err := http.Get("https://antifilter.download/list/allyouneed.lst")
+	if err != nil {
+		return nil, fmt.Errorf("download: %w", err)
+	}
+	defer resp.Body.Close()
+
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read: %w", err)
+	}
+
+	lines := strings.Split(strings.TrimSpace(string(data)), " ")
+	unique := make(map[string]bool)
+	var cidrs []string
+	for _, cidr := range lines {
+		cidr = strings.TrimSpace(cidr)
+		// Aggregate /24 to /16 for sanity (51k → ~1600)
+		if strings.HasSuffix(cidr, "/24") {
+			base := cidr[:len(cidr)-3]
+			// Take first 2 octets as /16
+			parts := strings.SplitN(base, ".", 3)
+			if len(parts) >= 2 {
+				agg := parts[0] + "." + parts[1] + ".0.0/16"
+				if !unique[agg] {
+					unique[agg] = true
+					cidrs = append(cidrs, agg)
+				}
+			}
+		} else {
+			if !unique[cidr] {
+				unique[cidr] = true
+				cidrs = append(cidrs, cidr)
+			}
+		}
+	}
+
+	if a.logger != nil {
+		a.logger.Printf("[ANTIFILTER] %d raw → %d aggregated CIDRs", len(lines), len(cidrs))
+	}
+	return cidrs, nil
 }

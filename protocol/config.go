@@ -39,7 +39,8 @@ type Config struct {
 
 	// Smart Bypass (split tunneling)
 	BypassMode  string   `json:"bypass_mode,omitempty"`  // "" | "vpn_only" | "bypass"
-	BypassCIDRs []string `json:"bypass_cidrs,omitempty"` // e.g. ["5.45.192.0/24"]
+	BypassCIDRs []string `json:"bypass_cidrs,omitempty"` // e.g. ["5.45.192.0/24"] bypass VPN
+	VPNCIDRs    []string `json:"vpn_cidrs,omitempty"`    // only used in vpn_only mode
 }
 
 type User struct {

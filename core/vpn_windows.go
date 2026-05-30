@@ -141,35 +141,54 @@ func (p *vpnPlatform) openTunnel(v *VPN) error {
 	// Используем on-link маршрут, как WireGuard.
 	run("route", "delete", v.config.ServerIP)
 	run("route", "add", v.config.ServerIP, "mask", "255.255.255.255", p.realGateway)
-	if index != "" {
-		run("route", "delete", "0.0.0.0", "mask", "0.0.0.0", "0.0.0.0", "if", index)
-	}
-	run("route", "delete", "0.0.0.0", v.config.InternalIP)
-	if index != "" {
-		run("route", "add", "0.0.0.0", "mask", "0.0.0.0", "0.0.0.0", "metric", "1", "if", index)
+
+	mode := v.config.BypassMode
+	if mode == "" {
+		mode = "bypass"
 	}
 
-	// Smart Bypass: add routes for bypass CIDRs through physical gateway
-	// These more-specific routes override the VPN default route
-	if len(v.config.BypassCIDRs) > 0 && p.realGateway != "" {
-		mode := v.config.BypassMode
-		if mode == "" {
-			mode = "bypass"
-		}
-		log.Printf("[BYPASS] mode=%s, %d CIDR(s)", mode, len(v.config.BypassCIDRs))
-		for _, cidr := range v.config.BypassCIDRs {
+	if mode == "vpn_only" {
+		// VPN Only: default route stays on physical, only VPN CIDRs go through TUN
+		log.Printf("[ROUTE] vpn_only mode: routing %d CIDR(s) through tunnel", len(v.config.VPNCIDRs))
+		for _, cidr := range v.config.VPNCIDRs {
 			_, ipnet, err := net.ParseCIDR(cidr)
 			if err != nil {
-				log.Printf("[BYPASS] invalid CIDR %s: %v", cidr, err)
+				log.Printf("[ROUTE] invalid VPN CIDR %s: %v", cidr, err)
 				continue
 			}
 			ones := ones(ipnet.Mask)
-			gw := p.realGateway
-			log.Printf("[BYPASS] route %s/%d via %s", ipnet.IP, ones, gw)
+			log.Printf("[ROUTE] vpn route %s/%d via TUN if=%s", ipnet.IP, ones, index)
 			if index != "" {
-				run("route", "add", ipnet.IP.String(), "mask", maskStr(ones), gw, "metric", "5", "if", index)
-			} else {
-				run("route", "add", ipnet.IP.String(), "mask", maskStr(ones), gw, "metric", "5")
+				run("route", "delete", ipnet.IP.String())
+				run("route", "add", ipnet.IP.String(), "mask", maskStr(ones), "0.0.0.0", "metric", "1", "if", index)
+			}
+		}
+	} else {
+		// Full tunnel mode: all traffic through VPN
+		if index != "" {
+			run("route", "delete", "0.0.0.0", "mask", "0.0.0.0", "0.0.0.0", "if", index)
+		}
+		run("route", "delete", "0.0.0.0", v.config.InternalIP)
+		if index != "" {
+			run("route", "add", "0.0.0.0", "mask", "0.0.0.0", "0.0.0.0", "metric", "1", "if", index)
+		}
+
+		// Smart Bypass: add routes for bypass CIDRs through physical gateway
+		if len(v.config.BypassCIDRs) > 0 && p.realGateway != "" {
+			log.Printf("[BYPASS] mode=%s, %d CIDR(s)", mode, len(v.config.BypassCIDRs))
+			for _, cidr := range v.config.BypassCIDRs {
+				_, ipnet, err := net.ParseCIDR(cidr)
+				if err != nil {
+					log.Printf("[BYPASS] invalid CIDR %s: %v", cidr, err)
+					continue
+				}
+				ones := ones(ipnet.Mask)
+				log.Printf("[BYPASS] route %s/%d via %s", ipnet.IP, ones, p.realGateway)
+				if index != "" {
+					run("route", "add", ipnet.IP.String(), "mask", maskStr(ones), p.realGateway, "metric", "5", "if", index)
+				} else {
+					run("route", "add", ipnet.IP.String(), "mask", maskStr(ones), p.realGateway, "metric", "5")
+				}
 			}
 		}
 	}

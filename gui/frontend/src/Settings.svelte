@@ -1,6 +1,6 @@
 <script lang="ts">
   import { fade, scale } from 'svelte/transition'
-  import { GetKillSwitchEnabled, SetKillSwitchEnabled, GetBypassMode, SetBypassMode, GetBypassCIDRs, SetBypassCIDRs, GetRussianBankPreset } from '../wailsjs/go/main/App'
+  import { GetKillSwitchEnabled, SetKillSwitchEnabled, GetBypassMode, SetBypassMode, GetBypassCIDRs, SetBypassCIDRs, GetRussianBankPreset, GetVPNCIDRs, SetVPNCIDRs, GetGameAntiVPNPreset, DownloadAntiFilter } from '../wailsjs/go/main/App'
 
   export let show: boolean
   export let serverIP: string
@@ -22,14 +22,18 @@
   let killSwitchOn = true
   let bypassMode = ''
   let bypassCIDRs: string[] = []
+  let vpnCIDRs: string[] = []
   let newCIDR = ''
   let bypassError = ''
+  let antiFilterStatus = ''
+  let activeList: 'bypass' | 'vpn' = 'bypass'
 
   $: {
     if (show) {
       GetKillSwitchEnabled().then(v => killSwitchOn = v)
       GetBypassMode().then(v => bypassMode = v || 'off')
       GetBypassCIDRs().then(v => bypassCIDRs = v || [])
+      GetVPNCIDRs().then(v => vpnCIDRs = v || [])
     }
   }
 
@@ -51,18 +55,29 @@
       bypassError = 'Invalid CIDR format. Example: 5.45.192.0/24'
       return
     }
-    if (bypassCIDRs.includes(cidr)) {
+    const list = bypassMode === 'vpn_only' ? vpnCIDRs : bypassCIDRs
+    if (list.includes(cidr)) {
       bypassError = 'CIDR already in list'
       return
     }
-    bypassCIDRs = [...bypassCIDRs, cidr]
+    if (bypassMode === 'vpn_only') {
+      vpnCIDRs = [...vpnCIDRs, cidr]
+      await SetVPNCIDRs(vpnCIDRs)
+    } else {
+      bypassCIDRs = [...bypassCIDRs, cidr]
+      await SetBypassCIDRs(bypassCIDRs)
+    }
     newCIDR = ''
-    await SetBypassCIDRs(bypassCIDRs)
   }
 
   async function removeCIDR(cidr: string) {
-    bypassCIDRs = bypassCIDRs.filter(c => c !== cidr)
-    await SetBypassCIDRs(bypassCIDRs)
+    if (bypassMode === 'vpn_only') {
+      vpnCIDRs = vpnCIDRs.filter(c => c !== cidr)
+      await SetVPNCIDRs(vpnCIDRs)
+    } else {
+      bypassCIDRs = bypassCIDRs.filter(c => c !== cidr)
+      await SetBypassCIDRs(bypassCIDRs)
+    }
   }
 
   async function loadRussianBanks() {
@@ -71,9 +86,40 @@
     await SetBypassCIDRs(bypassCIDRs)
   }
 
+  async function loadGamePreset() {
+    const preset = await GetGameAntiVPNPreset()
+    if (bypassMode === 'vpn_only') {
+      vpnCIDRs = [...new Set([...vpnCIDRs, ...preset])]
+      await SetVPNCIDRs(vpnCIDRs)
+    } else {
+      bypassCIDRs = [...new Set([...bypassCIDRs, ...preset])]
+      await SetBypassCIDRs(bypassCIDRs)
+    }
+  }
+
+  async function loadAntiFilter() {
+    antiFilterStatus = 'Downloading...'
+    try {
+      const result = await DownloadAntiFilter()
+      if (result && result.length > 0) {
+        vpnCIDRs = [...new Set([...vpnCIDRs, ...result])]
+        await SetVPNCIDRs(vpnCIDRs)
+        bypassMode = 'vpn_only'
+        await SetBypassMode('vpn_only')
+        antiFilterStatus = `Loaded ${result.length} aggregated CIDRs`
+      } else {
+        antiFilterStatus = 'No CIDRs loaded'
+      }
+    } catch (e) {
+      antiFilterStatus = 'Error: ' + e
+    }
+  }
+
   async function clearAll() {
     bypassCIDRs = []
+    vpnCIDRs = []
     await SetBypassCIDRs([])
+    await SetVPNCIDRs([])
   }
 </script>
 
@@ -192,7 +238,7 @@
         <div class="cidr-section">
           <div class="field-row">
             <div class="field" style="flex: 1;">
-              <label>Add CIDR</label>
+              <label>{bypassMode === 'vpn_only' ? 'VPN CIDRs (through tunnel)' : 'Bypass CIDRs (direct)'}</label>
               <input
                 bind:value={newCIDR}
                 placeholder="5.45.192.0/24"
@@ -206,11 +252,23 @@
           {/if}
 
           <div class="preset-row">
+            {#if bypassMode !== 'vpn_only'}
             <button class="preset-btn" on:click={loadRussianBanks}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
-              Russian Banks (preset)
+              Russian Banks
             </button>
-            {#if bypassCIDRs.length > 0}
+            {/if}
+            <button class="preset-btn" on:click={loadGamePreset}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 11h-5V6a1 1 0 0 0-2 0v5H6a1 1 0 0 0 0 2h5v5a1 1 0 0 0 2 0v-5h5a1 1 0 0 0 0-2z"/></svg>
+              {bypassMode === 'vpn_only' ? 'Game VPN' : 'Game Anti-VPN'}
+            </button>
+            {#if bypassMode === 'vpn_only'}
+            <button class="preset-btn" on:click={loadAntiFilter}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+              AntiFilter
+            </button>
+            {/if}
+            {#if (bypassMode === 'vpn_only' ? vpnCIDRs : bypassCIDRs).length > 0}
             <button class="preset-btn danger" on:click={clearAll}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
               Clear All
@@ -218,28 +276,47 @@
             {/if}
           </div>
 
+          {#if antiFilterStatus}
+          <div class="note">{antiFilterStatus}</div>
+          {/if}
+
           <div class="cidr-list">
-            {#if bypassCIDRs.length === 0}
-            <div class="empty">No CIDRs added. Traffic will not be bypassed.</div>
+            {#if bypassMode === 'vpn_only'}
+              {#if vpnCIDRs.length === 0}
+              <div class="empty">No VPN CIDRs. Traffic will not be tunneled.</div>
+              {:else}
+              {#each vpnCIDRs as cidr}
+              <div class="cidr-item">
+                <code>{cidr}</code>
+                <button class="remove-btn" on:click={() => removeCIDR(cidr)}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+              </div>
+              {/each}
+              {/if}
             {:else}
-            {#each bypassCIDRs as cidr}
-            <div class="cidr-item">
-              <code>{cidr}</code>
-              <button class="remove-btn" on:click={() => removeCIDR(cidr)}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-              </button>
-            </div>
-            {/each}
+              {#if bypassCIDRs.length === 0}
+              <div class="empty">No CIDRs added. Traffic will not be bypassed.</div>
+              {:else}
+              {#each bypassCIDRs as cidr}
+              <div class="cidr-item">
+                <code>{cidr}</code>
+                <button class="remove-btn" on:click={() => removeCIDR(cidr)}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+              </div>
+              {/each}
+              {/if}
             {/if}
           </div>
 
           <div class="note">
             {#if bypassMode === 'bypass'}
-            <strong>Bypass Mode:</strong> Traffic to these CIDRs goes DIRECT (bypasses VPN).
-            Use for Russian banks, government services, or any site that blocks VPN IPs.
+            <strong>Bypass Mode:</strong> Traffic to listed CIDRs goes DIRECT (bypasses VPN).
+            Use for Russian banks, game servers that block VPN, government services.
             {:else}
-            <strong>VPN Only Mode:</strong> Only traffic to these CIDRs goes through the VPN tunnel.
-            Everything else is direct.
+            <strong>VPN Only Mode:</strong> Only traffic to listed CIDRs goes through the VPN tunnel.
+            Everything else is direct. Use with AntiFilter preset to only tunnel blocked sites.
             {/if}
           </div>
         </div>
