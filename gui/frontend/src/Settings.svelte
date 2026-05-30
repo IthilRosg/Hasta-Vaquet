@@ -1,6 +1,6 @@
 <script lang="ts">
   import { fade, scale } from 'svelte/transition'
-  import { GetKillSwitchEnabled, SetKillSwitchEnabled } from '../wailsjs/go/main/App'
+  import { GetKillSwitchEnabled, SetKillSwitchEnabled, GetBypassMode, SetBypassMode, GetBypassCIDRs, SetBypassCIDRs, GetRussianBankPreset } from '../wailsjs/go/main/App'
 
   export let show: boolean
   export let serverIP: string
@@ -17,19 +17,63 @@
   export let onImport: () => void
   export let onClose: () => void
 
-  const tabs = ['Connection', 'Kill Switch', 'Transport', 'Advanced']
+  const tabs = ['Connection', 'Kill Switch', 'Transport', 'Bypass']
   let activeTab = 'Connection'
   let killSwitchOn = true
+  let bypassMode = ''
+  let bypassCIDRs: string[] = []
+  let newCIDR = ''
+  let bypassError = ''
 
   $: {
     if (show) {
       GetKillSwitchEnabled().then(v => killSwitchOn = v)
+      GetBypassMode().then(v => bypassMode = v || 'off')
+      GetBypassCIDRs().then(v => bypassCIDRs = v || [])
     }
   }
 
   async function toggleKillSwitch() {
     killSwitchOn = !killSwitchOn
     await SetKillSwitchEnabled(killSwitchOn)
+  }
+
+  async function setBypassMode(mode: string) {
+    bypassMode = mode
+    await SetBypassMode(mode === 'off' ? '' : mode)
+  }
+
+  async function addCIDR() {
+    bypassError = ''
+    const cidr = newCIDR.trim()
+    if (!cidr) return
+    if (!/^(\d{1,3}\.){3}\d{1,3}\/\d{1,2}$/.test(cidr)) {
+      bypassError = 'Invalid CIDR format. Example: 5.45.192.0/24'
+      return
+    }
+    if (bypassCIDRs.includes(cidr)) {
+      bypassError = 'CIDR already in list'
+      return
+    }
+    bypassCIDRs = [...bypassCIDRs, cidr]
+    newCIDR = ''
+    await SetBypassCIDRs(bypassCIDRs)
+  }
+
+  async function removeCIDR(cidr: string) {
+    bypassCIDRs = bypassCIDRs.filter(c => c !== cidr)
+    await SetBypassCIDRs(bypassCIDRs)
+  }
+
+  async function loadRussianBanks() {
+    const preset = await GetRussianBankPreset()
+    bypassCIDRs = [...new Set([...bypassCIDRs, ...preset])]
+    await SetBypassCIDRs(bypassCIDRs)
+  }
+
+  async function clearAll() {
+    bypassCIDRs = []
+    await SetBypassCIDRs([])
   }
 </script>
 
@@ -124,15 +168,82 @@
         <div class="note">Reality (Xray) — SOCKS5 proxy on 127.0.0.1:1080, connect via WS transport through it.</div>
       </div>
 
-      {:else if activeTab === 'Advanced'}
-      <h3>Advanced</h3>
+      {:else if activeTab === 'Bypass'}
+      <h3>Smart Bypass</h3>
       <div class="section">
-        <div class="placeholder">
-          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.3">
-            <circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>
-          </svg>
-          <p>Additional settings coming soon</p>
+        <div class="toggle-group">
+          {#each [
+            {val: 'off', label: 'Off', desc: 'All traffic through VPN'},
+            {val: 'bypass', label: 'Bypass Mode', desc: 'Traffic to listed CIDRs goes direct, rest through VPN'},
+            {val: 'vpn_only', label: 'VPN Only Mode', desc: 'Only traffic to listed CIDRs goes through VPN'},
+          ] as m}
+          <button
+            class="transport-toggle"
+            class:active={bypassMode === m.val}
+            on:click={() => setBypassMode(m.val)}
+          >
+            <div class="toggle-name">{m.label}</div>
+            <div class="toggle-desc">{m.desc}</div>
+          </button>
+          {/each}
         </div>
+
+        {#if bypassMode !== 'off'}
+        <div class="cidr-section">
+          <div class="field-row">
+            <div class="field" style="flex: 1;">
+              <label>Add CIDR</label>
+              <input
+                bind:value={newCIDR}
+                placeholder="5.45.192.0/24"
+                on:keydown={(e) => e.key === 'Enter' && addCIDR()}
+              />
+            </div>
+            <button class="action-btn" style="margin-top: 18px; width: auto; padding: 8px 20px;" on:click={addCIDR}>Add</button>
+          </div>
+          {#if bypassError}
+          <div class="error">{bypassError}</div>
+          {/if}
+
+          <div class="preset-row">
+            <button class="preset-btn" on:click={loadRussianBanks}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+              Russian Banks (preset)
+            </button>
+            {#if bypassCIDRs.length > 0}
+            <button class="preset-btn danger" on:click={clearAll}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+              Clear All
+            </button>
+            {/if}
+          </div>
+
+          <div class="cidr-list">
+            {#if bypassCIDRs.length === 0}
+            <div class="empty">No CIDRs added. Traffic will not be bypassed.</div>
+            {:else}
+            {#each bypassCIDRs as cidr}
+            <div class="cidr-item">
+              <code>{cidr}</code>
+              <button class="remove-btn" on:click={() => removeCIDR(cidr)}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+            {/each}
+            {/if}
+          </div>
+
+          <div class="note">
+            {#if bypassMode === 'bypass'}
+            <strong>Bypass Mode:</strong> Traffic to these CIDRs goes DIRECT (bypasses VPN).
+            Use for Russian banks, government services, or any site that blocks VPN IPs.
+            {:else}
+            <strong>VPN Only Mode:</strong> Only traffic to these CIDRs goes through the VPN tunnel.
+            Everything else is direct.
+            {/if}
+          </div>
+        </div>
+        {/if}
       </div>
       {/if}
     </div>
@@ -300,6 +411,68 @@
     font-size: 12px; color: var(--text-dim);
     padding: 12px; background: rgba(255,255,255,0.03);
     border-radius: 8px; line-height: 1.5;
+  }
+
+  .note strong { color: var(--text); }
+
+  /* Bypass UI */
+  .cidr-section {
+    display: flex; flex-direction: column; gap: 12px;
+    padding: 16px; background: rgba(255,255,255,0.02);
+    border: 1px solid var(--border); border-radius: 12px;
+  }
+
+  .error {
+    font-size: 12px; color: #ff4444;
+    padding: 6px 10px; background: rgba(255,68,68,0.1);
+    border-radius: 6px;
+  }
+
+  .preset-row {
+    display: flex; gap: 10px; flex-wrap: wrap;
+  }
+
+  .preset-btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 8px 16px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--border); border-radius: 8px;
+    color: var(--text); cursor: pointer;
+    font-size: 13px; font-weight: 500;
+    transition: all 0.15s;
+  }
+  .preset-btn:hover { background: rgba(63,185,80,0.08); border-color: var(--accent); }
+  .preset-btn.danger:hover { background: rgba(255,68,68,0.1); border-color: #ff4444; }
+
+  .cidr-list {
+    display: flex; flex-direction: column; gap: 4px;
+    max-height: 180px; overflow-y: auto;
+  }
+
+  .cidr-item {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 12px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--border); border-radius: 8px;
+    transition: background 0.15s;
+  }
+  .cidr-item:hover { background: rgba(255,255,255,0.06); }
+  .cidr-item code {
+    font-size: 13px; font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    color: var(--accent);
+  }
+
+  .remove-btn {
+    background: none; border: none;
+    color: var(--text-dim); cursor: pointer;
+    padding: 4px; border-radius: 4px;
+    transition: all 0.15s;
+  }
+  .remove-btn:hover { color: #ff4444; background: rgba(255,68,68,0.1); }
+
+  .empty {
+    font-size: 13px; color: var(--text-dim);
+    text-align: center; padding: 24px;
   }
 
   .placeholder {

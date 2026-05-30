@@ -148,6 +148,32 @@ func (p *vpnPlatform) openTunnel(v *VPN) error {
 	if index != "" {
 		run("route", "add", "0.0.0.0", "mask", "0.0.0.0", "0.0.0.0", "metric", "1", "if", index)
 	}
+
+	// Smart Bypass: add routes for bypass CIDRs through physical gateway
+	// These more-specific routes override the VPN default route
+	if len(v.config.BypassCIDRs) > 0 && p.realGateway != "" {
+		mode := v.config.BypassMode
+		if mode == "" {
+			mode = "bypass"
+		}
+		log.Printf("[BYPASS] mode=%s, %d CIDR(s)", mode, len(v.config.BypassCIDRs))
+		for _, cidr := range v.config.BypassCIDRs {
+			_, ipnet, err := net.ParseCIDR(cidr)
+			if err != nil {
+				log.Printf("[BYPASS] invalid CIDR %s: %v", cidr, err)
+				continue
+			}
+			ones := ones(ipnet.Mask)
+			gw := p.realGateway
+			log.Printf("[BYPASS] route %s/%d via %s", ipnet.IP, ones, gw)
+			if index != "" {
+				run("route", "add", ipnet.IP.String(), "mask", maskStr(ones), gw, "metric", "5", "if", index)
+			} else {
+				run("route", "add", ipnet.IP.String(), "mask", maskStr(ones), gw, "metric", "5")
+			}
+		}
+	}
+
 	log.Printf("[ROUTE] openTunnel done: ifIndex=%s, internal=%s, gateway=%s, server=%s",
 		p.ifIndex, v.config.InternalIP, p.realGateway, v.config.ServerIP)
 
@@ -452,4 +478,19 @@ func getInterfaceIndex(name string) string {
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	out, _ := cmd.Output()
 	return strings.TrimSpace(string(out))
+}
+
+// ones возвращает количество единичных битов в маске подсети.
+func ones(mask net.IPMask) int {
+	ones, _ := mask.Size()
+	return ones
+}
+
+// maskStr преобразует CIDR /N в dotted-quad маску (например, 24 → 255.255.255.0).
+func maskStr(ones int) string {
+	mask := net.CIDRMask(ones, 32)
+	if mask == nil {
+		return "255.255.255.255"
+	}
+	return mask.String()
 }

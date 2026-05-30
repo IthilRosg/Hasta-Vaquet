@@ -25,6 +25,8 @@ type App struct {
 	profiles          []string
 	logger            *log.Logger
 	killSwitchEnabled bool
+	bypassMode        string
+	bypassCIDRs       []string
 }
 
 // vpnListener реализует core.StatusListener для отправки событий в UI.
@@ -102,17 +104,19 @@ func (a *App) startup(ctx context.Context) {
 }
 
 type ConfigResult struct {
-	ProfileName string `json:"profile_name"`
-	ServerIP    string `json:"server_ip"`
-	Port        int    `json:"port"`
-	ShortID     uint16 `json:"short_id"`
-	SecretKey   string `json:"secret_key"`
-	InternalIP  string `json:"internal_ip"`
-	RoutingSalt string `json:"routing_salt"`
-	GatewayIP   string `json:"gateway_ip"`
-	DNS         string `json:"dns"`
-	Transport   string `json:"transport"`
-	CDNDomain   string `json:"cdn_domain"`
+	ProfileName string   `json:"profile_name"`
+	ServerIP    string   `json:"server_ip"`
+	Port        int      `json:"port"`
+	ShortID     uint16   `json:"short_id"`
+	SecretKey   string   `json:"secret_key"`
+	InternalIP  string   `json:"internal_ip"`
+	RoutingSalt string   `json:"routing_salt"`
+	GatewayIP   string   `json:"gateway_ip"`
+	DNS         string   `json:"dns"`
+	Transport   string   `json:"transport"`
+	CDNDomain   string   `json:"cdn_domain"`
+	BypassMode  string   `json:"bypass_mode"`
+	BypassCIDRs []string `json:"bypass_cidrs"`
 }
 
 func (a *App) LoadDefaultConfig() *ConfigResult {
@@ -229,6 +233,8 @@ func toResult(cfg core.Config) *ConfigResult {
 		DNS:         cfg.DNS,
 		Transport:   cfg.Transport,
 		CDNDomain:   cfg.CDNDomain,
+		BypassMode:  cfg.BypassMode,
+		BypassCIDRs: cfg.BypassCIDRs,
 	}
 }
 
@@ -299,6 +305,8 @@ func (a *App) DoConnect(serverIP, secretKey, routingSalt, internalIP, gatewayIP,
 		DNS:         dns,
 		Transport:   transport,
 		CDNDomain:   cdnDomain,
+		BypassMode:  a.bypassMode,
+		BypassCIDRs: a.bypassCIDRs,
 	}
 	vpn := core.New(cfg, &vpnListener{ctx: a.ctx, logger: a.logger})
 	vpn.SetKillSwitchEnabled(a.killSwitchEnabled)
@@ -351,4 +359,44 @@ func (a *App) LoadLastProfile() string {
 		return ""
 	}
 	return string(data)
+}
+
+// ─── Smart Bypass ──────────────────────────────────────────────
+
+func (a *App) GetBypassMode() string {
+	return a.bypassMode
+}
+
+func (a *App) SetBypassMode(mode string) {
+	a.bypassMode = mode
+	if a.logger != nil {
+		a.logger.Printf("[BYPASS] mode=%s", mode)
+	}
+}
+
+func (a *App) GetBypassCIDRs() []string {
+	return a.bypassCIDRs
+}
+
+func (a *App) SetBypassCIDRs(cidrs []string) {
+	a.bypassCIDRs = cidrs
+	if a.logger != nil {
+		a.logger.Printf("[BYPASS] %d CIDR(s): %v", len(cidrs), cidrs)
+	}
+}
+
+// Russian bank presets for easy bypass
+var RussianBankCIDRs = []string{
+	"5.45.192.0/24",    // Sberbank Online
+	"62.109.0.0/16",    // VTB
+	"94.51.0.0/16",     // Tinkoff
+	"178.204.0.0/16",   // Alfa-Bank
+	"195.19.0.0/16",    // Gazprombank
+	"93.123.0.0/16",    // Gosuslugi
+	"185.57.84.0/22",   // Sberbank additional
+	"195.208.128.0/18", // VTB additional
+}
+
+func (a *App) GetRussianBankPreset() []string {
+	return RussianBankCIDRs
 }
