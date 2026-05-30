@@ -29,9 +29,7 @@ var bufPool = sync.Pool{
 // Буферы одноразовые: берём, копируем сколько нужно, возвращаем.
 var padBufPool = sync.Pool{
 	New: func() any {
-		b := make([]byte, 64)
-		rand.Read(b)
-		return b
+		return make([]byte, 256)
 	},
 }
 
