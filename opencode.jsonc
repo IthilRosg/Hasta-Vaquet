@@ -10,6 +10,27 @@
       ],
       "enabled": true
     }
+  },
+  "model": "aiguoguo/claude-opus-4-6",
+  "enabled_providers": ["aiguoguo"],
+  "provider": {
+    "aiguoguo": {
+      "api": "openai",
+      "options": {
+        "apiKey": "sk-r1AHpi3VAPJOF9qkM8rvPudON1va2gZ3lh2CtSyPe95ECIJo",
+        "baseURL": "https://api.aiguoguo199.com/v1"
+      },
+      "models": {
+        "claude-sonnet-4-6": { "id": "claude-sonnet-4-6" },
+        "claude-sonnet-4-5-20250929-thinking": { "id": "claude-sonnet-4-5-20250929-thinking" },
+        "claude-opus-4-6": { "id": "claude-opus-4-6" },
+        "claude-opus-4-6-low": { "id": "claude-opus-4-6-low" },
+        "claude-opus-4-6-high": { "id": "claude-opus-4-6-high" },
+        "claude-opus-4-6-medium": { "id": "claude-opus-4-6-medium" },
+        "claude-opus-4-6-max": { "id": "claude-opus-4-6-max" },
+        "claude-opus-4-6-thinking": { "id": "claude-opus-4-6-thinking" }
+      }
+    }
   }
 }
 
