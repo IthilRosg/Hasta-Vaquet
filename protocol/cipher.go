@@ -77,6 +77,9 @@ type CipherPack struct {
 	prng      fastPRNG      // быстрый PRNG для padding (без блокировок)
 	noEncrypt bool          // true = Encrypt/Decrypt без крипты (для замера накладных расходов)
 	Mode      int           // CipherModeStandard или CipherModeQUIC
+	// PadMax sets the maximum padding length in bytes during Encrypt.
+	// 0 means use the default (41, giving 0-40 bytes padding).
+	PadMax int
 }
 
 func NewCipherPack(secretKey []byte) (*CipherPack, error) {
@@ -141,7 +144,11 @@ func (cp *CipherPack) Encrypt(plaintext []byte, shortID uint16, routingSalt stri
 	binary.BigEndian.PutUint64(nonce[:8], n)
 	binary.BigEndian.PutUint32(nonce[8:], cp.prng.Uint32())
 
-	padLen := int(cp.prng.Uint32() % 41)
+	maxPad := cp.PadMax
+	if maxPad <= 0 {
+		maxPad = 41
+	}
+	padLen := int(cp.prng.Uint32() % uint32(maxPad))
 
 	// Reuse буфер для inner (plaintext + padding)
 	innerLen := 2 + len(plaintext) + padLen
@@ -182,7 +189,11 @@ func (cp *CipherPack) encryptQUIC(plaintext []byte, shortID uint16, routingSalt 
 	n := cp.quicNonce.Add(1)
 	packetNum := uint32(n & 0xFFFF)
 
-	padLen := int(cp.prng.Uint32() % 41)
+	maxPad := cp.PadMax
+	if maxPad <= 0 {
+		maxPad = 41
+	}
+	padLen := int(cp.prng.Uint32() % uint32(maxPad))
 
 	// Reuse буфер для inner (plaintext + padding)
 	innerLen := 2 + len(plaintext) + padLen
