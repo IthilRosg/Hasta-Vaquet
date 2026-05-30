@@ -14,8 +14,32 @@ export function DoDisconnect() {
   return window['go']['main']['App']['DoDisconnect']();
 }
 
+export function DownloadAntiFilter() {
+  return window['go']['main']['App']['DownloadAntiFilter']();
+}
+
+export function GetBypassCIDRs() {
+  return window['go']['main']['App']['GetBypassCIDRs']();
+}
+
+export function GetBypassMode() {
+  return window['go']['main']['App']['GetBypassMode']();
+}
+
+export function GetGameAntiVPNPreset() {
+  return window['go']['main']['App']['GetGameAntiVPNPreset']();
+}
+
 export function GetKillSwitchEnabled() {
   return window['go']['main']['App']['GetKillSwitchEnabled']();
+}
+
+export function GetRussianBankPreset() {
+  return window['go']['main']['App']['GetRussianBankPreset']();
+}
+
+export function GetVPNCIDRs() {
+  return window['go']['main']['App']['GetVPNCIDRs']();
 }
 
 export function ImportConfig(arg1) {
@@ -54,6 +78,18 @@ export function SaveLastProfile(arg1) {
   return window['go']['main']['App']['SaveLastProfile'](arg1);
 }
 
+export function SetBypassCIDRs(arg1) {
+  return window['go']['main']['App']['SetBypassCIDRs'](arg1);
+}
+
+export function SetBypassMode(arg1) {
+  return window['go']['main']['App']['SetBypassMode'](arg1);
+}
+
 export function SetKillSwitchEnabled(arg1) {
   return window['go']['main']['App']['SetKillSwitchEnabled'](arg1);
+}
+
+export function SetVPNCIDRs(arg1) {
+  return window['go']['main']['App']['SetVPNCIDRs'](arg1);
 }

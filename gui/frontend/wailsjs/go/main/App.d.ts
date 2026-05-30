@@ -8,7 +8,19 @@ export function DoConnect(arg1:string,arg2:string,arg3:string,arg4:string,arg5:s
 
 export function DoDisconnect():Promise<string>;
 
+export function DownloadAntiFilter():Promise<Array<string>>;
+
+export function GetBypassCIDRs():Promise<Array<string>>;
+
+export function GetBypassMode():Promise<string>;
+
+export function GetGameAntiVPNPreset():Promise<Array<string>>;
+
 export function GetKillSwitchEnabled():Promise<boolean>;
+
+export function GetRussianBankPreset():Promise<Array<string>>;
+
+export function GetVPNCIDRs():Promise<Array<string>>;
 
 export function ImportConfig(arg1:string):Promise<main.ConfigResult>;
 
@@ -28,4 +40,10 @@ export function LoadProfile(arg1:string):Promise<main.ConfigResult>;
 
 export function SaveLastProfile(arg1:string):Promise<void>;
 
+export function SetBypassCIDRs(arg1:Array<string>):Promise<void>;
+
+export function SetBypassMode(arg1:string):Promise<void>;
+
 export function SetKillSwitchEnabled(arg1:boolean):Promise<void>;
+
+export function SetVPNCIDRs(arg1:Array<string>):Promise<void>;

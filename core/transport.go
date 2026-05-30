@@ -29,7 +29,7 @@ const (
 	TransportXHTTP = "xhttp"
 )
 
-var defaultTransportPriority = []string{TransportWSS, TransportQUIC, TransportUDP}
+var defaultTransportPriority = []string{TransportWS, TransportWSS, TransportQUIC, TransportUDP}
 
 var wsBufPool = sync.Pool{
 	New: func() any { return make([]byte, 65535+14) },
@@ -126,7 +126,11 @@ func (tm *TransportManager) dialTransport(ctx context.Context, transport string)
 		}
 		return DialWSS(ctx, cfg.ServerIP, cfg.Port, &tls.Config{ServerName: cfg.ServerIP})
 	case TransportWS:
-		return DialWS(ctx, cfg.ServerIP, 19998)
+		wsPort := cfg.WSPort
+		if wsPort == 0 {
+			wsPort = 19998
+		}
+		return DialWS(ctx, cfg.ServerIP, wsPort)
 	case TransportQUIC:
 		return DialQUICUDP(ctx, cfg.ServerIP, cfg.Port, cfg.ShortID, cfg.SecretKey)
 	case TransportUDP:

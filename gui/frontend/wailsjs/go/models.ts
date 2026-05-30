@@ -12,6 +12,8 @@ export namespace main {
 	    dns: string;
 	    transport: string;
 	    cdn_domain: string;
+	    bypass_mode: string;
+	    bypass_cidrs: string[];
 	
 	    static createFrom(source: any = {}) {
 	        return new ConfigResult(source);
@@ -30,6 +32,8 @@ export namespace main {
 	        this.dns = source["dns"];
 	        this.transport = source["transport"];
 	        this.cdn_domain = source["cdn_domain"];
+	        this.bypass_mode = source["bypass_mode"];
+	        this.bypass_cidrs = source["bypass_cidrs"];
 	    }
 	}
 	export class ProfileItem {
