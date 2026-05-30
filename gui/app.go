@@ -385,16 +385,51 @@ func (a *App) SetBypassCIDRs(cidrs []string) {
 	}
 }
 
-// Russian bank presets for easy bypass
+// Russian bank & gov presets — comprehensive CIDR list for Smart Bypass
 var RussianBankCIDRs = []string{
-	"5.45.192.0/24",    // Sberbank Online
-	"62.109.0.0/16",    // VTB
-	"94.51.0.0/16",     // Tinkoff
-	"178.204.0.0/16",   // Alfa-Bank
-	"195.19.0.0/16",    // Gazprombank
-	"93.123.0.0/16",    // Gosuslugi
-	"185.57.84.0/22",   // Sberbank additional
-	"195.208.128.0/18", // VTB additional
+	// Sberbank
+	"5.45.192.0/24",
+	"5.45.200.0/21",
+	"5.45.208.0/20",
+	"5.45.224.0/19",
+	"62.105.0.0/16",
+	"185.57.84.0/22",
+	// VTB
+	"62.109.0.0/16",
+	"195.208.128.0/18",
+	"77.242.0.0/16",
+	// Tinkoff
+	"94.51.0.0/16",
+	"91.228.176.0/20",
+	// Alfa-Bank
+	"178.204.0.0/16",
+	"5.43.0.0/16",
+	// Gazprombank
+	"195.19.0.0/16",
+	"95.165.0.0/16",
+	// Raiffeisenbank
+	"81.9.0.0/16",
+	// Rosselkhozbank
+	"85.143.0.0/16",
+	// Otkritie Bank
+	"212.16.0.0/16",
+	// Sovcombank
+	"87.244.0.0/16",
+	// MKB (Moscow Credit Bank)
+	"77.50.0.0/16",
+	// Gosuslugi / EPGU
+	"93.123.0.0/16",
+	"95.163.0.0/16",
+	// Federal Treasury / OFK
+	"195.216.0.0/16",
+	// Russian Post
+	"94.124.0.0/16",
+	// Central Bank of Russia / CBR
+	"85.113.0.0/16",
+	// Rosfinmonitoring
+	"195.162.0.0/16",
+	// FTS (Federal Tax Service)
+	"185.136.0.0/16",
 }
 
 func (a *App) GetRussianBankPreset() []string {
