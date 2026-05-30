@@ -33,25 +33,24 @@ func EncodeQUICHeader(encryptedPayload []byte, shortID uint16, packetNum uint32,
 	// Byte 0: fixed 0x40 | spin | key_phase | reserved 0x00
 	firstByte := byte(0x40) | byte(spin<<4) | byte(kp<<3)
 
-	// ConnectionID: shortID XOR'd with key-derived mask (4 bytes)
-	connID := make([]byte, 4)
-	maskVal := Fnv1a16(append(key[:8], byte(shortID), byte(shortID>>8)))
-	binary.BigEndian.PutUint16(connID[2:], shortID^maskVal)
-
-	// Packet number bytes (big-endian, 2 bytes)
-	pktNumBytes := make([]byte, 2)
-	binary.BigEndian.PutUint16(pktNumBytes, uint16(packetNum))
-
-	// Build packet: [1][connID(4)][pktNum(2)][payload]
+	// Pre-allocate single buffer for entire packet: [1][connID(4)][pktNum(2)][payload]
 	packet := make([]byte, 1+4+2+len(encryptedPayload))
+
+	// ConnectionID mask
+	maskVal := Fnv1a16(append(key[:8], byte(shortID), byte(shortID>>8)))
+
 	packet[0] = firstByte
-	copy(packet[1:5], connID)
-	copy(packet[5:7], pktNumBytes)
+	// ConnectionID bytes directly into packet (no intermediate slice)
+	binary.BigEndian.PutUint16(packet[1:3], 0)
+	binary.BigEndian.PutUint16(packet[3:5], shortID^maskVal)
+	// Packet number bytes directly into packet (no intermediate slice)
+	binary.BigEndian.PutUint16(packet[5:7], uint16(packetNum))
+	// Payload
 	copy(packet[7:], encryptedPayload)
 
-	// Apply header protection: AES(key, pktNumBytes)[:5]
+	// Apply header protection: AES(key, packetNumBytes at offset 5)[:5]
 	var sample [16]byte
-	copy(sample[:2], pktNumBytes)
+	copy(sample[:2], packet[5:7])
 	cipher, _ := aes.NewCipher(key[:])
 	cipher.Encrypt(sample[:], sample[:])
 	mask := sample[:5]

@@ -9,12 +9,18 @@ import (
 	"net"
 	"os/exec"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
 	"golang.org/x/sys/windows"
 	"golang.zx2c4.com/wintun"
 )
+
+// tunBufPool — reusable буферы для чтения пакетов из сокета.
+var tunBufPool = sync.Pool{
+	New: func() any { return make([]byte, 65535) },
+}
 
 // platform-специфичные поля VPN
 type vpnPlatform struct {
@@ -220,7 +226,7 @@ func (p *vpnPlatform) readerLoop(v *VPN) {
 			continue
 		}
 
-		buf := make([]byte, 65535) // fresh buffer per iteration — no race
+		buf := tunBufPool.Get().([]byte)
 		go func() {
 			n, err := conn.Read(buf)
 			ch <- readResult{n, err}
@@ -231,6 +237,7 @@ func (p *vpnPlatform) readerLoop(v *VPN) {
 			return
 		case r := <-ch:
 			if r.err != nil {
+				tunBufPool.Put(buf[:cap(buf)])
 				if v.stopping.Load() {
 					return
 				}
@@ -239,9 +246,11 @@ func (p *vpnPlatform) readerLoop(v *VPN) {
 			v.lastPacketRx.Store(time.Now().UnixMilli())
 
 			if r.n < 4+2+12 {
+				tunBufPool.Put(buf[:cap(buf)])
 				continue
 			}
 			decrypted, err := v.decCP.Decrypt(buf[:r.n])
+			tunBufPool.Put(buf[:cap(buf)])
 			if err != nil {
 				continue
 			}

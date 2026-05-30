@@ -6,13 +6,12 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
-	"math/rand"
 	"sync"
 	"sync/atomic"
-	"time"
 )
 
 // Cipher modes for packet format selection.
@@ -20,6 +19,34 @@ const (
 	CipherModeStandard = iota // current format: HMAC(4) + DynamicID(2) + Nonce(12) + AES-GCM
 	CipherModeQUIC            // QUIC Short Header v1 format
 )
+
+// Buffer pools to reduce allocations in Encrypt/Decrypt.
+var bufPool = sync.Pool{
+	New: func() any { return make([]byte, 65535) },
+}
+
+// padBufPool предоставляет буферы со случайными байтами для padding'а.
+// Буферы одноразовые: берём, копируем сколько нужно, возвращаем.
+var padBufPool = sync.Pool{
+	New: func() any {
+		b := make([]byte, 64)
+		rand.Read(b)
+		return b
+	},
+}
+
+// fastPRNG — xorshift64* для генерации длины padding'а.
+// НЕ thread-safe — каждый CipherPack владеет своим экземпляром.
+type fastPRNG struct {
+	state uint64
+}
+
+func (r *fastPRNG) Uint32() uint32 {
+	r.state ^= r.state << 13
+	r.state ^= r.state >> 17
+	r.state ^= r.state << 5
+	return uint32(r.state)
+}
 
 func Fnv1a16(data []byte) uint16 {
 	h := uint64(14695981039346656037)
@@ -40,14 +67,14 @@ func Fnv1a64(data []byte, seed uint64) uint64 {
 }
 
 // CipherPack — криптографический контекст для Encrypt/Decrypt.
-// Безопасен для конкурентного доступа (mutex на GCM).
+// Каждый экземпляр используется строго из одной горутины — мутекс не нужен.
+// Для разных горутин создавайте отдельные CipherPack из одного ключа.
 type CipherPack struct {
 	key       [32]byte
-	gcm       cipher.AEAD
-	mu        sync.Mutex    // защита gcm.Seal/Open (AEAD не thread-safe)
+	gcm       cipher.AEAD   // AEAD не thread-safe, но каждый CP однопоточный
 	nonce     atomic.Uint64 // monotonic counter (standard mode)
 	quicNonce atomic.Uint64 // monotonic counter for QUIC mode
-	prng      *rand.Rand    // быстрый PRNG для padding
+	prng      fastPRNG      // быстрый PRNG для padding (без блокировок)
 	noEncrypt bool          // true = Encrypt/Decrypt без крипты (для замера накладных расходов)
 	Mode      int           // CipherModeStandard или CipherModeQUIC
 }
@@ -63,14 +90,19 @@ func NewCipherPack(secretKey []byte) (*CipherPack, error) {
 	}
 	var k [32]byte
 	copy(k[:], secretKey)
-	seed := int64(k[0])<<56 | int64(k[1])<<48 | int64(time.Now().UnixNano())
-	prng := rand.New(rand.NewSource(seed))
+
 	cp := &CipherPack{
-		key:  k,
-		gcm:  gcm,
-		prng: prng,
+		key: k,
+		gcm: gcm,
 	}
-	cp.nonce.Store(prng.Uint64())
+
+	// Seed PRNG из crypto/rand (8 байт → xorshift64)
+	var seedBuf [8]byte
+	rand.Read(seedBuf[:])
+	cp.prng.state = binary.LittleEndian.Uint64(seedBuf[:])
+
+	// Nonce стартует со случайным смещением
+	cp.nonce.Store(uint64(cp.prng.Uint32()))
 	return cp, nil
 }
 
@@ -109,13 +141,19 @@ func (cp *CipherPack) Encrypt(plaintext []byte, shortID uint16, routingSalt stri
 	binary.BigEndian.PutUint64(nonce[:8], n)
 	binary.BigEndian.PutUint32(nonce[8:], cp.prng.Uint32())
 
-	padLen := int(cp.prng.Int31n(41))
+	padLen := int(cp.prng.Uint32() % 41)
 
-	inner := make([]byte, 2+len(plaintext)+padLen)
+	// Reuse буфер для inner (plaintext + padding)
+	innerLen := 2 + len(plaintext) + padLen
+	inner := bufPool.Get().([]byte)[:innerLen]
+	defer bufPool.Put(inner[:cap(inner)])
+
 	binary.BigEndian.PutUint16(inner[:2], uint16(len(plaintext)))
 	copy(inner[2:], plaintext)
 	if padLen > 0 {
-		cp.prng.Read(inner[2+len(plaintext):])
+		padBuf := padBufPool.Get().([]byte)
+		copy(inner[2+len(plaintext):], padBuf[:padLen])
+		padBufPool.Put(padBuf)
 	}
 
 	routeMask := Fnv1a16(append([]byte(routingSalt), nonce[:]...))
@@ -130,9 +168,7 @@ func (cp *CipherPack) Encrypt(plaintext []byte, shortID uint16, routingSalt stri
 	marker := mac.Sum(nil)[:4]
 	marker[0] |= 0x40
 
-	cp.mu.Lock()
 	ciphertext := cp.gcm.Seal(nil, nonce[:], inner, nil)
-	cp.mu.Unlock()
 
 	buf := make([]byte, 4+2+12+len(ciphertext))
 	copy(buf[:4], marker)
@@ -146,19 +182,24 @@ func (cp *CipherPack) encryptQUIC(plaintext []byte, shortID uint16, routingSalt 
 	n := cp.quicNonce.Add(1)
 	packetNum := uint32(n & 0xFFFF)
 
-	padLen := int(cp.prng.Int31n(41))
-	inner := make([]byte, 2+len(plaintext)+padLen)
+	padLen := int(cp.prng.Uint32() % 41)
+
+	// Reuse буфер для inner (plaintext + padding)
+	innerLen := 2 + len(plaintext) + padLen
+	inner := bufPool.Get().([]byte)[:innerLen]
+	defer bufPool.Put(inner[:cap(inner)])
+
 	binary.BigEndian.PutUint16(inner[:2], uint16(len(plaintext)))
 	copy(inner[2:], plaintext)
 	if padLen > 0 {
-		cp.prng.Read(inner[2+len(plaintext):])
+		padBuf := padBufPool.Get().([]byte)
+		copy(inner[2+len(plaintext):], padBuf[:padLen])
+		padBufPool.Put(padBuf)
 	}
 
 	nonce := quicNonceFromPacket(cp.key, packetNum)
 
-	cp.mu.Lock()
 	ciphertext := cp.gcm.Seal(nil, nonce[:], inner, nil)
-	cp.mu.Unlock()
 
 	return EncodeQUICHeader(ciphertext, shortID, packetNum, cp.key, routingSalt), nil
 }
@@ -183,27 +224,27 @@ func (cp *CipherPack) Decrypt(packet []byte) ([]byte, error) {
 		return nil, fmt.Errorf("packet too short")
 	}
 
-	marker := make([]byte, 4)
-	copy(marker, packet[:4])
+	// Стек-аллоцированные буферы — без heap-alloc
+	var marker [4]byte
+	copy(marker[:], packet[:4])
 	marker[0] &^= 0x40
-	nonce := packet[6:18]
-	ciphertext := packet[18:]
 
-	authData := make([]byte, 14)
+	var authData [14]byte
 	copy(authData[:2], packet[4:6])
-	copy(authData[2:], nonce)
+	copy(authData[2:], packet[6:18])
 
 	mac := hmac.New(sha256.New, cp.key[:])
-	mac.Write(authData)
+	mac.Write(authData[:])
 	expected := mac.Sum(nil)[:4]
 	expected[0] &^= 0x40
-	if !hmac.Equal(marker, expected) {
+	if !hmac.Equal(marker[:], expected) {
 		return nil, fmt.Errorf("HMAC mismatch")
 	}
 
-	cp.mu.Lock()
+	nonce := packet[6:18]
+	ciphertext := packet[18:]
+
 	plaintext, err := cp.gcm.Open(nil, nonce, ciphertext, nil)
-	cp.mu.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -225,9 +266,7 @@ func (cp *CipherPack) decryptQUIC(packet []byte) ([]byte, error) {
 
 	nonce := quicNonceFromPacket(cp.key, packetNum)
 
-	cp.mu.Lock()
 	plaintext, err := cp.gcm.Open(nil, nonce[:], inner, nil)
-	cp.mu.Unlock()
 	if err != nil {
 		return nil, fmt.Errorf("GCM decrypt failed: %w", err)
 	}

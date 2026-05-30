@@ -31,8 +31,9 @@ type StatusListener interface {
 type VPN struct {
 	config            Config
 	key               [32]byte
-	encCP             *CipherPack // для Encrypt (writerLoop + ping) — отдельно от decCP
-	decCP             *CipherPack // для Decrypt (readerLoop) — убираем lock contention
+	encCP             *CipherPack // для Encrypt (writerLoop) — отдельная копия для каждой горутины
+	decCP             *CipherPack // для Decrypt (readerLoop) — отдельная копия для каждой горутины
+	pingCP            *CipherPack // для Encrypt (persistentPingLoop) — своя копия, без shared-encCP
 	conn              net.Conn
 	transport         *TransportManager
 	transportType     string // "wss" | "quic" | "udp"
@@ -59,13 +60,15 @@ type VPN struct {
 func New(cfg Config, listener StatusListener) *VPN {
 	key := DeriveKey(cfg.SecretKey)
 
-	var encCP, decCP *CipherPack
+	var encCP, decCP, pingCP *CipherPack
 	if cfg.NoEncrypt {
 		encCP = NewNoopCipherPack()
 		decCP = NewNoopCipherPack()
+		pingCP = NewNoopCipherPack()
 	} else {
 		encCP, _ = NewCipherPack(key[:])
 		decCP, _ = NewCipherPack(key[:])
+		pingCP, _ = NewCipherPack(key[:])
 	}
 
 	v := &VPN{
@@ -73,6 +76,7 @@ func New(cfg Config, listener StatusListener) *VPN {
 		key:        key,
 		encCP:      encCP,
 		decCP:      decCP,
+		pingCP:     pingCP,
 		listener:   listener,
 		killSwitch: newKillSwitch(),
 		transport:  NewTransportManager(&cfg),
@@ -194,7 +198,7 @@ func (v *VPN) persistentPingLoop() {
 		}
 		conn := v.conn
 		if conn != nil {
-			pkt, err := v.encCP.Encrypt([]byte{}, v.config.ShortID, v.config.RoutingSalt)
+			pkt, err := v.pingCP.Encrypt([]byte{}, v.config.ShortID, v.config.RoutingSalt)
 			if err == nil {
 				fec := v.config.FEC
 				if fec < 1 {

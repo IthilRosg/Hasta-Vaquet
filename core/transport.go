@@ -26,6 +26,11 @@ const (
 
 var defaultTransportPriority = []string{TransportWSS, TransportQUIC, TransportUDP}
 
+// wsBufPool — reusable буферы для WebSocket/QUIC фреймов.
+var wsBufPool = sync.Pool{
+	New: func() any { return make([]byte, 65535+14) },
+}
+
 type TransportManager struct {
 	config *protocol.Config
 	conn   net.Conn
@@ -176,6 +181,7 @@ func DialWSS(ctx context.Context, server string, port int, tlsConfig *tls.Config
 	dialer := &websocket.Dialer{
 		HandshakeTimeout: 12 * time.Second,
 		TLSClientConfig:  tlsConfig,
+		WriteBufferSize:  65535 + 14,
 	}
 
 	ws, resp, err := dialer.DialContext(ctx, url, nil)
@@ -195,6 +201,7 @@ func DialWS(ctx context.Context, server string, port int) (net.Conn, error) {
 	url := fmt.Sprintf("ws://%s:%d/hasta-vaquet/ws", server, port)
 	dialer := &websocket.Dialer{
 		HandshakeTimeout: 10 * time.Second,
+		WriteBufferSize:  65535 + 14,
 	}
 
 	ws, resp, err := dialer.DialContext(ctx, url, nil)
@@ -220,15 +227,15 @@ type quicUDPConn struct {
 
 func (c *quicUDPConn) Write(b []byte) (int, error) {
 	pn := uint32(c.packetNum.Add(1) - 1)
-	// Simple QUIC-like prefix (7 bytes, no header protection to preserve inner content)
-	hdr := make([]byte, 7)
-	hdr[0] = 0x40 | byte(pn&0x07)                    // QUIC Short Header + spin bit
-	binary.BigEndian.PutUint16(hdr[1:3], 0)          // connID[0:2] = 0
-	binary.BigEndian.PutUint16(hdr[3:5], c.shortID)  // connID[2:4] = shortID (plain)
-	binary.BigEndian.PutUint16(hdr[5:7], uint16(pn)) // packet number
-	// Append the standard-format packet (no XOR protection — preserves HMAC/DynamicID/Nonce)
-	frame := append(hdr, b...)
+	// Pre-allocate single buffer from pool for QUIC frame
+	frame := wsBufPool.Get().([]byte)[:7+len(b)]
+	frame[0] = 0x40 | byte(pn&0x07)                    // QUIC Short Header + spin bit
+	binary.BigEndian.PutUint16(frame[1:3], 0)          // connID[0:2] = 0
+	binary.BigEndian.PutUint16(frame[3:5], c.shortID)  // connID[2:4] = shortID (plain)
+	binary.BigEndian.PutUint16(frame[5:7], uint16(pn)) // packet number
+	copy(frame[7:], b)
 	n, err := c.UDPConn.Write(frame)
+	wsBufPool.Put(frame[:cap(frame)])
 	if n > 0 && n > len(b) {
 		return len(b), err
 	}
